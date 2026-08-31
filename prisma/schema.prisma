@@ -1,0 +1,193 @@
+// ============================================================
+// LedgerAI — Prisma schema (PostgreSQL via Supabase)
+// ------------------------------------------------------------
+// Security model: Supabase Row-Level Security is the PRIMARY
+// boundary for direct DB access. The Prisma client connects with
+// the elevated (service) role on the trusted server, so Prisma
+// BYPASSES RLS by design. Therefore every service-layer call MUST
+// enforce tenant isolation itself: it derives the active user from
+// the authenticated server-side session and scopes every query to
+// that user's business_id. Client-provided IDs are never trusted as
+// the sole authority. See SUPABASE_RLS.md for the full auth flow.
+// ============================================================
+
+generator client {
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client" // Rust-free client; no native binary download
+  // The client is generated under src/generated/prisma and imported
+  // from there so it stays consistent with this schema.
+}
+
+datasource db {
+  provider = "postgresql"
+  // url is supplied via prisma.config.ts (datasource.url) and, at runtime,
+  // through the @prisma/adapter-pg driver adapter (see src/lib/db/client.ts).
+}
+
+// ---------- Core identity ----------
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  businesses Business[]
+
+  @@map("users")
+}
+
+// A small business owner can (eventually) hold multiple businesses.
+model Business {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  type      String?
+  country   String   @default("NG")
+  currency  String   @default("NGN")
+  size      String?
+  goals     String[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accounts     Account[]
+  transactions Transaction[]
+  categories   Category[]
+  imports      Import[]
+  insights     Insight[]
+  categoryRules CategoryRule[]
+
+  @@index([userId])
+  @@map("businesses")
+}
+
+model Account {
+  id          String   @id @default(uuid()) @db.Uuid
+  businessId  String   @map("business_id") @db.Uuid
+  name        String
+  institution String?
+  currency    String   @default("NGN")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  imports      Import[]
+
+  @@index([businessId])
+  @@map("accounts")
+}
+
+// ---------- Categories ----------
+
+model Category {
+  id         String   @id @default(uuid()) @db.Uuid
+  businessId String?  @map("business_id") @db.Uuid // null => system default
+  name       String
+  type       String // "income" | "expense"
+  isSystem   Boolean  @default(false) @map("is_system")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  business       Business?       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+  categoryRules  CategoryRule[]
+
+  @@unique([businessId, name, type])
+  @@index([businessId])
+  @@map("categories")
+}
+
+// ---------- Transactions ----------
+
+model Transaction {
+  id          String   @id @default(uuid()) @db.Uuid
+  businessId  String   @map("business_id") @db.Uuid
+  accountId   String?  @map("account_id") @db.Uuid
+  date        DateTime @db.Date
+  description String
+  amount      Decimal  @db.Decimal(18, 2)
+  type        String // "income" | "expense" | "transfer"
+  categoryId  String?  @map("category_id") @db.Uuid
+  source      String   @default("manual") // manual | csv | xlsx | pdf | bank
+  reference   String?
+  notes       String?
+  aiCategory  String?  @map("ai_category")
+  aiConfidence Decimal? @map("ai_confidence") @db.Decimal(5, 4)
+  // Deterministic duplicate-detection fingerprint:
+  // <dateSoT>|<type>|<normalized description>|<amount>|<reference>
+  fingerprint String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account  Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, date])
+  @@index([businessId, type, date])
+  @@index([businessId, categoryId, date])
+  @@index([fingerprint])
+  @@map("transactions")
+}
+
+// ---------- Imports ----------
+
+model Import {
+  id                   String   @id @default(uuid()) @db.Uuid
+  businessId           String   @map("business_id") @db.Uuid
+  accountId            String?  @map("account_id") @db.Uuid
+  filename             String
+  fileType             String   @map("file_type") // csv | xlsx | pdf
+  status               String   @default("started") // started | parsing | reviewed | committed | failed
+  transactionsFound    Int      @default(0) @map("transactions_found")
+  transactionsImported Int      @default(0) @map("transactions_imported")
+  errors               Json? // structured, non-sensitive error report
+  createdAt            DateTime @default(now()) @map("created_at")
+  completedAt          DateTime? @map("completed_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account  Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([businessId])
+  @@map("imports")
+}
+
+// ---------- Insights ----------
+
+model Insight {
+  id          String   @id @default(uuid()) @db.Uuid
+  businessId  String   @map("business_id") @db.Uuid
+  type        String // key | spending | revenue | profitability | anomaly | recommendation
+  title       String
+  description String
+  metadata    Json? // source metrics, period comparison
+  periodStart DateTime? @map("period_start") @db.Date
+  periodEnd   DateTime? @map("period_end") @db.Date
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("insights")
+}
+
+// ---------- Deterministic category rules (learning from corrections) ----------
+
+model CategoryRule {
+  id         String   @id @default(uuid()) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  matchType  String   @map("match_type") // merchant | keyword
+  pattern    String
+  categoryId String?  @map("category_id") @db.Uuid
+  categoryName String? @map("category_name") // display fallback
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([businessId])
+  @@map("category_rules")
+}
