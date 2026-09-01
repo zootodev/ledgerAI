@@ -11,6 +11,14 @@
 // no floating-point drift is possible. Convert at the edges.
 // ============================================================
 
+export type TransactionKind = "income" | "expense" | "transfer";
+
+export const TRANSACTION_KINDS: readonly TransactionKind[] = [
+  "income",
+  "expense",
+  "transfer",
+];
+
 export interface PeriodSummary {
   revenue: number; // major units (₦)
   expenses: number;
@@ -29,6 +37,49 @@ export function summarizePeriod(
   const profitMargin =
     revenue === 0 ? null : (netProfit / revenue) * 100;
   return { revenue, expenses, transfers, netProfit, profitMargin };
+}
+
+/** How much a transaction of a given kind contributes to net profit (major units). */
+export function profitImpact(kind: TransactionKind, amount: number): number {
+  switch (kind) {
+    case "income":
+      return amount;
+    case "expense":
+      return -amount;
+    case "transfer":
+      return 0; // transfers move money between own accounts; never P&L
+  }
+}
+
+export interface ProfitRow {
+  type: TransactionKind;
+  amount: number; // major units, always positive for transfers
+}
+
+/**
+ * Deterministic P&L aggregation over transaction rows. Transfers are counted
+ * separately and EXCLUDED from revenue/expenses/profit (a transfer between
+ * the owner's own accounts is neither earnings nor spending).
+ */
+export function computeSummary(rows: ProfitRow[]): PeriodSummary {
+  let revenue = 0;
+  let expenses = 0;
+  let transfers = 0;
+  for (const row of rows) {
+    const amount = round(Math.abs(row.amount));
+    switch (row.type) {
+      case "income":
+        revenue += amount;
+        break;
+      case "expense":
+        expenses += amount;
+        break;
+      case "transfer":
+        transfers += amount;
+        break;
+    }
+  }
+  return summarizePeriod(round(revenue, 2), round(expenses, 2), round(transfers, 2));
 }
 
 /** Percent change from a previous value to a current value. Null if no prior baseline. */
@@ -71,4 +122,44 @@ export function toMinorUnits(amount: string): number {
 /** Convert integer minor units back to a major-units number. */
 export function fromMinorUnits(minor: number): number {
   return minor / 100;
+}
+
+/**
+ * Parse an amount to a major-units number safely. Accepts a "250.50" string
+ * (already validated) or a number. Throws on anything non-finite rather than
+ * propagating NaN into downstream arithmetic.
+ */
+export function majorAmount(value: string | number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid amount: "${String(value)}"`);
+  }
+  return round(parsed, 2);
+}
+
+/** Normalize free-text for deterministic fingerprinting (case + whitespace). */
+function normalizeText(text: string): string {
+  return text.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Deterministic duplicate-detection fingerprint for a transaction.
+ * Two transactions with the same date, type, normalized description, amount,
+ * and reference are considered the same business event.
+ * Stable string format: <date>|<type>|<description>|<amount>|<reference>
+ */
+export function transactionFingerprint(input: {
+  date: string; // YYYY-MM-DD
+  type: TransactionKind;
+  description: string;
+  amount: string;
+  reference?: string | null;
+}): string {
+  return [
+    input.date,
+    input.type,
+    normalizeText(input.description),
+    input.amount.trim(),
+    (input.reference ?? "").trim(),
+  ].join("|");
 }

@@ -16,9 +16,33 @@ export type {
   SignInInput,
   AuthResult,
 } from "./auth";
+export { getBusinessProfile, updateBusiness } from "./business";
+export type { BusinessServiceData, UpdateBusinessInput } from "./business";
+export {
+  listAccounts,
+  createAccount,
+  updateAccount,
+  deleteAccount,
+} from "./accounts";
+export type { AccountServiceData, AccountInput, AccountUpdateInput } from "./accounts";
+export {
+  listCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  isCategoryType,
+} from "./categories";
+export type { CategoryServiceData, CategoryInput, CategoryUpdateInput } from "./categories";
 export {
   listTransactions,
   getTransaction,
+  createTransaction,
+  updateTransaction,
   deleteTransaction,
 } from "./transactions";
-export type { TransactionServiceData } from "./transactions";
+export type {
+  TransactionServiceData,
+  TransactionInput,
+  ListTransactionsParams,
+  ListTransactionsResult,
+} from "./transactions";

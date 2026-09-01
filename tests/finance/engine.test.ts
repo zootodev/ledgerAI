@@ -6,6 +6,10 @@ import {
   formatAmount,
   toMinorUnits,
   fromMinorUnits,
+  profitImpact,
+  computeSummary,
+  majorAmount,
+  transactionFingerprint,
 } from "../../src/lib/finance/engine";
 
 describe("summarizePeriod", () => {
@@ -36,6 +40,126 @@ describe("summarizePeriod", () => {
     const s = summarizePeriod(100_000, 40_000, 10_000);
     expect(s.transfers).toBe(10_000);
     expect(s.netProfit).toBe(60_000);
+  });
+});
+
+describe("profitImpact (income/expense/transfer handling)", () => {
+  it("income adds to profit", () => {
+    expect(profitImpact("income", 50_000)).toBe(50_000);
+  });
+
+  it("expense subtracts from profit", () => {
+    expect(profitImpact("expense", 20_000)).toBe(-20_000);
+  });
+
+  it("transfers never count as income or expense", () => {
+    expect(profitImpact("transfer", 100_000)).toBe(0);
+  });
+});
+
+describe("computeSummary (deterministic P&L aggregation)", () => {
+  it("totals revenue, expenses, and transfers separately", () => {
+    const s = computeSummary([
+      { type: "income", amount: 2_000_000 },
+      { type: "income", amount: 450_000 },
+      { type: "expense", amount: 600_000 },
+      { type: "expense", amount: 300_000 },
+      { type: "transfer", amount: 5_000_000 },
+      { type: "transfer", amount: 2_500_000 },
+    ]);
+    expect(s.revenue).toBe(2_450_000);
+    expect(s.expenses).toBe(900_000);
+    expect(s.transfers).toBe(7_500_000);
+    expect(s.netProfit).toBe(1_550_000);
+  });
+
+  it("excludes transfers from net profit entirely", () => {
+    const s = computeSummary([
+      { type: "income", amount: 100_000 },
+      { type: "transfer", amount: 99_999 },
+    ]);
+    expect(s.netProfit).toBe(100_000);
+    expect(s.transfers).toBe(99_999);
+  });
+
+  it("handles a pure-transfer period as zero profit", () => {
+    const s = computeSummary([
+      { type: "transfer", amount: 1_000 },
+      { type: "transfer", amount: 500 },
+    ]);
+    expect(s.revenue).toBe(0);
+    expect(s.expenses).toBe(0);
+    expect(s.netProfit).toBe(0);
+    expect(s.profitMargin).toBeNull();
+  });
+
+  it("treats negative inputs as absolute magnitudes (records store positives)", () => {
+    const s = computeSummary([
+      { type: "expense", amount: -250.5 },
+      { type: "income", amount: -1000 },
+    ]);
+    expect(s.expenses).toBe(250.5);
+    expect(s.revenue).toBe(1000);
+  });
+
+  it("rounds aggregated cents deterministically", () => {
+    const s = computeSummary([
+      { type: "expense", amount: 0.1 },
+      { type: "expense", amount: 0.2 },
+    ]);
+    expect(s.expenses).toBe(0.3);
+  });
+});
+
+describe("majorAmount", () => {
+  it("parses validated decimal strings to numbers", () => {
+    expect(majorAmount("250.50")).toBe(250.5);
+    expect(majorAmount("1234")).toBe(1234);
+  });
+
+  it("passes numbers through after rounding", () => {
+    expect(majorAmount(0.1 + 0.2)).toBe(0.3);
+  });
+
+  it("rejects non-numeric amounts", () => {
+    expect(() => majorAmount("abc")).toThrow();
+  });
+});
+
+describe("transactionFingerprint (deterministic duplicate detection)", () => {
+  it("normalizes case and whitespace in descriptions", () => {
+    const a = transactionFingerprint({
+      date: "2026-01-15",
+      type: "expense",
+      description: "  UBER   Trip  ",
+      amount: "2500.00",
+    });
+    const b = transactionFingerprint({
+      date: "2026-01-15",
+      type: "expense",
+      description: "uber trip",
+      amount: "2500.00",
+    });
+    expect(a).toBe(b);
+    expect(a).toBe("2026-01-15|expense|uber trip|2500.00|");
+  });
+
+  it("distinguishes income, expense, and transfer", () => {
+    const base = { date: "2026-01-15", description: "opay transfer", amount: "1000" };
+    const income = transactionFingerprint({ ...base, type: "income" });
+    const expense = transactionFingerprint({ ...base, type: "expense" });
+    const transfer = transactionFingerprint({ ...base, type: "transfer" });
+    expect(new Set([income, expense, transfer]).size).toBe(3);
+  });
+
+  it("distinguishes by amount and reference", () => {
+    const base = { date: "2026-01-15", type: "expense" as const, description: "rent" };
+    expect(
+      transactionFingerprint({ ...base, amount: "1000", reference: "jan" }),
+    ).not.toBe(transactionFingerprint({ ...base, amount: "1100", reference: "jan" }));
+    expect(
+      transactionFingerprint({ ...base, amount: "1000", reference: "jan" }),
+    ).not.toBe(transactionFingerprint({ ...base, amount: "1000" }));
   });
 });
 
