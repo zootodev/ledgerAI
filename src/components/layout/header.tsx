@@ -17,9 +17,11 @@ export interface HeaderProps
   user?: UserMenu | null;
   /** Render additional actions on the right of the header. */
   actions?: React.ReactNode;
+  /** Called when the user picks "Sign out" from the user menu. */
+  onSignOut?: () => void;
 }
 
-export function Header({ title, user, actions, className }: HeaderProps) {
+export function Header({ title, user, actions, onSignOut, className }: HeaderProps) {
   return (
     <header
       className={cn(
@@ -57,7 +59,7 @@ export function Header({ title, user, actions, className }: HeaderProps) {
           >
             <DropdownItem onClick={() => {}}>Profile</DropdownItem>
             <DropdownItem onClick={() => {}}>Settings</DropdownItem>
-            <DropdownItem destructive onClick={() => {}}>
+            <DropdownItem destructive onClick={onSignOut}>
               Sign out
             </DropdownItem>
           </Dropdown>

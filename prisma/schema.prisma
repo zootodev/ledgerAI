@@ -27,8 +27,15 @@ datasource db {
 
 // ---------- Core identity ----------
 
+// ============================================================
+// The `users` table EXTENDS Supabase Auth's managed `auth.users`.
+// `public.users.id` mirrors `auth.users.id` (a UUID) so every app
+// profile maps 1:1 to an authenticated Supabase user. A user row is
+// created on first sign-up/onboarding; RLS policies key user-owned
+// rows on `auth.uid()`.
+// ============================================================
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @db.Uuid // FK -> auth.users(id), set in migration
   email     String   @unique
   name      String?
   createdAt DateTime @default(now()) @map("created_at")

@@ -8,12 +8,14 @@ import { cn } from "@/lib/utils/cn";
 
 export interface AppShellProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Header props (title, user, actions) passed to the top bar. */
-  header?: Omit<HeaderProps, "onMenuToggle">;
+  header?: Omit<HeaderProps, "onMenuToggle" | "onSignOut">;
+  /** Called when the user picks "Sign out" from the user menu. */
+  onSignOut?: () => void;
   children: React.ReactNode;
 }
 
 /** Authenticated app layout: sidebar + top bar + content. */
-export function AppShell({ header, children, className }: AppShellProps) {
+export function AppShell({ header, onSignOut, children, className }: AppShellProps) {
   const [navOpen, setNavOpen] = React.useState(false);
 
   return (
@@ -35,6 +37,7 @@ export function AppShell({ header, children, className }: AppShellProps) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           {...header}
+          onSignOut={onSignOut}
           title={
             <span className="flex items-center gap-2">
               <MobileMenuButton onToggle={() => setNavOpen((o) => !o)} />
