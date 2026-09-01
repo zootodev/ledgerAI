@@ -46,3 +46,5 @@ export type {
   ListTransactionsParams,
   ListTransactionsResult,
 } from "./transactions";
+export { getAnalyticsSummary } from "./analytics";
+export type { AnalyticsQuery, AnalyticsSummary } from "./analytics";
