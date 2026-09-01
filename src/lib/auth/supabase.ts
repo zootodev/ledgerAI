@@ -17,6 +17,11 @@ export async function getSupabaseServer() {
   const cookieStore = await cookies();
 
   return createServerClient(url, anonKey, {
+    // PKCE: the email-confirmation link returns the session as a `?code` that
+    // the /auth/callback route exchanges server-side (works with the SSR
+    // cookie storage). Implicit flow would leave tokens in the URL hash,
+    // which server-rendered pages cannot read.
+    auth: { flowType: "pkce" },
     cookies: {
       getAll() {
         return cookieStore.getAll();

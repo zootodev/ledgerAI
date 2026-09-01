@@ -2,8 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 // Public routes are reachable without a session. Everything else under the
-// app area requires an authenticated user.
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/design"];
+// app area requires an authenticated user. /auth/callback must stay public:
+// it is hit without a session when the user first clicks an email link.
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/design", "/auth/callback"];
 
 export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

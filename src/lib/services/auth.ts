@@ -1,4 +1,5 @@
 import { getSupabaseServer } from "@/lib/auth/supabase";
+import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { getCurrentUser } from "@/lib/auth/server";
 import { getPrismaClient } from "@/lib/db/client";
 
@@ -14,7 +15,9 @@ export interface SignInInput {
   password: string;
 }
 
-export type AuthResult = { ok: true; session?: boolean } | { ok: false; error: string };
+export type AuthResult =
+  | { ok: true; session?: boolean; alreadyExists?: boolean }
+  | { ok: false; error: string };
 
 const EMAIL_ERROR = "Invalid email, password, or account not found.";
 
@@ -33,17 +36,24 @@ async function assertServerClient() {
  * row is created (mirroring the Auth user id) so ownership/RLS can key on
  * it. When confirmation is enabled no session cookie is set yet and the app
  * shows a check-your-inbox message. Returns a client-safe result object.
+ *
+ * Supabase intentionally returns *no error* for an existing confirmed email
+ * when email confirmation is enabled (anti-enumeration): it echoes an
+ * obfuscated user object whose `identities` array is empty and sends no mail.
+ * That case is surfaced as `alreadyExists` so callers never imply a new
+ * account was created.
  */
 export async function signUp(input: SignUpInput): Promise<AuthResult> {
   const supabase = await assertServerClient();
 
   const email = input.email.trim().toLowerCase();
+  const redirectTo = input.redirectTo ?? `${(await getAppBaseUrl())}/auth/callback`;
   const { data, error } = await supabase.auth.signUp({
     email,
     password: input.password,
     options: {
       data: { name: input.name ?? null },
-      emailRedirectTo: input.redirectTo,
+      emailRedirectTo: redirectTo,
     },
   });
 
@@ -51,19 +61,34 @@ export async function signUp(input: SignUpInput): Promise<AuthResult> {
     return { ok: false, error: error.message };
   }
 
+  const hasSession = Boolean(data.session);
   const authUser = data.user;
+
+  // Existing confirmed email: no session is produced, and the echoed user
+  // carries no identities. Nothing was created and nothing was emailed, so
+  // neither a success nor a "you already have an account" claim is sent.
+  if (
+    !hasSession &&
+    authUser &&
+    Array.isArray(authUser.identities) &&
+    authUser.identities.length === 0
+  ) {
+    return { ok: true, alreadyExists: true };
+  }
+
   if (!authUser) {
     return { ok: false, error: "Unable to create your account. Please try again." };
   }
 
   // Provision the public.users profile row mirroring auth.users.id so RLS and
   // the service layer can resolve ownership. Best-effort: if it fails, the
-  // auth user still exists and the profile is created on first login.
-  if (data.session) {
+  // auth user still exists and the profile is created on first login. Only
+  // done when a real session was established (confirmations disabled).
+  if (hasSession) {
     await syncUserProfile(authUser.id, authUser.email ?? email, input.name);
   }
 
-  return { ok: true, session: Boolean(data.session) };
+  return { ok: true, session: hasSession };
 }
 
 /**

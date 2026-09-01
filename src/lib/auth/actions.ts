@@ -7,6 +7,7 @@ import type { AuthResult } from "@/lib/services/auth";
 export interface AuthFormState {
   error?: string;
   success?: string;
+  info?: string;
 }
 
 export async function loginAction(
@@ -51,6 +52,15 @@ export async function signupAction(
   try {
     const result: AuthResult = await signUp({ email, password, name });
     if (!result.ok) return { error: result.error };
+    // Supabase signUp for an existing confirmed email returns intentional
+    // "success" with no identities/session and sends no mail. Show the
+    // neutral message — never "Account created" and never an enumeration hint.
+    if (result.alreadyExists) {
+      return {
+        info:
+          "No account changes were made. If you just signed up, check your inbox for a confirmation link — if you already have an account, sign in below.",
+      };
+    }
     // A session means confirmation is disabled — go straight to the dashboard.
     // Otherwise the user must confirm their email before their first sign-in.
     sessionEstablished = result.session ?? false;
@@ -63,7 +73,8 @@ export async function signupAction(
   if (sessionEstablished) redirect("/overview");
 
   return {
-    success: "Account created! If email confirmation is enabled, check your inbox.",
+    success:
+      "Account created! Check your inbox for a confirmation link to finish signing up.",
   };
 }
 

@@ -32,6 +32,11 @@ export function SignupForm() {
             {state.success}
           </Alert>
         )}
+        {state.info && (
+          <Alert tone="info" title="Check your inbox">
+            {state.info}
+          </Alert>
+        )}
 
         <Field label="Full name" htmlFor="name">
           <Input id="name" name="name" autoComplete="name" placeholder="Ngozi Adeyemi" />
