@@ -9,18 +9,24 @@ export interface OverviewShellProps {
   userEmail: string;
   businessName: string;
   currency: string;
+  /** Client date-range control shown above the KPIs and charts. */
+  rangeControl?: React.ReactNode;
   /** Server-rendered KPI grid (Suspense-wrapped) shown under the header. */
   kpis: React.ReactNode;
+  /** Server-rendered analytics charts (Suspense-wrapped). */
+  charts?: React.ReactNode;
   onSignOut?: () => void;
 }
 
-/** Authenticated overview shell: header + analytics KPI grid. */
+/** Authenticated overview shell: header + range control + KPI grid + charts. */
 export function OverviewShell({
   userName,
   userEmail,
   businessName,
   currency,
+  rangeControl,
   kpis,
+  charts,
   onSignOut,
 }: OverviewShellProps) {
   return (
@@ -42,7 +48,9 @@ export function OverviewShell({
           <Badge tone="brand">{currency}</Badge>
         </div>
 
+        {rangeControl}
         {kpis}
+        {charts}
       </div>
     </AppShell>
   );

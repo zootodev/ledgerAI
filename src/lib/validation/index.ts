@@ -6,8 +6,12 @@ export { categoryInputSchema, categoryIdSchema, categoryTypeSchema } from "./cat
 export type { CategoryInput } from "./category";
 export { businessUpdateSchema } from "./business";
 export type { BusinessUpdateInput } from "./business";
-export { analyticsQuerySchema } from "./analytics";
-export type { AnalyticsQuery } from "./analytics";
+export {
+  analyticsQuerySchema,
+  analyticsTrendsQuerySchema,
+  ANALYTICS_GROUP_BY,
+} from "./analytics";
+export type { AnalyticsQuery, AnalyticsTrendsQuery } from "./analytics";
 
 /**
  * Summarize Zod issues into a single human-readable error string.

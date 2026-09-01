@@ -1,7 +1,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { DollarSign, Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
-import { getAnalyticsSummary, type AnalyticsSummary } from "@/lib/services";
+import { getAnalyticsSummary, type AnalyticsQuery, type AnalyticsSummary } from "@/lib/services";
 import { formatAmount } from "@/lib/finance/engine";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -25,6 +25,8 @@ export function isEmptySummary(summary: AnalyticsSummary): boolean {
 
 export interface KpiGridProps {
   currency: string;
+  /** Optional validated date range; when omitted the KPIs report all time. */
+  range?: AnalyticsQuery;
 }
 
 /**
@@ -32,10 +34,10 @@ export interface KpiGridProps {
  * analytics summary (scoped to the session business) and formats values with
  * the existing engine, so no financial logic is duplicated here.
  */
-export async function AnalyticsKpiGrid({ currency }: KpiGridProps) {
+export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
   let summary: AnalyticsSummary;
   try {
-    summary = await getAnalyticsSummary();
+    summary = await getAnalyticsSummary(range ?? {});
   } catch (err) {
     return (
       <ErrorState
