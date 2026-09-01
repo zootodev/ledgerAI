@@ -116,6 +116,34 @@ export function DataTable<T>({
     if (pagination) pagination.onPageChange(page);
   };
 
+  // Horizontal overflow cue: fade the right edge when the table content
+  // extends past the wrapper and the user hasn't scrolled to the end.
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const [canScrollRight, setCanScrollRight] = React.useState(false);
+
+  const updateScrollCue = React.useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const scrollable = el.scrollWidth > el.clientWidth + 1;
+    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
+    setCanScrollRight(scrollable && !atEnd);
+  }, []);
+
+  React.useEffect(() => {
+    updateScrollCue();
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", updateScrollCue, { passive: true });
+    const observer = new ResizeObserver(updateScrollCue);
+    observer.observe(el);
+    window.addEventListener("resize", updateScrollCue);
+    return () => {
+      el.removeEventListener("scroll", updateScrollCue);
+      observer.disconnect();
+      window.removeEventListener("resize", updateScrollCue);
+    };
+  }, [updateScrollCue]);
+
   const renderSortIcon = (col: Column<T>) => {
     if (!col.sortValue) return null;
     if (effectiveSort?.key === col.key) {
@@ -130,46 +158,47 @@ export function DataTable<T>({
 
   return (
     <div className={cn("flex flex-col", className)}>
-      <div className="overflow-x-auto rounded-card border border-border bg-surface">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border bg-surface-subtle/60">
-              {columns.map((col) => {
-                const sortable = !!col.sortValue;
-                return (
-                  <th
-                    key={col.key}
-                    scope="col"
-                    aria-sort={
-                      effectiveSort?.key === col.key
-                        ? effectiveSort.direction === "asc"
-                          ? "ascending"
-                          : "descending"
-                        : undefined
-                    }
-                    className={cn(
-                      "px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted",
-                      alignClass[col.align ?? "left"],
-                      col.headerClassName,
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => (sortable ? handleSortClick(col) : undefined)}
+      <div className="relative overflow-hidden rounded-card border border-border bg-surface">
+        <div ref={scrollRef} className="overflow-x-auto overscroll-x-contain">
+          <table className="w-full min-w-max border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border bg-surface-subtle/60">
+                {columns.map((col) => {
+                  const sortable = !!col.sortValue;
+                  return (
+                    <th
+                      key={col.key}
+                      scope="col"
+                      aria-sort={
+                        effectiveSort?.key === col.key
+                          ? effectiveSort.direction === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : undefined
+                      }
                       className={cn(
-                        "inline-flex items-center gap-1",
-                        col.align === "right" && "flex-row-reverse",
-                        sortable ? "cursor-pointer hover:text-foreground" : "cursor-default",
+                        "px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted",
+                        alignClass[col.align ?? "left"],
+                        col.headerClassName,
                       )}
                     >
-                      {col.header}
-                      {renderSortIcon(col)}
-                    </button>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
+                      <button
+                        type="button"
+                        onClick={() => (sortable ? handleSortClick(col) : undefined)}
+                        className={cn(
+                          "inline-flex items-center gap-1",
+                          col.align === "right" && "flex-row-reverse",
+                          sortable ? "cursor-pointer hover:text-foreground" : "cursor-default",
+                        )}
+                      >
+                        {col.header}
+                        {renderSortIcon(col)}
+                      </button>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
           <tbody>
             {loading
               ? Array.from({ length: 5 }).map((_, i) => (
@@ -226,6 +255,13 @@ export function DataTable<T>({
                     ))}
           </tbody>
         </table>
+        </div>
+        {canScrollRight && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent"
+          />
+        )}
       </div>
 
       {pagination && totalPages > 1 && !loading && (

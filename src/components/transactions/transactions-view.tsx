@@ -193,6 +193,8 @@ export function TransactionsView({
       key: "date",
       header: "Date",
       sortValue: (t) => t.date,
+      className: "min-w-32",
+      headerClassName: "min-w-32",
       cell: (t) => (
         <span className="whitespace-nowrap tabular-nums">{formatDate(t.date)}</span>
       ),
@@ -201,6 +203,8 @@ export function TransactionsView({
       key: "description",
       header: "Description",
       sortValue: (t) => t.description.toLowerCase(),
+      className: "min-w-56",
+      headerClassName: "min-w-56",
       cell: (t) => (
         <div>
           <p className="font-medium text-foreground">{t.description}</p>
@@ -213,6 +217,8 @@ export function TransactionsView({
     {
       key: "category",
       header: "Category",
+      className: "min-w-32",
+      headerClassName: "min-w-32",
       cell: (t) => {
         const c = t.categoryId ? categoriesById.get(t.categoryId) : undefined;
         return c ? (
@@ -225,6 +231,8 @@ export function TransactionsView({
     {
       key: "account",
       header: "Account",
+      className: "min-w-32",
+      headerClassName: "min-w-32",
       cell: (t) => {
         const a = t.accountId ? accountsById.get(t.accountId) : undefined;
         return a ? (
@@ -237,6 +245,8 @@ export function TransactionsView({
     {
       key: "type",
       header: "Type",
+      className: "min-w-24",
+      headerClassName: "min-w-24",
       cell: (t) => (
         <Badge tone={typeTone[t.type]}>
           {TRANSACTION_TYPE_LABELS[t.type]}
@@ -248,12 +258,16 @@ export function TransactionsView({
       header: "Amount",
       align: "right",
       sortValue: (t) => Number(t.amount),
+      className: "min-w-28",
+      headerClassName: "min-w-28",
       cell: renderAmount,
     },
     {
       key: "actions",
       header: "",
       align: "right",
+      className: "min-w-24",
+      headerClassName: "min-w-24",
       cell: (t) => (
         <div
           className="inline-flex items-center gap-1"
@@ -309,9 +323,9 @@ export function TransactionsView({
         </div>
 
         <Card className="overflow-hidden">
-          <div className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
+          <div className="flex w-full flex-wrap items-start gap-3 border-b border-border px-4 py-3">
             <form
-              className="flex flex-wrap items-end gap-3"
+              className="flex w-full flex-wrap items-start gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
                 push({ search: searchText });
@@ -392,28 +406,30 @@ export function TransactionsView({
                   ))}
                 </Select>
               </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted">
-                  From
-                </span>
-                <Input
-                  type="date"
-                  value={params.dateFrom ?? ""}
-                  onChange={(e) => push({ dateFrom: e.target.value || undefined })}
-                  className="w-40"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted">
-                  To
-                </span>
-                <Input
-                  type="date"
-                  value={params.dateTo ?? ""}
-                  onChange={(e) => push({ dateTo: e.target.value || undefined })}
-                  className="w-40"
-                />
-              </label>
+              <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                    From
+                  </span>
+                  <Input
+                    type="date"
+                    value={params.dateFrom ?? ""}
+                    onChange={(e) => push({ dateFrom: e.target.value || undefined })}
+                    className="w-full sm:w-40"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                    To
+                  </span>
+                  <Input
+                    type="date"
+                    value={params.dateTo ?? ""}
+                    onChange={(e) => push({ dateTo: e.target.value || undefined })}
+                    className="w-full sm:w-40"
+                  />
+                </label>
+              </div>
               {hasFilters && (
                 <Button
                   type="button"
