@@ -21,7 +21,7 @@ export function SignupForm() {
         Start turning your business records into clarity.
       </p>
 
-      <form action={formAction} className="mt-6 flex flex-col gap-4">
+      <form action={formAction} suppressHydrationWarning className="mt-6 flex flex-col gap-4">
         {state.error && (
           <Alert tone="danger" title="Couldn't create account">
             {state.error}
