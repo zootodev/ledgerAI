@@ -3,7 +3,8 @@
 /* ============================================================
    LedgerAI Design Tokens
    Restrained fintech/SaaS visual language: clean, trustworthy,
-   premium, calm, data-focused.
+   premium, calm, data-focused. No glassmorphism, minimal
+   animation, finance-appropriate trust signals.
    ============================================================ */
 
 :root {
@@ -11,6 +12,7 @@
   --background: #f8fafc;
   --surface: #ffffff;
   --surface-subtle: #f1f5f9;
+  --surface-hover: #f8fafc;
   --border: #e2e8f0;
   --border-strong: #cbd5e1;
 
@@ -19,31 +21,89 @@
   --text-secondary: #475569;
   --text-muted: #64748b;
   --text-subtle: #94a3b8;
+  --text-on-accent: #ffffff;
 
   /* Brand */
-  --brand: #10b981; /* trust-first emerald in default scaffold; overridden below */
+  --brand: #2563eb;
+  --brand-hover: #1d4ed8;
+  --brand-soft: #eff6ff;
+  --brand-strong: #1e40af;
+
+  /* Semantic */
+  --success: #16a34a;
+  --success-soft: #f0fdf4;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --info: #0284c7;
+  --info-soft: #f0f9ff;
+
+  /* Chart palette (accessible, distinguishable) */
+  --chart-1: #2563eb;
+  --chart-2: #16a34a;
+  --chart-3: #ea580c;
+  --chart-4: #7c3aed;
+  --chart-5: #0891b2;
+  --chart-6: #475569;
+  --chart-grid: #e2e8f0;
 }
 
 .theme-ledgerai {
-  --brand: #2563eb; /* primary indigo */
+  --brand: #2563eb;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-subtle: var(--surface-subtle);
+  --color-surface-hover: var(--surface-hover);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
+
   --color-foreground: var(--foreground);
-  --color-muted: var(--text-secondary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-subtle: var(--text-subtle);
   --color-faint: var(--text-subtle);
+  --color-on-accent: var(--text-on-accent);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-strong: var(--brand-strong);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-grid: var(--chart-grid);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
   --radius-card: 0.75rem;
   --radius-field: 0.5rem;
+  --radius-button: 0.5rem;
+
   --shadow-card: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 3px rgb(15 23 42 / 0.1);
+  --shadow-card-hover: 0 4px 6px -1px rgb(15 23 42 / 0.07),
+    0 2px 4px -2px rgb(15 23 42 / 0.05);
+  --shadow-popover: 0 10px 15px -3px rgb(15 23 42 / 0.1),
+    0 4px 6px -4px rgb(15 23 42 / 0.05);
+  --shadow-modal: 0 20px 25px -5px rgb(15 23 42 / 0.2),
+    0 8px 10px -6px rgb(15 23 42 / 0.1);
 }
 
 body {
@@ -52,20 +112,41 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-size: 0.9375rem;
+  line-height: 1.5;
 }
 
 /* Numeric tabular figures for financial data */
-.tabular-nums {
+.tabular-nums,
+.tabular-nums * {
   font-variant-numeric: tabular-nums;
 }
 
 /* Visible, consistent focus states for accessibility */
-:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+:where(a, button, input, select, textarea, [tabindex], [role="switch"]):focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
   border-radius: var(--radius-field);
 }
 
+/* Reduced motion — respect user preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 ::selection {
   background: color-mix(in srgb, var(--brand) 20%, transparent);
+}
+
+/* Subtle scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
