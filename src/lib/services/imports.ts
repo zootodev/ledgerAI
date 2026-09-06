@@ -8,13 +8,18 @@ import {
   fingerprintOf,
   validateMapping,
   categorizeImportRow,
+  matchByName,
 } from "@/lib/import/index";
+import { extractMerchantKey } from "@/lib/ai/merchant-key";
+import { persistLearnedRules } from "@/lib/services/rules";
+import type { CategoryRuleLearnInput } from "@/lib/validation/rules";
 import { canonicalAmount } from "@/lib/import/dedupe";
 import type {
   ImportCategoryOption,
   ImportSuggestion,
   NormalizedImportRow,
 } from "@/lib/import/types";
+import type { CategoryRuleDto } from "@/types";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { ImportModel } from "@/generated/prisma/models/Import";
 
@@ -54,6 +59,8 @@ export interface ImportCommitServiceResult {
   invalid: number;
   excluded: number;
   importId: string;
+  /** How many category rules were remembered from review corrections. */
+  learnedRuleCount: number;
 }
 
 export type { ImportCommitInput };
@@ -134,6 +141,10 @@ export async function commitImport(
   const tags = tagDuplicates(normalized, existing);
 
   const categoryOptions = await listCategoryOptions(prisma, business.id);
+  // Business rules are re-loaded here independently of anything the preview
+  // sent, so preview and commit always categorize against the same rules and
+  // a stale or forged client preview can never change what is written.
+  const businessRules = await listCategoryRulesForBusiness(prisma, business.id);
 
   const selected = new Map(
     input.selections.map((s) => [s.rowIndex, s]),
@@ -143,6 +154,11 @@ export async function commitImport(
   const toCreate: Prisma.TransactionCreateManyInput[] = [];
   const errors: { sourceRow: number; message: string }[] = [];
   const reasons = { invalid: 0, existing: 0, inFile: 0, excluded: 0 };
+
+  // Learned-rule candidates from review corrections: keyed by merchant key.
+  // A value of null marks a conflict (same key corrected to different
+  // categories) and the whole key is skipped.
+  const learnCandidates = new Map<string, string | null>();
 
   for (const row of normalized) {
     const tag = tags.get(row.rowIndex);
@@ -178,13 +194,14 @@ export async function commitImport(
       continue;
     }
 
-    const suggestion = await categorizeImportRow(row);
+    const suggestion = await categorizeImportRow(row, { businessRules, categoryOptions });
     const category = await resolveCategory(
       categoryOptions,
       selection.categoryId,
       row,
       suggestion,
     );
+    const included = !!category;
 
     toCreate.push({
       businessId: business.id,
@@ -201,6 +218,24 @@ export async function commitImport(
       fingerprint: fp,
     });
     committedFingerprints.add(fp);
+
+    if (included) {
+      const learned = await collectReviewCorrection(
+        row,
+        categoryOptions,
+        selection.categoryId,
+        suggestion,
+        category,
+      );
+      if (learned) {
+        const prior = learnCandidates.get(learned.pattern);
+        if (prior === undefined) {
+          learnCandidates.set(learned.pattern, learned.category.id);
+        } else if (prior !== learned.category.id) {
+          learnCandidates.set(learned.pattern, null);
+        }
+      }
+    }
   }
 
   const importId = await prisma.$transaction(async (tx) => {
@@ -232,6 +267,18 @@ export async function commitImport(
     return record.id;
   });
 
+  // Learn from review corrections AFTER the import committed. Best-effort:
+  // a learning failure must never fail, retry or roll back the import.
+  const candidates = collectLearningCandidates(learnCandidates, categoryOptions);
+  let learnedRuleCount = 0;
+  if (candidates.length > 0) {
+    try {
+      learnedRuleCount = await persistLearnedRules(candidates, "import");
+    } catch (err) {
+      console.error("[rules] import: learning batch failed", { error: String(err) });
+    }
+  }
+
   return {
     total: normalized.length,
     imported: toCreate.length,
@@ -240,6 +287,7 @@ export async function commitImport(
     invalid: reasons.invalid,
     excluded: reasons.excluded,
     importId,
+    learnedRuleCount,
   };
 }
 
@@ -290,8 +338,10 @@ async function listCategoryOptions(
  * Resolve a category id for the row, in precedence order:
  *  1. the user's explicit review choice (business-owned or system),
  *  2. the file's own category text when it matches an app category,
- *  3. the rules-based suggestion,
- *  4. the deterministic fallback (Other / Other Income). Transfers always
+ *  3. a learned business rule that matched (exact category id first so a
+ *     rule survives a category rename between preview and commit),
+ *  4. the rules-based suggestion,
+ *  5. the deterministic fallback (Other / Other Income). Transfers always
  *     resolve to null — they are not categories.
  */
 async function resolveCategory(
@@ -312,6 +362,11 @@ async function resolveCategory(
     if (byFile) return byFile;
   }
 
+  if (suggestion.businessRule) {
+    const byRule = resolveBusinessRuleOption(options, suggestion.businessRule, row.type);
+    if (byRule) return byRule;
+  }
+
   if (suggestion.categoryName && suggestion.categoryName !== "Transfer") {
     const bySuggestion = matchByName(options, suggestion.categoryName, row.type);
     if (bySuggestion) return bySuggestion;
@@ -321,16 +376,93 @@ async function resolveCategory(
   return matchByName(options, fallbackName, row.type) ?? null;
 }
 
-function matchByName(
+/**
+ * Resolve a learned rule's target the same way as the engine: exact
+ * category id first (survives a rename), then the stored category name.
+ */
+function resolveBusinessRuleOption(
   options: ImportCategoryOption[],
-  name: string,
+  rule: NonNullable<ImportSuggestion["businessRule"]>,
   type: "income" | "expense",
 ): ImportCategoryOption | null {
-  const target = name.trim().toLowerCase();
-  return (
-    options.find((o) => o.type === type && o.name.trim().toLowerCase() === target) ??
-    null
-  );
+  if (rule.categoryId) {
+    const byId = options.find((o) => o.id === rule.categoryId && o.type === type);
+    if (byId) return byId;
+  }
+  return matchByName(options, rule.categoryName, type);
+}
+
+/**
+ * Build the list of business-scoped learned rules for the current business,
+ * independent of anything the client sent.
+ */
+async function listCategoryRulesForBusiness(
+  prisma: PrismaClient,
+  businessId: string,
+): Promise<CategoryRuleDto[]> {
+  const rules = await prisma.categoryRule.findMany({
+    where: { businessId },
+    orderBy: { createdAt: "asc" },
+  });
+  return rules.map((r) => ({
+    id: r.id,
+    businessId: r.businessId,
+    matchType: r.matchType as CategoryRuleDto["matchType"],
+    pattern: r.pattern,
+    categoryId: r.categoryId,
+    categoryName: r.categoryName ?? "",
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+/**
+ * Learn from a single committed row ONLY when the user explicitly overrode
+ * the categorizer's suggestion with a different, valid category:
+ *  - a non-null, resolvable review selection that differs from what the
+ *    system would have chosen without it,
+ *  - the row is not a transfer,
+ *  - the suggestion did NOT come from the file's own category column,
+ *  - a trustworthy merchant key can be extracted.
+ * Returns null when any condition fails.
+ */
+async function collectReviewCorrection(
+  row: NormalizedImportRow,
+  categoryOptions: ImportCategoryOption[],
+  selectedId: string | null,
+  suggestion: ImportSuggestion,
+  chosen: ImportCategoryOption,
+): Promise<{ pattern: string; category: ImportCategoryOption } | null> {
+  if (!selectedId) return null;
+  if (row.type === "transfer") return null;
+  if (row.category) return null;
+
+  const base = await resolveCategory(categoryOptions, null, row, suggestion);
+  if (base && base.id === chosen.id) return null;
+
+  const pattern = extractMerchantKey(row.description);
+  if (!pattern) return null;
+
+  return { pattern, category: chosen };
+}
+
+/** Resolve the deduped candidate keys into validated learning intents. */
+function collectLearningCandidates(
+  learnCandidates: Map<string, string | null>,
+  categoryOptions: ImportCategoryOption[],
+): CategoryRuleLearnInput[] {
+  const candidates: CategoryRuleLearnInput[] = [];
+  for (const [pattern, categoryId] of learnCandidates) {
+    if (!categoryId) continue; // conflicting key — learn nothing for it
+    const category = categoryOptions.find((o) => o.id === categoryId);
+    if (!category) continue;
+    candidates.push({
+      matchType: "merchant",
+      pattern,
+      categoryId: category.id,
+      categoryName: category.name,
+    });
+  }
+  return candidates;
 }
 
 function parseFile(

@@ -4,6 +4,13 @@ export { accountInputSchema, accountIdSchema } from "./account";
 export type { AccountInput } from "./account";
 export { categoryInputSchema, categoryIdSchema, categoryTypeSchema } from "./category";
 export type { CategoryInput } from "./category";
+export {
+  categoryRuleIdSchema,
+  categoryRuleMatchTypeSchema,
+  categoryRulePatternSchema,
+  categoryRuleLearnInputSchema,
+} from "./rules";
+export type { CategoryRuleLearnInput } from "./rules";
 export { businessUpdateSchema } from "./business";
 export type { BusinessUpdateInput } from "./business";
 export {

@@ -1,6 +1,11 @@
 import type { Categorizer } from "./types";
-import type { CategorizationResult } from "../../types";
+import type { CategorizationResult, CategoryRuleDto } from "../../types";
 import { categorizeByRules, REVIEW_THRESHOLD } from "./rules";
+
+export interface RulesCategorizerOptions {
+  /** Business-scoped learned rules, ranked above the built-in defaults. */
+  businessRules?: CategoryRuleDto[];
+}
 
 /**
  * Deterministic rules-based categorizer. Implements the Categorizer
@@ -8,9 +13,19 @@ import { categorizeByRules, REVIEW_THRESHOLD } from "./rules";
  * an LLM and never performs financial math.
  */
 export class RulesCategorizer implements Categorizer {
+  private readonly businessRules?: CategoryRuleDto[];
+
+  constructor(options: RulesCategorizerOptions = {}) {
+    this.businessRules = options.businessRules;
+  }
+
   async categorize(description: string): Promise<CategorizationResult> {
-    const { categoryName, confidence, matched } = categorizeByRules(description);
+    const { categoryName, confidence, matched, businessRule } = categorizeByRules(
+      description,
+      undefined,
+      this.businessRules,
+    );
     const needsReview = !matched || confidence < REVIEW_THRESHOLD;
-    return { categoryName, confidence, needsReview };
+    return { categoryName, confidence, needsReview, businessRule };
   }
 }

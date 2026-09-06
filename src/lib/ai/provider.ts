@@ -10,27 +10,36 @@
 // ============================================================
 
 import type { AIService, Categorizer } from "./types";
+import type { CategoryRuleDto } from "../../types";
 import { RulesCategorizer } from "./rules-categorizer";
 
 export type AiProviderName = "rules" | string;
 
+export interface AIServiceOptions {
+  /** Business-scoped learned rules applied above the built-in defaults. */
+  categoryRules?: CategoryRuleDto[];
+}
+
 /** Returns the active AI service. Defaults to the deterministic rules engine. */
-export function getAIService(): AIService {
+export function getAIService(options: AIServiceOptions = {}): AIService {
   const configured = process.env.AI_PROVIDER?.toLowerCase();
   const providerName: AiProviderName = configured && configured !== "" ? configured : "rules";
 
-  const categorizer = createCategorizer(providerName);
+  const categorizer = createCategorizer(providerName, options.categoryRules);
   return { categorizer };
 }
 
-function createCategorizer(providerName: AiProviderName): Categorizer {
+function createCategorizer(
+  providerName: AiProviderName,
+  categoryRules?: CategoryRuleDto[],
+): Categorizer {
   switch (providerName) {
     case "rules":
-      return new RulesCategorizer();
+      return new RulesCategorizer({ businessRules: categoryRules });
     // Future providers (e.g. "openai", "anthropic", "openrouter") implement
     // the Categorizer interface and are selected here. Without a real key/impl
     // they are intentionally not wired yet; the app always falls back to rules.
     default:
-      return new RulesCategorizer();
+      return new RulesCategorizer({ businessRules: categoryRules });
   }
 }

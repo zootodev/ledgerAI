@@ -196,5 +196,6 @@ model CategoryRule {
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([businessId])
+  @@unique([businessId, matchType, pattern])
   @@map("category_rules")
 }

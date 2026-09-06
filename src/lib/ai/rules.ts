@@ -3,9 +3,8 @@
 // ------------------------------------------------------------
 // Categorizes transaction descriptions using deterministic rules so
 // the MVP works with NO AI API key and with fully predictable,
-// auditable behavior. User corrections can be folded in later by
-// adding business-specific rules (the CategoryRule table) ranked above
-// these defaults.
+// auditable behavior. Business-specific learned rules (the CategoryRule
+// table) are ranked ABOVE these defaults.
 //
 // Confidence heuristics:
 //  - specific merchant match       -> high confidence (0.92–0.97)
@@ -13,6 +12,8 @@
 //  - weak/generic match            -> low (<0.75) and needsReview
 //  - no match                      -> "Other", low confidence, needsReview
 // ============================================================
+
+import type { CategoryRuleDto } from "../../types";
 
 export interface MatchRule {
   /** Exact (case-insensitive) merchant token -> category. */
@@ -60,6 +61,39 @@ export interface RuleMatch {
   categoryName: string;
   confidence: number;
   matched: boolean;
+  /** Set when the match came from a learned business rule. */
+  businessRule?: {
+    categoryId: string | null;
+    categoryName: string;
+  } | null;
+}
+
+/**
+ * Rank business rules for deterministic matching: longest pattern first,
+ * then oldest createdAt, then id (all ascending aside from length).
+ */
+function orderedBusinessRules(
+  rules: CategoryRuleDto[] | undefined,
+  type: CategoryRuleDto["matchType"],
+): CategoryRuleDto[] {
+  if (!rules) return [];
+  return rules
+    .filter((r) => r.matchType === type)
+    .sort(
+      (a, b) =>
+        b.pattern.length - a.pattern.length ||
+        a.createdAt.localeCompare(b.createdAt) ||
+        a.id.localeCompare(b.id),
+    );
+}
+
+function safeRuleRegex(pattern: string | undefined): RegExp | null {
+  if (!pattern) return null;
+  try {
+    return new RegExp(pattern, "i");
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -70,6 +104,7 @@ export interface RuleMatch {
 export function categorizeByRules(
   description: string,
   rules: MatchRule = DEFAULT_RULES,
+  businessRules?: CategoryRuleDto[],
 ): RuleMatch {
   const text = description.trim();
 
@@ -79,14 +114,40 @@ export function categorizeByRules(
 
   const upper = text.toUpperCase();
 
-  // 1) Exact merchant lookup (highest specificity)
+  // 1) Business (learned) merchant rules — highest specificity. Beat a
+  //    conflicting built-in merchant rule by being consulted first.
+  for (const rule of orderedBusinessRules(businessRules, "merchant")) {
+    if (rule.pattern && upper.includes(rule.pattern)) {
+      return {
+        categoryName: rule.categoryName || "Other",
+        confidence: 0.94,
+        matched: true,
+        businessRule: { categoryId: rule.categoryId, categoryName: rule.categoryName },
+      };
+    }
+  }
+
+  // 2) Business keyword rules.
+  for (const rule of orderedBusinessRules(businessRules, "keyword")) {
+    const re = safeRuleRegex(rule.pattern);
+    if (re && re.test(text)) {
+      return {
+        categoryName: rule.categoryName || "Other",
+        confidence: 0.82,
+        matched: true,
+        businessRule: { categoryId: rule.categoryId, categoryName: rule.categoryName },
+      };
+    }
+  }
+
+  // 3) Built-in exact merchant lookup.
   for (const [merchant, category] of Object.entries(rules.merchants)) {
     if (upper.includes(merchant)) {
       return { categoryName: category, confidence: 0.94, matched: true };
     }
   }
 
-  // 2) Keyword patterns (medium confidence)
+  // 4) Built-in keyword patterns (medium confidence).
   for (const entry of rules.keywords) {
     if (entry.pattern.test(text)) {
       return {
@@ -97,7 +158,7 @@ export function categorizeByRules(
     }
   }
 
-  // 3) No reliable match -> "Other" + needsReview
+  // 5) No reliable match -> "Other" + needsReview
   return { categoryName: "Other", confidence: LOW_CONFIDENCE, matched: false };
 }
 

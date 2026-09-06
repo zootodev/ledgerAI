@@ -6,7 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Tabs } from "@/components/ui/tabs";
 
 export interface SettingsShellProps {
-  active: "accounts" | "categories";
+  active: "accounts" | "categories" | "rules";
   userName?: string;
   userEmail: string;
   businessName: string;
@@ -23,6 +23,12 @@ export function SettingsShell({
   children,
 }: SettingsShellProps) {
   const router = useRouter();
+
+  const paths: Record<string, string> = {
+    accounts: "/settings/accounts",
+    categories: "/settings/categories",
+    rules: "/settings/rules",
+  };
 
   return (
     <AppShell
@@ -41,10 +47,11 @@ export function SettingsShell({
         <Tabs
           ariaLabel="Settings sections"
           value={active}
-          onChange={(value: string) => router.push(value === "categories" ? "/settings/categories" : "/settings/accounts")}
+          onChange={(value: string) => router.push(paths[value] ?? "/settings/accounts")}
           items={[
             { value: "accounts", label: "Accounts" },
             { value: "categories", label: "Categories" },
+            { value: "rules", label: "Rules" },
           ]}
         />
 

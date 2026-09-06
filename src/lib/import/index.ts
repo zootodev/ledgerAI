@@ -33,6 +33,8 @@ export {
 export {
   categorizeImportRow,
   categorizeImportRows,
+  matchByName,
+  resolveRulesForRow,
 } from "./categorize";
 export {
   buildImportPreview,

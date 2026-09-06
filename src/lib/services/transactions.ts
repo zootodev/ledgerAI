@@ -6,6 +6,8 @@ import {
   zErrorMessage,
 } from "@/lib/validation/index";
 import { transactionFingerprint } from "@/lib/finance/engine";
+import { extractMerchantKey } from "@/lib/ai/merchant-key";
+import { learnMerchantRule } from "@/lib/services/rules";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { TransactionModel } from "@/generated/prisma/models/Transaction";
 
@@ -246,9 +248,17 @@ export async function updateTransaction(
   }
 
   const { prisma, business } = await requireAuthContext();
+  // Pre-read the fields the learning flow needs so a correction is only
+  // detected against what the AI originally suggested.
   const existing = await prisma.transaction.findFirst({
     where: { id: idParsed.data, businessId: business.id },
-    select: { id: true },
+    select: {
+      id: true,
+      categoryId: true,
+      aiCategory: true,
+      description: true,
+      type: true,
+    },
   });
   if (!existing) throw new Error("Transaction not found.");
 
@@ -274,7 +284,72 @@ export async function updateTransaction(
       }),
     },
   });
+
+  // Learn from a manual edit that moved a transaction AWAY from its AI
+  // suggestion. Best-effort and explicitly AFTER the successful update: a
+  // learning failure must never fail the user's edit.
+  await maybeLearnFromEdit(prisma, business.id, {
+    previous: existing,
+    newCategoryId: parsed.data.categoryId ?? null,
+    newDescription: parsed.data.description,
+    newType: parsed.data.type,
+  });
+
   return toDto(updated);
+}
+
+/**
+ * Learn a merchant rule from a manual edit, but ONLY when the user actually
+ * corrected the categorizer's suggestion:
+ *  - the row was AI-categorized (hand-entered rows never learn),
+ *  - the edit set a valid, different category (never the same as before),
+ *  - the target category is not a transfer and differs from the AI category
+ *    by name, and
+ *  - a trustworthy merchant key can be extracted from the description.
+ * Never throws: failures are logged and ignored.
+ */
+async function maybeLearnFromEdit(
+  prisma: PrismaClient,
+  businessId: string,
+  edit: {
+    previous: {
+      id: string;
+      categoryId: string | null;
+      aiCategory: string | null;
+      description: string;
+      type: string;
+    };
+    newCategoryId: string | null;
+    newDescription: string;
+    newType: string;
+  },
+): Promise<void> {
+  if (edit.newType === "transfer") return;
+  if (!edit.previous.aiCategory) return;
+  if (!edit.newCategoryId) return;
+  if (edit.newCategoryId === edit.previous.categoryId) return;
+
+  const category = await prisma.category.findFirst({
+    where: { id: edit.newCategoryId, OR: [{ businessId: null }, { businessId }] },
+    select: { id: true, name: true },
+  });
+  if (!category) return;
+  if (category.name.trim().toLowerCase() === edit.previous.aiCategory.trim().toLowerCase()) {
+    return;
+  }
+
+  const pattern = extractMerchantKey(edit.newDescription);
+  if (!pattern) return;
+
+  try {
+    await learnMerchantRule({ pattern, categoryId: category.id, categoryName: category.name });
+  } catch (err) {
+    console.error("[rules] edit: failed to persist rule", {
+      pattern,
+      category: category.name,
+      error: String(err),
+    });
+  }
 }
 
 /**

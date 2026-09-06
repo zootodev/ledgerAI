@@ -1,9 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as React from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ImportSummaryCards } from "@/components/import/import-summary-cards";
 import { WizardStepper } from "@/components/import/import-stepper";
 import { ImportHistory } from "@/components/import/import-history";
+import { ImportSuccessDescription } from "@/components/import/import-wizard";
 import type { ImportHistoryItem } from "@/lib/services/imports";
+
+vi.mock("next/link", () => ({
+  default: ({ href, children }: { href: string; children: React.ReactNode }) =>
+    createElement("a", { href }, children),
+}));
 
 const SUMMARY = {
   total: 12,
@@ -82,5 +90,41 @@ describe("ImportHistory", () => {
     expect(html).toContain("1 excluded");
     expect(html).toContain("committed");
     expect(html).toContain("O&#x27;Brien&#x27;s statement.xlsx");
+  });
+});
+
+describe("ImportSuccessDescription", () => {
+  const baseResult = {
+    total: 4,
+    imported: 3,
+    invalid: 1,
+    existingDuplicates: 2,
+    inFileDuplicates: 1,
+    excluded: 1,
+    learnedRuleCount: 0,
+    importId: "imp-1",
+  };
+
+  it("summarises the import result counts", () => {
+    const html = renderToStaticMarkup(<ImportSuccessDescription result={baseResult} />);
+    expect(html).toContain("3 imported");
+    expect(html).toContain("2 already in ledger");
+    expect(html).toContain("1 duplicate in file");
+    expect(html).toContain("1 invalid");
+    expect(html).toContain("1 excluded");
+  });
+
+  it("links to the rules page when corrections were learned", () => {
+    const html = renderToStaticMarkup(
+      <ImportSuccessDescription result={{ ...baseResult, learnedRuleCount: 2 }} />,
+    );
+    expect(html).toContain("Remembered 2 categorisations");
+    expect(html).toContain('href="/settings/rules"');
+  });
+
+  it("never links to the rules page when nothing was learned", () => {
+    const html = renderToStaticMarkup(<ImportSuccessDescription result={baseResult} />);
+    expect(html).not.toContain("Remembered");
+    expect(html).not.toContain('/settings/rules"');
   });
 });

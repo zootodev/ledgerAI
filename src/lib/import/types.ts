@@ -89,6 +89,11 @@ export interface ImportSuggestion {
   categoryName: string;
   confidence: number;
   needsReview: boolean;
+  /** Set when the suggestion came from a learned business rule. */
+  businessRule?: {
+    categoryId: string | null;
+    categoryName: string;
+  } | null;
 }
 
 export type DuplicateStatus =

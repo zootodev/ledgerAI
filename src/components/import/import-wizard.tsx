@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
@@ -40,13 +41,16 @@ import {
   shouldIncludeByDefault,
   type BuiltPreview,
 } from "@/lib/import/index";
+import type { ImportCategoryOption } from "@/lib/import/types";
 import {
   getImportFingerprintsAction,
   commitImportAction,
 } from "@/lib/actions/imports";
+import { getCategoryRulesAction } from "@/lib/actions/rules";
+import type { CategoryRuleDto } from "@/types";
 import type { AccountServiceData } from "@/lib/services/accounts";
 import type { CategoryServiceData } from "@/lib/services/categories";
-import type { ImportHistoryItem } from "@/lib/services/imports";
+import type { ImportHistoryItem, ImportCommitServiceResult } from "@/lib/services/imports";
 
 export interface ImportWizardProps {
   accounts: AccountServiceData[];
@@ -100,19 +104,33 @@ export function ImportWizard({
   const [mapping, setMapping] = React.useState<ColumnMapping>({});
   const [preview, setPreview] = React.useState<BuiltPreview | null>(null);
   const [existing, setExisting] = React.useState<string[]>([]);
+  const [rules, setRules] = React.useState<CategoryRuleDto[]>([]);
   const [parseError, setParseError] = React.useState<string | null>(null);
   const [selections, setSelections] = React.useState<Record<number, boolean>>({});
   const [overrides, setOverrides] = React.useState<Record<number, string>>({});
   const [accountId, setAccountId] = React.useState("");
 
   const buildPreviewFor = React.useCallback(
-    async (p: ParsedImportFile, m: ColumnMapping, fps: string[]): Promise<BuiltPreview> => {
+    async (
+      p: ParsedImportFile,
+      m: ColumnMapping,
+      fps: string[],
+      businessRules: CategoryRuleDto[],
+    ): Promise<BuiltPreview> => {
       const rows = p.rows.map((raw, index) => normalizeImportRow(raw, m, index));
       const tags = tagDuplicates(rows, new Set(fps));
-      const suggestions = await categorizeImportRows(rows);
+      const categoryOptions: ImportCategoryOption[] = categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+      }));
+      const suggestions = await categorizeImportRows(rows, {
+        businessRules,
+        categoryOptions,
+      });
       return buildImportPreview(rows, suggestions, tags);
     },
-    [],
+    [categories],
   );
 
   const applyDefaults = React.useCallback((built: BuiltPreview): Record<number, boolean> => {
@@ -164,13 +182,15 @@ export function ImportWizard({
 
         const detected = detectColumns(file.headers);
         const fps = await getImportFingerprintsAction();
+        const businessRules = await getCategoryRulesAction();
 
         setFile(next);
         setParsed(file);
         setMapping(detected);
         setExisting(fps);
+        setRules(businessRules);
 
-        const built = await buildPreviewFor(file, detected, fps);
+        const built = await buildPreviewFor(file, detected, fps, businessRules);
         setPreview(built);
         setSelections(applyDefaults(built));
         setOverrides({});
@@ -199,7 +219,7 @@ export function ImportWizard({
       setMapping(next);
       setWorking(true);
       try {
-        const built = await buildPreviewFor(parsed, next, existing);
+        const built = await buildPreviewFor(parsed, next, existing, rules);
         setPreview(built);
         setSelections(applyDefaults(built));
         setOverrides({});
@@ -207,7 +227,7 @@ export function ImportWizard({
         setWorking(false);
       }
     },
-    [parsed, mapping, existing, buildPreviewFor, applyDefaults],
+    [parsed, mapping, existing, rules, buildPreviewFor, applyDefaults],
   );
 
   const reset = React.useCallback(() => {
@@ -217,6 +237,7 @@ export function ImportWizard({
     setMapping({});
     setPreview(null);
     setExisting([]);
+    setRules([]);
     setParseError(null);
     setSelections({});
     setOverrides({});
@@ -250,25 +271,9 @@ export function ImportWizard({
 
       const res = await commitImportAction({}, fd);
       if (res.ok && res.result) {
-        const parts: string[] = [];
-        if (res.result.imported > 0) {
-          parts.push(`${res.result.imported} imported`);
-        }
-        if (res.result.existingDuplicates > 0) {
-          parts.push(`${res.result.existingDuplicates} already in ledger`);
-        }
-        if (res.result.inFileDuplicates > 0) {
-          parts.push(`${res.result.inFileDuplicates} duplicate in file`);
-        }
-        if (res.result.invalid > 0) {
-          parts.push(`${res.result.invalid} invalid`);
-        }
-        if (res.result.excluded > 0) {
-          parts.push(`${res.result.excluded} excluded`);
-        }
         toast.success({
           title: `${res.result.imported} of ${res.result.total} row${res.result.total === 1 ? "" : "s"} imported`,
-          description: parts.length > 0 ? parts.join(" · ") : "Nothing to import.",
+          description: <ImportSuccessDescription result={res.result} />,
         });
         router.refresh();
         reset();
@@ -471,7 +476,8 @@ export function ImportWizard({
               <CardDescription>
                 Rows ready to import are included by default. Duplicates are excluded until you
                 choose &quot;Import anyway&quot;. Review low-confidence categories and override per-row
-                where needed.
+                where needed. When you change a suggested category, LedgerAI will remember that
+                correction for future imports.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -650,5 +656,33 @@ function AliveSample({
       <span className="font-medium uppercase tracking-wide text-xs">Sample row:</span>{" "}
       {parts.length > 0 ? parts.join(" · ") : "No sample values to show yet."}
     </p>
+  );
+}
+
+export interface ImportSuccessDescriptionProps {
+  result: ImportCommitServiceResult;
+}
+
+export function ImportSuccessDescription({ result }: ImportSuccessDescriptionProps) {
+  const parts: string[] = [];
+  if (result.imported > 0) parts.push(`${result.imported} imported`);
+  if (result.existingDuplicates > 0) parts.push(`${result.existingDuplicates} already in ledger`);
+  if (result.inFileDuplicates > 0) parts.push(`${result.inFileDuplicates} duplicate in file`);
+  if (result.invalid > 0) parts.push(`${result.invalid} invalid`);
+  if (result.excluded > 0) parts.push(`${result.excluded} excluded`);
+
+  return (
+    <>
+      <p>{parts.length > 0 ? parts.join(" · ") : "Nothing to import."}</p>
+      {result.learnedRuleCount > 0 && (
+        <p className="mt-1">
+          Remembered {result.learnedRuleCount} categorisation
+          {result.learnedRuleCount === 1 ? "" : "s"} —{" "}
+          <Link href="/settings/rules" className="underline">
+            manage them in Settings → Rules
+          </Link>
+        </p>
+      )}
+    </>
   );
 }

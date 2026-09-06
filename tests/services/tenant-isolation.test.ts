@@ -120,6 +120,11 @@ const mockPrisma = {
     update: vi.fn(),
     delete: vi.fn(),
   },
+  categoryRule: {
+    findMany: vi.fn(),
+    findFirst: vi.fn(),
+    upsert: vi.fn(),
+  },
 };
 
 beforeEach(() => {
@@ -279,6 +284,7 @@ describe("transactions service (tenant-isolated data access)", () => {
 });
 
 const UUID_SYSTEM = "33333333-3333-4333-8333-333333333333";
+const UUID_MARKETING = "44444444-4444-4444-8444-444444444444";
 
 function makeAccountRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -593,5 +599,174 @@ describe("transaction reference validation (ownership at write time)", () => {
     const data = mockPrisma.transaction.update.mock.calls[0][0].data;
     expect(data.fingerprint).toContain("refund");
     expect(data.amount).toBe("50.00");
+  });
+});
+
+describe("transaction edit learning (Phase 7)", () => {
+  beforeEach(() => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    mockPrisma.business.findFirst.mockResolvedValue(businessA);
+  });
+
+  const validInput = {
+    date: "2026-08-01",
+    description: "Sales receipt",
+    amount: "1000.00",
+    type: "income" as const,
+    reference: "INV-7",
+  };
+
+  const aiCategorizedRow = {
+    id: UUID_OWNED,
+    categoryId: UUID_SYSTEM,
+    aiCategory: "Transportation",
+    description: "UBER *TRIP",
+    type: "expense",
+  };
+
+  it("learns a merchant rule when an edit moves a row away from its AI suggestion", async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue(aiCategorizedRow);
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED_2, name: "Food" });
+    mockPrisma.transaction.update.mockResolvedValue(
+      makeTransactionRow({ categoryId: UUID_OWNED_2, type: "expense" }),
+    );
+    mockPrisma.categoryRule.upsert.mockResolvedValue({ id: "rule-edit" });
+
+    await updateTransaction(UUID_OWNED, {
+      ...validInput,
+      description: "UBER *TRIP",
+      type: "expense",
+      categoryId: UUID_OWNED_2,
+    });
+
+    expect(mockPrisma.transaction.update).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.categoryRule.upsert).toHaveBeenCalledTimes(1);
+    const upsertCall = mockPrisma.categoryRule.upsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(upsertCall.where).toEqual({
+      businessId_matchType_pattern: {
+        businessId: businessA.id,
+        matchType: "merchant",
+        pattern: "UBER",
+      },
+    });
+    expect(upsertCall.create).toMatchObject({
+      businessId: businessA.id,
+      matchType: "merchant",
+      pattern: "UBER",
+      categoryId: UUID_OWNED_2,
+      categoryName: "Food",
+    });
+  });
+
+  it("never learns from a hand-entered row that has no AI suggestion", async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue({
+      id: UUID_OWNED,
+      categoryId: null,
+      aiCategory: null,
+      description: "UBER *TRIP",
+      type: "expense",
+    });
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED_2, name: "Food" });
+    mockPrisma.transaction.update.mockResolvedValue(
+      makeTransactionRow({ categoryId: UUID_OWNED_2, type: "expense" }),
+    );
+
+    await updateTransaction(UUID_OWNED, {
+      ...validInput,
+      description: "UBER *TRIP",
+      type: "expense",
+      categoryId: UUID_OWNED_2,
+    });
+
+    expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
+  });
+
+  it("does not learn when the edit keeps the same category the AI suggested", async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue({
+      id: UUID_OWNED,
+      categoryId: null,
+      aiCategory: "Marketing",
+      description: "META ADS SPEND",
+      type: "expense",
+    });
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_MARKETING, name: "Marketing" });
+    mockPrisma.transaction.update.mockResolvedValue(
+      makeTransactionRow({ categoryId: UUID_MARKETING, type: "expense" }),
+    );
+
+    await updateTransaction(UUID_OWNED, {
+      ...validInput,
+      description: "META ADS SPEND",
+      type: "expense",
+      categoryId: UUID_MARKETING,
+    });
+
+    expect(mockPrisma.transaction.update).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
+  });
+
+  it("does not learn when the edit keeps the same category id", async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue({
+      id: UUID_OWNED,
+      categoryId: UUID_OWNED_2,
+      aiCategory: "Transportation",
+      description: "UBER *TRIP",
+      type: "expense",
+    });
+    mockPrisma.transaction.update.mockResolvedValue(
+      makeTransactionRow({ categoryId: UUID_OWNED_2, type: "expense" }),
+    );
+
+    await updateTransaction(UUID_OWNED, {
+      ...validInput,
+      description: "UBER *TRIP",
+      type: "expense",
+      categoryId: UUID_OWNED_2,
+    });
+
+    expect(mockPrisma.transaction.update).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
+  });
+
+  it("never learns from a transfer edit", async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue({
+      id: UUID_OWNED,
+      categoryId: null,
+      aiCategory: "Food",
+      description: "UBER *TRIP",
+      type: "transfer",
+    });
+    mockPrisma.transaction.update.mockResolvedValue(makeTransactionRow({ type: "transfer" }));
+
+    await updateTransaction(UUID_OWNED, {
+      ...validInput,
+      description: "UBER *TRIP",
+      type: "transfer",
+      categoryId: UUID_OWNED_2,
+    });
+
+    expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
+  });
+
+  it("never lets a learning failure fail the user's edit", async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue(aiCategorizedRow);
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED_2, name: "Food" });
+    mockPrisma.transaction.update.mockResolvedValue(
+      makeTransactionRow({ categoryId: UUID_OWNED_2, type: "expense" }),
+    );
+    mockPrisma.categoryRule.upsert.mockRejectedValue(new Error("db down"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await updateTransaction(UUID_OWNED, {
+      ...validInput,
+      description: "UBER *TRIP",
+      type: "expense",
+      categoryId: UUID_OWNED_2,
+    });
+
+    expect(result.id).toBe(UUID_OWNED);
+    expect(mockPrisma.transaction.update).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });

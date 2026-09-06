@@ -59,4 +59,22 @@ export interface CategorizationResult {
   categoryName: string;
   confidence: number; // 0..1
   needsReview: boolean;
+  /** Set when the match came from a learned business rule. */
+  businessRule?: {
+    categoryId: string | null;
+    categoryName: string;
+  } | null;
+}
+
+export type CategoryRuleMatchType = "merchant" | "keyword";
+
+/** Serializable rule DTO (category_rules table) consumed by the engine + UI. */
+export interface CategoryRuleDto {
+  id: string;
+  businessId: string;
+  matchType: CategoryRuleMatchType;
+  pattern: string;
+  categoryId: string | null;
+  categoryName: string;
+  createdAt: string;
 }

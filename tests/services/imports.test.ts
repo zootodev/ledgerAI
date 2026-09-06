@@ -27,6 +27,9 @@ const SYS_OTHER_INCOME = "00000000-0000-4000-8000-000000000001";
 const SYS_TRANSPORTATION = "00000000-0000-4000-8000-000000000002";
 const SYS_RENT = "00000000-0000-4000-8000-000000000003";
 const SYS_OTHER = "00000000-0000-4000-8000-000000000004";
+const SYS_MARKETING = "00000000-0000-4000-8000-000000000005";
+const SYS_FOOD = "00000000-0000-4000-8000-000000000006";
+const SYS_UTILITIES = "00000000-0000-4000-8000-000000000007";
 
 function makeDecimal(value: number) {
   return { toString: () => value.toFixed(2) };
@@ -51,7 +54,8 @@ const mockPrisma = {
     findMany: vi.fn(),
     createMany: vi.fn(),
   },
-  category: { findMany: vi.fn() },
+  category: { findMany: vi.fn(), findFirst: vi.fn() },
+  categoryRule: { findMany: vi.fn(), upsert: vi.fn() },
   import: { findMany: vi.fn(), create: vi.fn() },
   $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockPrisma)),
 };
@@ -227,6 +231,8 @@ describe("commitImport", () => {
   beforeEach(() => {
     mockedGetCurrentUser.mockResolvedValue(userA);
     mockPrisma.business.findFirst.mockResolvedValue(businessA);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.category.findFirst.mockResolvedValue(null);
   });
 
   it("re-derives rows from the bytes and writes only valid, included, new rows", async () => {
@@ -500,6 +506,244 @@ describe("commitImport", () => {
     expect(mockPrisma.account.findFirst.mock.calls[0][0].where).toEqual({
       id: "acc-other-biz",
       businessId: businessA.id,
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // Learning category rules from review corrections (Phase 7)
+  // ---------------------------------------------------------------
+
+  const COMMON_CATEGORIES = [
+    makeCategoryRow({ id: SYS_OTHER_INCOME, name: "Other Income", type: "income" }),
+    makeCategoryRow({ id: SYS_TRANSPORTATION, name: "Transportation" }),
+    makeCategoryRow({ id: SYS_UTILITIES, name: "Utilities" }),
+    makeCategoryRow({ id: SYS_RENT, name: "Rent" }),
+    makeCategoryRow({ id: SYS_MARKETING, name: "Marketing" }),
+    makeCategoryRow({ id: SYS_FOOD, name: "Food" }),
+    makeCategoryRow({ id: SYS_OTHER, name: "Other" }),
+  ];
+
+  it("remembers a review override as a merchant rule and keeps the suggestion confidence", async () => {
+    const statement = ["Date,Description,Amount", "2026-03-01,AIRTEL RECHARGE 500MB,-2500.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.category.findFirst.mockResolvedValue({ id: SYS_MARKETING });
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-learn-1" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({
+        fileName: "learn.csv",
+        selections: [{ rowIndex: 0, include: true, categoryId: SYS_MARKETING }],
+      }),
+    );
+
+    expect(result.imported).toBe(1);
+    expect(result.learnedRuleCount).toBe(1);
+
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created).toMatchObject({
+      categoryId: SYS_MARKETING,
+      aiCategory: "Marketing",
+      aiConfidence: 0.94,
+    });
+
+    const upsertCall = mockPrisma.categoryRule.upsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(upsertCall.where).toEqual({
+      businessId_matchType_pattern: {
+        businessId: businessA.id,
+        matchType: "merchant",
+        pattern: "AIRTEL",
+      },
+    });
+    expect(upsertCall.create).toMatchObject({
+      businessId: businessA.id,
+      matchType: "merchant",
+      pattern: "AIRTEL",
+      categoryId: SYS_MARKETING,
+      categoryName: "Marketing",
+    });
+  });
+
+  it("does not learn when the user keeps the categorizer suggestion", async () => {
+    const statement = ["Date,Description,Amount", "2026-03-01,MTN data recharge,-3000.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-learn-2" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({ fileName: "keep.csv", selections: [{ rowIndex: 0, include: true, categoryId: null }] }),
+    );
+
+    expect(result.imported).toBe(1);
+    expect(result.learnedRuleCount).toBe(0);
+    expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
+
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created).toMatchObject({ categoryId: SYS_UTILITIES, aiCategory: "Utilities" });
+  });
+
+  it("never learns from a row that already carried a category in the file", async () => {
+    const statement = ["Date,Description,Amount,Category", "2026-03-01,AIRTEL RECHARGE 500MB,-2500.00,Utilities"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-learn-3" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({
+        fileName: "filecat.csv",
+        mapping: { date: "Date", description: "Description", amount: "Amount", category: "Category" },
+        selections: [{ rowIndex: 0, include: true, categoryId: SYS_MARKETING }],
+      }),
+    );
+
+    expect(result.imported).toBe(1);
+    expect(result.learnedRuleCount).toBe(0);
+    expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
+
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created.categoryId).toBe(SYS_MARKETING);
+  });
+
+  it("dedupes identical corrections for the same merchant into a single rule", async () => {
+    const statement = [
+      "Date,Description,Amount",
+      "2026-03-01,UBER *TRIP,-2500.00",
+      "2026-03-02,UBER RIDE,-1500.00",
+    ].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.category.findFirst.mockResolvedValue({ id: SYS_MARKETING });
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 2 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-learn-4" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({
+        fileName: "dedupe.csv",
+        selections: [
+          { rowIndex: 0, include: true, categoryId: SYS_MARKETING },
+          { rowIndex: 1, include: true, categoryId: SYS_MARKETING },
+        ],
+      }),
+    );
+
+    expect(result.imported).toBe(2);
+    expect(result.learnedRuleCount).toBe(1);
+    expect(mockPrisma.categoryRule.upsert).toHaveBeenCalledTimes(1);
+    const upsertCall = mockPrisma.categoryRule.upsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(upsertCall.where).toEqual({
+      businessId_matchType_pattern: { businessId: businessA.id, matchType: "merchant", pattern: "UBER" },
+    });
+  });
+
+  it("learns nothing when the same merchant was corrected to different categories", async () => {
+    const statement = [
+      "Date,Description,Amount",
+      "2026-03-01,UBER *TRIP,-2500.00",
+      "2026-03-02,UBER RIDE,-1500.00",
+    ].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 2 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-learn-5" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({
+        fileName: "conflict.csv",
+        selections: [
+          { rowIndex: 0, include: true, categoryId: SYS_MARKETING },
+          { rowIndex: 1, include: true, categoryId: SYS_FOOD },
+        ],
+      }),
+    );
+
+    expect(result.imported).toBe(2);
+    expect(result.learnedRuleCount).toBe(0);
+    expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
+  });
+
+  it("never fails the import when learning a rule fails", async () => {
+    const statement = ["Date,Description,Amount", "2026-03-01,AIRTEL RECHARGE 500MB,-2500.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.category.findFirst.mockResolvedValue({ id: SYS_MARKETING });
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.categoryRule.upsert.mockRejectedValue(new Error("db down"));
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-learn-6" });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({
+        fileName: "flaky.csv",
+        selections: [{ rowIndex: 0, include: true, categoryId: SYS_MARKETING }],
+      }),
+    );
+
+    expect(result.imported).toBe(1);
+    expect(result.learnedRuleCount).toBe(0);
+    expect(mockPrisma.import.create).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("applies a learned rule at commit exactly like the preview would", async () => {
+    const statement = ["Date,Description,Amount", "2026-03-01,AIRTEL RECHARGE 500MB,-2500.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([
+      {
+        id: "rule-airtel",
+        businessId: businessA.id,
+        matchType: "merchant",
+        pattern: "AIRTEL",
+        categoryId: SYS_MARKETING,
+        categoryName: "Marketing",
+        createdAt: new Date("2026-09-01T00:00:00.000Z"),
+      },
+    ]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-learn-7" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({ fileName: "rule.csv" }),
+    );
+
+    expect(result.imported).toBe(1);
+    expect(result.learnedRuleCount).toBe(0);
+    expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
+
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created).toMatchObject({
+      categoryId: SYS_MARKETING,
+      aiCategory: "Marketing",
+      aiConfidence: 0.94,
     });
   });
 });
