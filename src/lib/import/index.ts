@@ -23,6 +23,7 @@ export {
   parseDate,
   inferTypeFromLabel,
   normalizeText,
+  isAbsentAmountCell,
 } from "./normalize";
 export {
   tagDuplicates,

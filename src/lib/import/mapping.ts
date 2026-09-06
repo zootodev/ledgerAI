@@ -32,15 +32,39 @@ const FIELD_ALIASES: Record<ImportField, AliasSet> = {
     tokens: ["narration", "description", "particulars", "details"],
   },
   amount: {
-    aliases: ["amount", "transaction amount", "value"],
+    aliases: ["amount", "transaction amount", "value", "amt", "total", "naira", "ngn"],
     tokens: ["amount"],
   },
   debit: {
-    aliases: ["debit", "debit amount", "withdrawal", "withdrawals", "paid out", "money out"],
+    aliases: [
+      "debit",
+      "debit amount",
+      "withdrawal",
+      "withdrawals",
+      "paid out",
+      "money out",
+      "expense",
+      "dr",
+      "moneyout",
+      "outflow",
+      "spent",
+    ],
     tokens: ["debit", "withdrawal"],
   },
   credit: {
-    aliases: ["credit", "credit amount", "deposit", "deposits", "paid in", "money in"],
+    aliases: [
+      "credit",
+      "credit amount",
+      "deposit",
+      "deposits",
+      "paid in",
+      "money in",
+      "income",
+      "cr",
+      "moneyin",
+      "inflow",
+      "received",
+    ],
     tokens: ["credit", "deposit"],
   },
   reference: {
@@ -67,7 +91,14 @@ const FIELD_ALIASES: Record<ImportField, AliasSet> = {
 };
 
 function normalizeHeader(value: string): string {
-  return value.toLowerCase().trim().replace(/\s+/g, " ").replace(/[()[\]]/g, "");
+  return value
+    .toLowerCase()
+    .trim()
+    // Ignore punctuation and underscores so "Money In", "Money_In" and
+    // "Money-In" all resolve to the same alias "money in".
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**

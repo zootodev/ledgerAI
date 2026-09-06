@@ -16,10 +16,10 @@
 //   zero -> invalid. Parenthesized values are negative (accounting).
 //
 // Debit/Credit columns:
-//   debit -> expense, credit -> income. Values must be positive;
-//   both populated with a nonzero value is ambiguous (a transfer is
-//   only accepted when the source explicitly says so via a type
-//   column).
+//   debit -> expense, credit -> income. Zero-filled sides (blank, "-",
+//   "0", "0.00", "₦0.00", "0,00") are treated as absent; exactly one
+//   non-zero side wins. Both sides non-zero without an explicit transfer
+//   type is ambiguous; both absent is "row has no amount".
 //
 // Transfers are ONLY produced when a mapped type column identifies
 // them. Ordinary debit/credit rows never become transfers.
@@ -46,6 +46,34 @@ interface DateResult {
 /** Normalize free text: trim + collapse inner whitespace. */
 export function normalizeText(value: string): string {
   return value.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * True when a Debit/Credit cell should be treated as ABSENT: blank, "-",
+ * or a zero value in any common form ("0", "0.00", "₦0.00", "0,00")
+ * after the same currency/number normalization used by parseAmount.
+ */
+export function isAbsentAmountCell(rawValue: string): boolean {
+  const raw = normalizeText(rawValue);
+  if (raw === "" || raw === "-") return true;
+
+  let body = raw;
+  if (body.startsWith("(") && body.endsWith(")")) {
+    body = body.slice(1, -1).trim();
+  }
+  if (body.startsWith("-") || body.startsWith("+")) {
+    body = body.slice(1).trim();
+  }
+
+  body = body
+    .replace(/[₦$€£]/g, "")
+    .replace(/NGN/gi, "")
+    .replace(/\s+/g, "")
+    .replace(/^\uFEFF/, "")
+    .trim();
+
+  if (body === "") return true;
+  return /^0+$/.test(body.replace(/[,.]/g, ""));
 }
 
 export function parseAmount(rawValue: string): AmountResult {
@@ -340,13 +368,21 @@ function resolveAmount(
 
   if (explicitType === "transfer") {
     // Transfer: accept the debit value as the amount when type says so.
-    const debit = parseAmount(debitCell);
-    if (hasDebit && !debit.error) {
-      return { amount: debit.value, type: "transfer", errors: [], warnings };
+    // A zero-filled side of the pair counts as absent, so the real side
+    // still wins for zero-filled bank exports.
+    const debitPresent = hasDebit && !isAbsentAmountCell(debitCell);
+    const creditPresent = hasCredit && !isAbsentAmountCell(creditCell);
+    if (debitPresent) {
+      const debit = parseAmount(debitCell);
+      if (!debit.error) {
+        return { amount: debit.value, type: "transfer", errors: [], warnings };
+      }
     }
-    const credit = parseAmount(creditCell);
-    if (hasCredit && !credit.error) {
-      return { amount: credit.value, type: "transfer", errors: [], warnings };
+    if (creditPresent) {
+      const credit = parseAmount(creditCell);
+      if (!credit.error) {
+        return { amount: credit.value, type: "transfer", errors: [], warnings };
+      }
     }
     const single = parseAmount(amountCell);
     if (hasAmount && !single.error) {
@@ -357,41 +393,37 @@ function resolveAmount(
   }
 
   if (hasDebit || hasCredit) {
-    const debit = hasDebit ? parseAmount(debitCell) : { value: "", error: undefined };
-    const credit = hasCredit ? parseAmount(creditCell) : { value: "", error: undefined };
-    const debitNegative = normalizeText(debitCell).startsWith("-");
-    const creditNegative = normalizeText(creditCell).startsWith("-");
+    // A zero-filled side of a Debit/Credit pair (blank, "-", "0", "0.00",
+    // "₦0.00", "0,00") is treated as ABSENT — common in bank exports.
+    const debitAbsent = !hasDebit || isAbsentAmountCell(debitCell);
+    const creditAbsent = !hasCredit || isAbsentAmountCell(creditCell);
+    const debit = debitAbsent ? { value: "", error: undefined } : parseAmount(debitCell);
+    const credit = creditAbsent ? { value: "", error: undefined } : parseAmount(creditCell);
+    const debitNegative = !debitAbsent && normalizeText(debitCell).startsWith("-");
+    const creditNegative = !creditAbsent && normalizeText(creditCell).startsWith("-");
 
-    const debitOk = !debit.error;
-    const creditOk = !credit.error;
-    const debitIsZero = debitOk && (debit.value === "" || debit.value.split(".")[0] === "0");
-    const creditIsZero = creditOk && (credit.value === "" || credit.value.split(".")[0] === "0");
-
-    if (hasDebit && !debitOk) errors.push(debit.error ?? "invalid debit amount");
-    if (hasCredit && !creditOk) errors.push(credit.error ?? "invalid credit amount");
+    if (!debitAbsent && debit.error) errors.push(debit.error ?? "invalid debit amount");
+    if (!creditAbsent && credit.error) errors.push(credit.error ?? "invalid credit amount");
     if (debitNegative) errors.push("debit value must be positive");
     if (creditNegative) errors.push("credit value must be positive");
-
-    const debitNonZero = debitOk && !debitIsZero;
-    const creditNonZero = creditOk && !creditIsZero;
 
     if (errors.length > 0) {
       return { amount: "", type: null, errors, warnings };
     }
 
-    if (debitNonZero && creditNonZero) {
+    if (!debitAbsent && !creditAbsent) {
       // Two populated amount columns without an explicit transfer type.
-      errors.push("ambiguous amount: both debit and credit are populated");
+      errors.push("row has both debit and credit amounts");
       return { amount: "", type: null, errors, warnings };
     }
 
-    if (debitNonZero) {
+    if (!debitAbsent) {
       return { amount: debit.value, type: "expense", errors, warnings };
     }
-    if (creditNonZero) {
+    if (!creditAbsent) {
       return { amount: credit.value, type: "income", errors, warnings };
     }
-    errors.push("missing amount");
+    errors.push("row has no amount");
     return { amount: "", type: null, errors, warnings };
   }
 

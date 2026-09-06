@@ -5,7 +5,11 @@ import {
   parseDate,
   inferTypeFromLabel,
   normalizeImportRow,
+  isAbsentAmountCell,
 } from "@/lib/import/normalize";
+import { parseCsv } from "@/lib/import/parse-csv";
+import { detectColumns } from "@/lib/import/mapping";
+import { buildImportPreview } from "@/lib/import/preview";
 import type { ColumnMapping, RawImportRow } from "@/lib/import/types";
 
 describe("normalizeText", () => {
@@ -111,6 +115,123 @@ const AMOUNT_MAP: ColumnMapping = {
   amount: "Amount",
   reference: "Reference",
 };
+
+describe("isAbsentAmountCell", () => {
+  it.each(["", "   ", "-", "0", "0.00", "0.0", "₦0.00", "0,00", "0,000", "-0.00", "(0.00)"])(
+    "treats %j as an absent pair cell",
+    (raw) => {
+      expect(isAbsentAmountCell(raw as string)).toBe(true);
+    },
+  );
+
+  it.each(["1", "0.01", "12000", "1,250.50", "₦5,000", "abc", "0x"])(
+    "treats %j as a present pair cell",
+    (raw) => {
+      expect(isAbsentAmountCell(raw as string)).toBe(false);
+    },
+  );
+});
+
+describe("Debit/Credit zero-filled pair", () => {
+  const dc: ColumnMapping = { date: "Date", description: "Description", debit: "Debit", credit: "Credit" };
+
+  it("treats a zero-filled unused side as absent and resolves the real side", () => {
+    const credit = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "Sales", Debit: "0", Credit: "12000" }),
+      dc,
+      0,
+    );
+    expect(credit.errors).toEqual([]);
+    expect(credit.type).toBe("income");
+    expect(credit.amount).toBe("12000.00");
+
+    const debit = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "Rent", Debit: "18500.00", Credit: "0" }),
+      dc,
+      0,
+    );
+    expect(debit.errors).toEqual([]);
+    expect(debit.type).toBe("expense");
+    expect(debit.amount).toBe("18500.00");
+  });
+
+  it.each([
+    ["0.00", "2500", "2500.00"],
+    ["₦0.00", "1200", "1200.00"],
+    ["-", "4500", "4500.00"],
+    ["0,00", "3150", "3150.00"],
+    ["", "700", "700.00"],
+  ])("treats an absent credit variant %j as zero and reads the debit side", (creditCell, debitCell, amount) => {
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "Pay", Debit: debitCell, Credit: creditCell }),
+      dc,
+      0,
+    );
+    expect(row.errors).toEqual([]);
+    expect(row.type).toBe("expense");
+    expect(row.amount).toBe(amount);
+  });
+
+  it("flags a row where both sides of the pair are non-zero", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "Ambiguous", Debit: "500.00", Credit: "300.00" }),
+      dc,
+      0,
+    );
+    expect(row.errors.some((e) => e.includes("row has both debit and credit amounts"))).toBe(true);
+    expect(row.amount).toBe("");
+  });
+
+  it("flags a row where both sides of the pair are absent", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "Empty pair", Debit: "0", Credit: "0.00" }),
+      dc,
+      0,
+    );
+    expect(row.errors).toContain("row has no amount");
+    expect(row.amount).toBe("");
+  });
+});
+
+describe("Debit/Credit pair end-to-end (zero-filled columns)", () => {
+  const CSV = [
+    "Date,Description,Income,Expense",
+    "2026-01-04,Bakery sales,12000,0",
+    "2026-01-04,Rent,0,18500",
+    "2026-01-05,POS receipts,500.50,0.00",
+    "2026-01-05,Stationery,₦0.00,2500",
+    "2026-01-06,Consulting,2000,-",
+    "2026-01-06,Internet,0,4500",
+    "2026-01-07,Sales,3000,",
+    "2026-01-07,Courier,0,1500.75",
+  ].join("\n");
+
+  it("auto-maps Income/Expense, normalizes all 8 rows as valid with correct types and amounts", () => {
+    const parsed = parseCsv(CSV);
+    expect(parsed.errors).toEqual([]);
+    const mapping = detectColumns(parsed.headers);
+    expect(mapping.credit).toBe("Income");
+    expect(mapping.debit).toBe("Expense");
+    expect(mapping.amount).toBeUndefined();
+
+    const normalized = parsed.rows.map((raw, i) => normalizeImportRow(raw, mapping, i));
+    expect(normalized.every((row) => row.errors.length === 0)).toBe(true);
+
+    const { rows, summary } = buildImportPreview(normalized, new Map(), new Map());
+    expect(summary.valid).toBe(8);
+    expect(summary.invalid).toBe(0);
+    expect(rows.map((r) => [r.type, r.amount])).toEqual([
+      ["income", "12000.00"],
+      ["expense", "18500.00"],
+      ["income", "500.50"],
+      ["expense", "2500.00"],
+      ["income", "2000.00"],
+      ["expense", "4500.00"],
+      ["income", "3000.00"],
+      ["expense", "1500.75"],
+    ]);
+  });
+});
 
 describe("normalizeImportRow", () => {
   it("normalizes a positive amount as income", () => {

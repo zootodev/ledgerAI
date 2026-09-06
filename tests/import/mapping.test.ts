@@ -52,6 +52,49 @@ describe("detectColumns", () => {
   });
 });
 
+describe("detectColumns pair-header aliases", () => {
+  it("auto-maps an Income/Expense pair without a single Amount field", () => {
+    const mapping = detectColumns(["Date", "Description", "Income", "Expense"]);
+    expect(mapping.date).toBe("Date");
+    expect(mapping.description).toBe("Description");
+    expect(mapping.credit).toBe("Income");
+    expect(mapping.debit).toBe("Expense");
+    expect(mapping.amount).toBeUndefined();
+  });
+
+  it("auto-maps Money In / Money Out headers case-insensitively", () => {
+    const mapping = detectColumns(["date", "Details", "money in", "Money Out"]);
+    expect(mapping.credit).toBe("money in");
+    expect(mapping.debit).toBe("Money Out");
+  });
+
+  it("ignores punctuation and underscores in pair headers", () => {
+    const mapping = detectColumns(["Date", "Description", "Money_In", "Money-Out", "CR.", "DR."]);
+    expect(mapping.credit).toBe("Money_In");
+    expect(mapping.debit).toBe("Money-Out");
+    expect(mapping.reference).toBeUndefined();
+  });
+
+  it("auto-maps CR/DR and paid-in/paid-out aliases", () => {
+    const mapping = detectColumns(["Date", "Narration", "Paid In", "Paid Out"]);
+    expect(mapping.credit).toBe("Paid In");
+    expect(mapping.debit).toBe("Paid Out");
+  });
+
+  it.each([
+    [["Date", "Description", "Amt"], "Amt"],
+    [["Date", "Description", "Total"], "Total"],
+    [["Date", "Description", "Naira"], "Naira"],
+    [["Date", "Description", "NGN"], "NGN"],
+    [["Date", "Description", "Value"], "Value"],
+  ])("detects single-amount aliases for %j", (headers, expectedAmount) => {
+    const mapping = detectColumns(headers as string[]);
+    expect(mapping.amount).toBe(expectedAmount);
+    expect(mapping.debit).toBeUndefined();
+    expect(mapping.credit).toBeUndefined();
+  });
+});
+
 describe("validateMapping", () => {
   const headers = ["Date", "Description", "Amount", "Debit", "Credit"];
 
