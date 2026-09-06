@@ -20,6 +20,8 @@ const nextConfig: NextConfig = {
     "**.loca.lt",
     "**.localhost.run",
     "**.serveo.net",
+    "**.devtunnels.ms",
+    "zooto.taile2c6a0.ts.net",
   ],
   experimental: {
     serverActions: {
@@ -32,6 +34,8 @@ const nextConfig: NextConfig = {
         "**.loca.lt",
         "**.localhost.run",
         "**.serveo.net",
+        "**.devtunnels.ms",
+        "zooto.taile2c6a0.ts.net",
       ],
     },
   },
