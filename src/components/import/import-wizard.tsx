@@ -264,6 +264,8 @@ export function ImportWizard({
           preview.rows.map((row) => ({
             rowIndex: row.rowIndex,
             include: !!selections[row.rowIndex],
+            importAnyway:
+              !!selections[row.rowIndex] && row.duplicate === "duplicate_existing",
             categoryId: overrides[row.rowIndex] ?? null,
           })),
         ),
@@ -271,8 +273,14 @@ export function ImportWizard({
 
       const res = await commitImportAction({}, fd);
       if (res.ok && res.result) {
+        const skipped =
+          res.result.existingDuplicates + res.result.inFileDuplicates;
+        const title =
+          res.result.imported === 0 && skipped > 0
+            ? `${res.result.imported} imported · ${skipped} skipped as duplicates`
+            : `${res.result.imported} of ${res.result.total} row${res.result.total === 1 ? "" : "s"} imported`;
         toast.success({
-          title: `${res.result.imported} of ${res.result.total} row${res.result.total === 1 ? "" : "s"} imported`,
+          title,
           description: <ImportSuccessDescription result={res.result} />,
         });
         router.refresh();
@@ -499,6 +507,7 @@ export function ImportWizard({
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={preview.summary.readyToImport === 0}
                     onClick={() => {
                       const next: Record<number, boolean> = {};
                       for (const row of preview.rows) {
@@ -518,6 +527,12 @@ export function ImportWizard({
                   </Button>
                 </div>
               </div>
+
+              {preview.summary.readyToImport === 0 && (
+                <p className="text-sm text-muted">
+                  No new rows — use Import anyway on duplicates.
+                </p>
+              )}
 
               {working ? (
                 <div className="space-y-2">

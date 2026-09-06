@@ -29,6 +29,10 @@ export type ImportMappingInput = z.infer<typeof importMappingSchema>;
 export const importCommitSelectionRowSchema = z.object({
   rowIndex: z.number().int().min(0),
   include: z.boolean(),
+  // Explicit per-row "Import anyway" opt-in for rows that already exist in
+  // the ledger. Absent/false is the safe default: the server only commits
+  // an existing duplicate when this flag is true (re-validated here).
+  importAnyway: z.boolean().optional(),
   categoryId: z.uuid().nullable(),
 });
 

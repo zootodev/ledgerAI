@@ -139,6 +139,8 @@ export interface ImportSummary {
 export interface ImportCommitSelectionRow {
   rowIndex: number;
   include: boolean;
+  /** Explicit opt-in to commit a row that already exists in the ledger. */
+  importAnyway?: boolean;
   categoryId: string | null;
 }
 

@@ -172,8 +172,14 @@ export async function commitImport(
       continue;
     }
 
-    // Already in the ledger (exact date-bearing fingerprint match).
-    if (tag?.duplicate === "duplicate_existing") {
+    // Already in the ledger (exact date-bearing fingerprint match). Only an
+    // explicit per-row "Import anyway" opt-in combined with an included
+    // selection lets such a row through; otherwise it is skipped here. The
+    // client flag is re-validated (never auto-import duplicates).
+    if (
+      tag?.duplicate === "duplicate_existing" &&
+      !(selection?.include && selection.importAnyway === true)
+    ) {
       reasons.existing += 1;
       continue;
     }

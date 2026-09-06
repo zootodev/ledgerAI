@@ -746,4 +746,135 @@ describe("commitImport", () => {
       aiConfidence: 0.94,
     });
   });
+
+  // ---------------------------------------------------------------
+  // "Import anyway" — rows that already exist in the ledger (Phase 6 gap)
+  // ---------------------------------------------------------------
+
+  const IMPORT_ANYWAY_STATEMENT = [
+    "Date,Description,Amount",
+    "2026-08-01,SHOPRITE MALL,-15000.00",
+    "2026-08-02,UBER TRIP,-3000.00",
+    "2026-08-03,AIRTEL RECHARGE 500MB,-2500.00",
+  ].join("\n");
+
+  const IMPORT_ANYWAY_EXISTING = [
+    { date: new Date("2026-08-01"), type: "expense", description: "SHOPRITE MALL", amount: makeDecimal(15000), reference: null },
+    { date: new Date("2026-08-02"), type: "expense", description: "UBER TRIP", amount: makeDecimal(3000), reference: null },
+    { date: new Date("2026-08-03"), type: "expense", description: "AIRTEL RECHARGE 500MB", amount: makeDecimal(2500), reference: null },
+  ];
+
+  it("commits rows marked Import anyway even when they already exist, and learns corrections", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue(IMPORT_ANYWAY_EXISTING);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.category.findFirst.mockResolvedValue({ id: SYS_FOOD });
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.categoryRule.upsert.mockReset();
+    mockPrisma.categoryRule.upsert.mockResolvedValue({} as never);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 3 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-anyway-1" });
+
+    const result = await commitImport(
+      csvBytes(IMPORT_ANYWAY_STATEMENT),
+      commitInput({
+        fileName: "anyway.csv",
+        selections: [
+          { rowIndex: 0, include: true, importAnyway: true, categoryId: SYS_FOOD },
+          { rowIndex: 1, include: true, importAnyway: true, categoryId: null },
+          { rowIndex: 2, include: true, importAnyway: true, categoryId: null },
+        ],
+      }),
+    );
+
+    expect(result.total).toBe(3);
+    expect(result.imported).toBe(3);
+    expect(result.existingDuplicates).toBe(0);
+    expect(result.inFileDuplicates).toBe(0);
+    expect(result.excluded).toBe(0);
+    expect(result.invalid).toBe(0);
+    expect(result.learnedRuleCount).toBe(1);
+
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data as Array<
+      Record<string, unknown>
+    >;
+    expect(created).toHaveLength(3);
+    const shoprite = created.find((t) => t.description === "SHOPRITE MALL");
+    expect(shoprite).toMatchObject({
+      categoryId: SYS_FOOD,
+      aiCategory: "Food",
+    });
+
+    const upsertCall = mockPrisma.categoryRule.upsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(upsertCall.where).toEqual({
+      businessId_matchType_pattern: {
+        businessId: businessA.id,
+        matchType: "merchant",
+        pattern: "SHOPRITE",
+      },
+    });
+    expect(upsertCall.create).toMatchObject({
+      businessId: businessA.id,
+      matchType: "merchant",
+      pattern: "SHOPRITE",
+      categoryId: SYS_FOOD,
+      categoryName: "Food",
+    });
+  });
+
+  it("skips existing duplicates not marked Import anyway and never learns from them", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue(IMPORT_ANYWAY_EXISTING);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 0 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-anyway-2" });
+
+    const result = await commitImport(
+      csvBytes(IMPORT_ANYWAY_STATEMENT),
+      commitInput({
+        fileName: "anyway-off.csv",
+        selections: [
+          { rowIndex: 0, include: true, categoryId: SYS_FOOD },
+          { rowIndex: 1, include: true, categoryId: null },
+          { rowIndex: 2, include: true, categoryId: null },
+        ],
+      }),
+    );
+
+    expect(result.total).toBe(3);
+    expect(result.imported).toBe(0);
+    expect(result.existingDuplicates).toBe(3);
+    expect(result.learnedRuleCount).toBe(0);
+    expect(mockPrisma.transaction.createMany).not.toHaveBeenCalled();
+    expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
+  });
+
+  it("keeps in-file duplicate suppression for rows marked Import anyway", async () => {
+    const inFileDup = [
+      "Date,Description,Amount",
+      "2026-03-01,Mystery charge,-300.00",
+      "2026-03-01,Mystery charge,-300.00",
+    ].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-anyway-3" });
+
+    const result = await commitImport(
+      csvBytes(inFileDup),
+      commitInput({
+        fileName: "anyway-infiledup.csv",
+        selections: [
+          { rowIndex: 0, include: true, importAnyway: true, categoryId: null },
+          { rowIndex: 1, include: true, importAnyway: true, categoryId: null },
+        ],
+      }),
+    );
+
+    expect(result.total).toBe(2);
+    expect(result.imported).toBe(1);
+    expect(result.inFileDuplicates).toBe(1);
+    expect(result.existingDuplicates).toBe(0);
+    expect(mockPrisma.transaction.createMany.mock.calls[0][0].data).toHaveLength(1);
+  });
 });
