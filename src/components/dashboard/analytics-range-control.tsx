@@ -76,13 +76,13 @@ export function AnalyticsRangeControl({
   return (
     <div
       className={cn(
-        "flex w-full flex-col gap-3 rounded-card border border-border bg-surface p-3",
+        "flex w-full min-w-0 flex-col gap-3 rounded-card border border-border bg-surface p-3",
         "lg:flex-row lg:items-end lg:justify-between",
         isPending && "pointer-events-none opacity-60",
       )}
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <label className="flex flex-col gap-1.5">
+      <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center">
+        <label className="flex min-w-0 flex-col gap-1.5">
           <span className="text-xs font-medium uppercase tracking-wide text-muted">
             From
           </span>
@@ -90,10 +90,10 @@ export function AnalyticsRangeControl({
             type="date"
             value={from ?? ""}
             onChange={(e) => apply(e.target.value, to ?? "")}
-            className="w-full sm:w-40"
+            className="w-full"
           />
         </label>
-        <label className="flex flex-col gap-1.5">
+        <label className="flex min-w-0 flex-col gap-1.5">
           <span className="text-xs font-medium uppercase tracking-wide text-muted">
             To
           </span>
@@ -101,7 +101,7 @@ export function AnalyticsRangeControl({
             type="date"
             value={to ?? ""}
             onChange={(e) => apply(from ?? "", e.target.value)}
-            className="w-full sm:w-40"
+            className="w-full"
           />
         </label>
       </div>

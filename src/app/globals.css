@@ -116,6 +116,39 @@ body {
   line-height: 1.5;
 }
 
+/* iOS WebKit renders time/date inputs with native appearance and a fixed
+   intrinsic width, ignoring width:100% until appearance is reset. Reset it so
+   the fields size like the text Input (rounded-field, h-9.5 = 2.375rem). */
+input[type="date"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.375rem;
+}
+/* iOS WebKit: keep the value left-aligned with stable height when empty. */
+input[type="date"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value,
+input[type="month"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.5em;
+}
+/* iOS zooms into focused <input> elements whose font-size is below 16px;
+   the date input inherits text-sm (0.875rem) from the Input component. */
+@media (pointer: coarse) {
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="time"] {
+    font-size: 1rem;
+  }
+}
+
 /* Numeric tabular figures for financial data */
 .tabular-nums,
 .tabular-nums * {

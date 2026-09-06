@@ -2,20 +2,22 @@ import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-export interface SelectProps
-  extends React.SelectHTMLAttributes<HTMLSelectElement> {
+export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   invalid?: boolean;
   placeholder?: string;
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  function Select({ className, invalid, placeholder, children, ...props }, ref) {
+  function Select(
+    { className, invalid, placeholder, children, ...props },
+    ref,
+  ) {
     return (
-      <div className="relative">
+      <div className="relative min-w-0">
         <select
           ref={ref}
           className={cn(
-            "flex h-9.5 w-full appearance-none rounded-field border bg-surface px-3 pr-9 text-sm text-foreground",
+            "block h-9.5 w-full min-w-0 appearance-none rounded-field border bg-surface px-3 pr-9 text-sm text-foreground",
             "focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand",
             "disabled:cursor-not-allowed disabled:opacity-50",
             invalid

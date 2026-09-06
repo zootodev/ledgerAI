@@ -15,7 +15,12 @@ export interface AppShellProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 /** Authenticated app layout: sidebar + top bar + content. */
-export function AppShell({ header, onSignOut, children, className }: AppShellProps) {
+export function AppShell({
+  header,
+  onSignOut,
+  children,
+  className,
+}: AppShellProps) {
   const [navOpen, setNavOpen] = React.useState(false);
 
   return (
@@ -45,7 +50,14 @@ export function AppShell({ header, onSignOut, children, className }: AppShellPro
             </span>
           }
         />
-        <main className={cn("flex-1 px-4 py-6 sm:px-6", className)}>{children}</main>
+        <main
+          className={cn(
+            "min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6",
+            className,
+          )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

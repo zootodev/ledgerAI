@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
 import {
   ArrowLeftRight,
+  FileUp,
   Pencil,
   Plus,
   Search,
@@ -307,7 +309,7 @@ export function TransactionsView({
         user: userName ? { name: userName, email: userEmail } : null,
       }}
     >
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto min-w-0 max-w-6xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
@@ -345,7 +347,7 @@ export function TransactionsView({
                 />
               </label>
               {!lockedType && (
-                <label className="flex flex-col gap-1.5">
+                <label className="flex min-w-0 flex-col gap-1.5">
                   <span className="text-xs font-medium uppercase tracking-wide text-muted">
                     Type
                   </span>
@@ -366,7 +368,7 @@ export function TransactionsView({
                   </Select>
                 </label>
               )}
-              <label className="flex flex-col gap-1.5">
+              <label className="flex min-w-0 flex-col gap-1.5">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted">
                   Account
                 </span>
@@ -386,7 +388,7 @@ export function TransactionsView({
                   ))}
                 </Select>
               </label>
-              <label className="flex flex-col gap-1.5">
+              <label className="flex min-w-0 flex-col gap-1.5">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted">
                   Category
                 </span>
@@ -406,8 +408,8 @@ export function TransactionsView({
                   ))}
                 </Select>
               </label>
-              <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
-                <label className="flex flex-col gap-1.5">
+              <div className="grid w-full grid-cols-2 gap-3 sm:w-auto sm:flex sm:items-end">
+                <label className="flex min-w-0 flex-col gap-1.5">
                   <span className="text-xs font-medium uppercase tracking-wide text-muted">
                     From
                   </span>
@@ -415,10 +417,10 @@ export function TransactionsView({
                     type="date"
                     value={params.dateFrom ?? ""}
                     onChange={(e) => push({ dateFrom: e.target.value || undefined })}
-                    className="w-full sm:w-40"
+                    className="sm:w-40"
                   />
                 </label>
-                <label className="flex flex-col gap-1.5">
+                <label className="flex min-w-0 flex-col gap-1.5">
                   <span className="text-xs font-medium uppercase tracking-wide text-muted">
                     To
                   </span>
@@ -426,7 +428,7 @@ export function TransactionsView({
                     type="date"
                     value={params.dateTo ?? ""}
                     onChange={(e) => push({ dateTo: e.target.value || undefined })}
-                    className="w-full sm:w-40"
+                    className="sm:w-40"
                   />
                 </label>
               </div>
@@ -479,9 +481,22 @@ export function TransactionsView({
                 }
                 action={
                   !hasFilters ? (
-                    <Button onClick={openCreate} leftIcon={<Plus className="h-4 w-4" />}>
-                      Add transaction
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Button
+                        onClick={openCreate}
+                        leftIcon={<Plus className="h-4 w-4" />}
+                      >
+                        Add transaction
+                      </Button>
+                      <Link href="/import">
+                        <Button
+                          variant="outline"
+                          leftIcon={<FileUp className="h-4 w-4" />}
+                        >
+                          Import a statement
+                        </Button>
+                      </Link>
+                    </div>
                   ) : undefined
                 }
               />

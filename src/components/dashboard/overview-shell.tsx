@@ -37,7 +37,7 @@ export function OverviewShell({
         user: userName ? { name: userName, email: userEmail } : null,
       }}
     >
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto min-w-0 max-w-6xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
