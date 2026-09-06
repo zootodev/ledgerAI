@@ -18,6 +18,7 @@
 // ============================================================
 
 import { getAIService } from "@/lib/ai/provider";
+import { categoryMatchesRowType } from "@/lib/ai/rules";
 import type { CategoryRuleDto } from "../../types";
 import type {
   ImportCategoryOption,
@@ -27,6 +28,16 @@ import type {
 
 const TRANSFER_CATEGORY = "Transfer";
 const FILE_CATEGORY_CONFIDENCE = 0.9;
+
+/**
+ * The deterministic fallback surname for an unmatched row of a given type.
+ * The rules engine only knows the expense "Other"; income rows must surface
+ * as "Other Income" so the review label matches what the commit layer
+ * resolves. Preview and commit both derive the fallback from here.
+ */
+export function fallbackCategoryName(type: unknown): string {
+  return type === "income" ? "Other Income" : "Other";
+}
 
 export interface CategorizeOptions {
   /** Business-scoped learned rules (ranked above the built-in defaults). */
@@ -57,9 +68,15 @@ export async function categorizeImportRow(
     options.categoryOptions,
   );
   const { categorizer } = getAIService({ categoryRules: resolvedRules });
-  const result = await categorizer.categorize(row.description);
+  const result = await categorizer.categorize(row.description, row.type);
   return {
-    categoryName: result.categoryName,
+    // The engine only knows the expense "Other". For an income row the
+    // unmatched fallback label is "Other Income" (matches what commit
+    // writes); the categorization itself is unchanged.
+    categoryName:
+      row.type === "income" && result.categoryName === "Other"
+        ? fallbackCategoryName("income")
+        : result.categoryName,
     confidence: result.confidence,
     needsReview: result.needsReview,
     businessRule: result.businessRule,
@@ -110,10 +127,14 @@ export function resolveRulesForRow(
   if (!rules || rules.length === 0) return rules;
   if (!categories) return rules;
 
-  const options = categories.filter((c) => c.type === rowType);
+  const options = categories.filter(
+    (c) =>
+      (rowType === "income" || rowType === "expense") &&
+      categoryMatchesRowType(c.type, rowType),
+  );
   const resolved: CategoryRuleDto[] = [];
   for (const rule of rules) {
-    const target = resolveRuleTarget(rule, options);
+    const target = resolveRuleTarget(rule, options, rowType);
     if (target) resolved.push(target);
   }
   return resolved;
@@ -122,16 +143,21 @@ export function resolveRulesForRow(
 function resolveRuleTarget(
   rule: CategoryRuleDto,
   options: ImportCategoryOption[],
+  targetRowType: "income" | "expense" | "transfer",
 ): CategoryRuleDto | null {
   if (rule.categoryId) {
-    const byId = options.find((o) => o.id === rule.categoryId);
+    const byId = options.find(
+      (o) => o.id === rule.categoryId && categoryMatchesRowType(o.type, targetRowType),
+    );
     if (byId) {
       return { ...rule, categoryId: byId.id, categoryName: byId.name };
     }
   }
   if (rule.categoryName) {
     const byName = options.find(
-      (o) => o.name.trim().toLowerCase() === rule.categoryName.trim().toLowerCase(),
+      (o) =>
+        categoryMatchesRowType(o.type, targetRowType) &&
+        o.name.trim().toLowerCase() === rule.categoryName.trim().toLowerCase(),
     );
     if (byName) {
       return { ...rule, categoryId: byName.id, categoryName: byName.name };

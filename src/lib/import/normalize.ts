@@ -435,12 +435,17 @@ function resolveAmount(
     }
     const negative = normalizeText(amountCell).startsWith("-") ||
       (normalizeText(amountCell).startsWith("(") && normalizeText(amountCell).endsWith(")"));
-    const baseType: ImportRowType = negative ? "expense" : "income";
-    if (explicitType && explicitType !== baseType) {
+    // With an explicit Type column the type is authoritative: an unsigned
+    // magnitude plus a separate type column is a valid, common export
+    // shape. The ONLY true contradiction is negative income — a negative
+    // amount can never be income — so that alone is flagged. The original
+    // sign check above is evaluated BEFORE the abs value is stored.
+    if (explicitType === "income" && negative) {
       errors.push("type conflicts with the amount sign");
-      return { amount: "", type: explicitType, errors, warnings };
+      return { amount: "", type: "income", errors, warnings };
     }
-    return { amount: parsed.value, type: explicitType ?? baseType, errors, warnings };
+    const type: ImportRowType = explicitType ?? (negative ? "expense" : "income");
+    return { amount: parsed.value, type, errors, warnings };
   }
 
   errors.push("missing amount");

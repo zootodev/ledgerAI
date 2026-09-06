@@ -9,7 +9,8 @@ import {
 } from "@/lib/import/normalize";
 import { parseCsv } from "@/lib/import/parse-csv";
 import { detectColumns } from "@/lib/import/mapping";
-import { buildImportPreview } from "@/lib/import/preview";
+import { buildImportPreview, shouldIncludeByDefault } from "@/lib/import/preview";
+import { tagDuplicates } from "@/lib/import/dedupe";
 import type { ColumnMapping, RawImportRow } from "@/lib/import/types";
 
 describe("normalizeText", () => {
@@ -327,5 +328,197 @@ describe("normalizeImportRow", () => {
     );
     expect(row.category).toBe("Food");
     expect(row.reference).toBe("REF-1");
+  });
+});
+
+describe("explicit Type column is authoritative over amount sign", () => {
+  const TYPED_MAP: ColumnMapping = { ...AMOUNT_MAP, type: "Type" };
+
+  const cases: Array<{
+    typeCell: string;
+    amount: string;
+    expectedType: string;
+    expectedAmount: string;
+    expectedError: boolean;
+  }> = [
+    { typeCell: "expense", amount: "+1500", expectedType: "expense", expectedAmount: "1500.00", expectedError: false },
+    { typeCell: "expense", amount: "-1500", expectedType: "expense", expectedAmount: "1500.00", expectedError: false },
+    { typeCell: "income", amount: "+1500", expectedType: "income", expectedAmount: "1500.00", expectedError: false },
+    { typeCell: "income", amount: "-1500", expectedType: "income", expectedAmount: "", expectedError: true },
+    { typeCell: "transfer", amount: "+1500", expectedType: "transfer", expectedAmount: "1500.00", expectedError: false },
+    { typeCell: "transfer", amount: "-1500", expectedType: "transfer", expectedAmount: "1500.00", expectedError: false },
+    { typeCell: "", amount: "-1500", expectedType: "expense", expectedAmount: "1500.00", expectedError: false },
+    { typeCell: "", amount: "+1500", expectedType: "income", expectedAmount: "1500.00", expectedError: false },
+  ];
+
+  it.each(cases)(
+    "type=%j amount=%j -> type %j amount %j (error=%j)",
+    ({ typeCell, amount, expectedType, expectedAmount, expectedError }) => {
+      const values: Record<string, string> = {
+        Date: "2026-01-05",
+        Description: "Row",
+        Amount: amount,
+      };
+      if (typeCell !== "") values.Type = typeCell;
+      const row = normalizeImportRow(RAW(values), TYPED_MAP, 0);
+
+      expect(row.errors.some((e) => e.includes("type conflicts with the amount sign"))).toBe(
+        expectedError,
+      );
+      if (expectedError) {
+        expect(row.amount).toBe("");
+      } else {
+        expect(row.errors).toEqual([]);
+        expect(row.type).toBe(expectedType);
+        expect(row.amount).toBe(expectedAmount);
+      }
+    },
+  );
+
+  it("rectifies the reported bug: type=expense with an unsigned positive amount is valid", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "Office rent", Amount: "1500.00", Type: "expense" }),
+      TYPED_MAP,
+      0,
+    );
+    expect(row.errors).toEqual([]);
+    expect(row.type).toBe("expense");
+    expect(row.amount).toBe("1500.00");
+  });
+
+  it("blank or unrecognized type cell falls back to the sign for that row", () => {
+    for (const [typeCell, amount, expectedType] of [
+      ["", "-1500", "expense"],
+      ["", "+1500", "income"],
+      ["misc", "-1500", "expense"],
+    ] as const) {
+      const values: Record<string, string> = { Date: "2026-01-05", Description: "Row", Amount: amount };
+      if (typeCell !== "") values.Type = typeCell;
+      const row = normalizeImportRow(RAW(values), TYPED_MAP, 0);
+      expect(row.errors).toEqual([]);
+      expect(row.type).toBe(expectedType);
+      expect(row.amount).toBe("1500.00");
+    }
+  });
+
+  it("documents precedence: an explicit Type label wins over the Debit/Credit pair", () => {
+    const map: ColumnMapping = {
+      date: "Date",
+      description: "Description",
+      debit: "Debit",
+      credit: "Credit",
+      type: "Type",
+    };
+    // The Credit side is populated but Type explicitly says "expense": the
+    // recognized Type label is authoritative for direction; the amount still
+    // comes from the populated Credit column.
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "Sales", Credit: "12000.00", Type: "expense" }),
+      map,
+      0,
+    );
+    expect(row.errors).toEqual([]);
+    expect(row.type).toBe("expense");
+    expect(row.amount).toBe("12000.00");
+  });
+});
+
+describe("end-to-end: explicit Type column with unsigned positive amounts (the reported bug)", () => {
+  // Realistic bank/accounting export: a Type column plus single positive
+  // Amount column. Row 20 is an EXACT in-file duplicate of row 1 (same
+  // date/type/description/amount/reference). Row 21 is a NEAR duplicate of
+  // row 4 (same description/amount/reference but a DIFFERENT date).
+  const CSV = [
+    "Date,Type,Description,Amount,Reference",
+    "2026-01-02,expense,SHOPRITE MALL,15000.00,REF-001",
+    "2026-01-02,expense,TOTALENERGIES FUEL,8500.00,REF-002",
+    "2026-01-03,income,Client payment,150000.00,REF-003",
+    "2026-01-03,expense,UBER TRIP,3500.00,REF-004",
+    "2026-01-04,expense,AIRTEL RECHARGE 500MB,2500.00,REF-005",
+    "2026-01-04,expense,MTN MOBILE MONEY,4800.00,REF-006",
+    "2026-01-05,income,POS sales,62000.00,REF-007",
+    "2026-01-05,expense,Office supplies,12200.00,REF-008",
+    "2026-01-06,expense,JUMIA SHOPPING ORDER,18750.00,REF-009",
+    "2026-01-06,expense,NETFLIX SUBSCRIPTION,17400.00,REF-010",
+    "2026-01-07,income,Refund from vendor,9500.00,REF-011",
+    "2026-01-07,expense,DHL SHIPMENT,24000.00,REF-012",
+    "2026-01-08,expense,KFC BUCKET MEAL,13500.00,REF-013",
+    "2026-01-08,expense,GLO DATA BUNDLE,11000.00,REF-014",
+    "2026-01-09,expense,SPOTIFY PREMIUM,9900.00,REF-015",
+    "2026-01-09,transfer,Own savings transfer,50000.00,REF-016",
+    "2026-01-10,expense,9MOBILE DATA BUNDLE,6800.00,REF-017",
+    "2026-01-10,income,Salary credit,250000.00,REF-018",
+    "2026-01-11,expense,FIDELITY BANK CHARGES,1750.00,REF-019",
+    "2026-01-02,expense,SHOPRITE MALL,15000.00,REF-001",
+    "2026-01-13,expense,UBER TRIP,3500.00,REF-004",
+  ].join("\n");
+
+  const EXPECTED: Array<{ desc: string; type: string; amount: string }> = [
+    { desc: "SHOPRITE MALL", type: "expense", amount: "15000.00" },
+    { desc: "TOTALENERGIES FUEL", type: "expense", amount: "8500.00" },
+    { desc: "Client payment", type: "income", amount: "150000.00" },
+    { desc: "UBER TRIP", type: "expense", amount: "3500.00" },
+    { desc: "AIRTEL RECHARGE 500MB", type: "expense", amount: "2500.00" },
+    { desc: "MTN MOBILE MONEY", type: "expense", amount: "4800.00" },
+    { desc: "POS sales", type: "income", amount: "62000.00" },
+    { desc: "Office supplies", type: "expense", amount: "12200.00" },
+    { desc: "JUMIA SHOPPING ORDER", type: "expense", amount: "18750.00" },
+    { desc: "NETFLIX SUBSCRIPTION", type: "expense", amount: "17400.00" },
+    { desc: "Refund from vendor", type: "income", amount: "9500.00" },
+    { desc: "DHL SHIPMENT", type: "expense", amount: "24000.00" },
+    { desc: "KFC BUCKET MEAL", type: "expense", amount: "13500.00" },
+    { desc: "GLO DATA BUNDLE", type: "expense", amount: "11000.00" },
+    { desc: "SPOTIFY PREMIUM", type: "expense", amount: "9900.00" },
+    { desc: "Own savings transfer", type: "transfer", amount: "50000.00" },
+    { desc: "9MOBILE DATA BUNDLE", type: "expense", amount: "6800.00" },
+    { desc: "Salary credit", type: "income", amount: "250000.00" },
+    { desc: "FIDELITY BANK CHARGES", type: "expense", amount: "1750.00" },
+    { desc: "SHOPRITE MALL", type: "expense", amount: "15000.00" },
+    { desc: "UBER TRIP", type: "expense", amount: "3500.00" },
+  ];
+
+  it("normalizes all 21 rows valid, auto-maps the Type column, and resolves the dedupe split exactly", () => {
+    const parsed = parseCsv(CSV);
+    expect(parsed.errors).toEqual([]);
+    const mapping = detectColumns(parsed.headers);
+    expect(mapping.type).toBe("Type");
+    expect(mapping.amount).toBe("Amount");
+
+    const normalized = parsed.rows.map((raw, i) => normalizeImportRow(raw, mapping, i));
+
+    // The reported bug: ZERO of the positive-amount + type=expense rows may
+    // fail. No row carries a "type conflicts with the amount sign" error.
+    expect(normalized).toHaveLength(21);
+    for (const row of normalized) {
+      expect(
+        row.errors.some((e) => e.includes("type conflicts with the amount sign")),
+      ).toBe(false);
+    }
+    expect(normalized.every((row) => row.errors.length === 0)).toBe(true);
+
+    // Per-row types and amounts.
+    expect(normalized.map((r) => [r.description, r.type, r.amount])).toEqual(
+      EXPECTED.map((e) => [e.desc, e.type, e.amount]),
+    );
+
+    // Empty existing-fingerprint set: all rows judged by the in-file key.
+    const tags = tagDuplicates(normalized);
+    const rows = buildImportPreview(normalized, new Map(), tags).rows;
+
+    // in-file fingerprint excludes the date, so row 20 (exact dup of row 1)
+    // AND row 21 (same desc/amount/ref, different date) are both duplicate.
+    const dupRows = rows.filter((r) => r.duplicate === "duplicate_in_file");
+    expect(dupRows.map((r) => r.description).sort()).toEqual(["SHOPRITE MALL", "UBER TRIP"]);
+
+    // 21 valid, 2 in-file duplicates, 19 new (included by default).
+    const summary = buildImportPreview(normalized, new Map(), tags).summary;
+    expect(summary.total).toBe(21);
+    expect(summary.valid).toBe(21);
+    expect(summary.invalid).toBe(0);
+    expect(summary.duplicates).toBe(2);
+    expect(summary.readyToImport).toBe(19);
+
+    const selected = rows.filter((r) => shouldIncludeByDefault(r));
+    expect(selected).toHaveLength(19);
   });
 });

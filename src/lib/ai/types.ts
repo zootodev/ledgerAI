@@ -19,8 +19,13 @@ export interface Categorizer {
   /**
    * Return a category + confidence for a raw description (e.g. "UBER").
    * Confidence is 0..1. `needsReview` flags results below a threshold.
+   * `rowType` (when known) restricts built-in matches to categories of the
+   * same type so an income row is never suggested an expense category.
    */
-  categorize(description: string): Promise<CategorizationResult>;
+  categorize(
+    description: string,
+    rowType?: "income" | "expense",
+  ): Promise<CategorizationResult>;
 }
 
 /** Interface for future insight narration (LLM). Deterministic MVP uses templates. */

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { categorizeByRules, REVIEW_THRESHOLD } from "../../src/lib/ai/rules";
+import {
+  categorizeByRules,
+  categoryMatchesRowType,
+  DEFAULT_CATEGORY_TYPES,
+  REVIEW_THRESHOLD,
+} from "../../src/lib/ai/rules";
 import { RulesCategorizer } from "../../src/lib/ai/rules-categorizer";
+import { resolveRulesForRow, fallbackCategoryName } from "../../src/lib/import/categorize";
 import type { CategoryRuleDto } from "../../src/types";
+import type { ImportCategoryOption } from "../../src/lib/import/types";
 
 function makeRule(overrides: Partial<CategoryRuleDto> = {}): CategoryRuleDto {
   return {
@@ -185,5 +192,89 @@ describe("RulesCategorizer with business rules", () => {
     const result = await categorizer.categorize("MTN data recharge");
     expect(result.categoryName).toBe("Utilities");
     expect(result.businessRule).toBeUndefined();
+  });
+});
+
+describe("type-aware built-in rules", () => {
+  it("applies a built-in expense category to an expense row", () => {
+    const r = categorizeByRules("PAYMENT - MTN MOBILE MONEY", undefined, undefined, "expense");
+    expect(r.categoryName).toBe("Utilities");
+    expect(r.matched).toBe(true);
+  });
+
+  it("blocks built-in expense categories for income rows", () => {
+    const r = categorizeByRules("PAYMENT - MTN MOBILE MONEY", undefined, undefined, "income");
+    expect(r.categoryName).toBe("Other");
+    expect(r.matched).toBe(false);
+  });
+
+  it("keeps legacy behavior when no row type is supplied", () => {
+    expect(categorizeByRules("MTN data recharge").categoryName).toBe("Utilities");
+    expect(categorizeByRules("Rent payment").categoryName).toBe("Rent");
+  });
+
+  it("applies built-in keyword rules only to matching row types", () => {
+    expect(
+      categorizeByRules("Rent payment", undefined, undefined, "expense").categoryName,
+    ).toBe("Rent");
+    expect(
+      categorizeByRules("Rent payment", undefined, undefined, "income").categoryName,
+    ).toBe("Other");
+  });
+
+  it("resolves every built-in default category to an expense type", () => {
+    for (const name of [
+      "Transportation", "Banking", "Utilities", "Other", "Marketing", "Inventory",
+      "Rent", "Salaries", "Software", "Taxes", "Food", "Equipment",
+    ]) {
+      expect(DEFAULT_CATEGORY_TYPES[name]).toBe("expense");
+    }
+  });
+
+  it("categoryMatchesRowType skips unknown rows, blocks transfers", () => {
+    expect(categoryMatchesRowType("expense", undefined)).toBe(true);
+    expect(categoryMatchesRowType("expense", "transfer")).toBe(false);
+    expect(categoryMatchesRowType("expense", "income")).toBe(false);
+    expect(categoryMatchesRowType("expense", "expense")).toBe(true);
+  });
+});
+
+describe("type-aware learned rule resolution", () => {
+  const options: ImportCategoryOption[] = [
+    { id: "expense-utils", name: "Utilities", type: "expense" },
+    { id: "expense-food", name: "Food", type: "expense" },
+    { id: "income-other", name: "Other Income", type: "income" },
+  ];
+
+  it("drops a learned rule whose category belongs to another row type", () => {
+    const rules = [
+      makeRule({ categoryId: "expense-utils", categoryName: "Utilities" }),
+    ];
+    const resolved = resolveRulesForRow(rules, "income", options) ?? [];
+    expect(resolved).toHaveLength(0);
+  });
+
+  it("keeps a learned rule whose category matches the row type", () => {
+    const rules = [
+      makeRule({ categoryId: "expense-food", categoryName: "Food" }),
+    ];
+    const resolved = resolveRulesForRow(rules, "expense", options) ?? [];
+    expect(resolved).toHaveLength(1);
+  });
+
+  it("does not leak a rule across category types by id", () => {
+    const rules = [
+      makeRule({ categoryId: "expense-utils", categoryName: "Utilities" }),
+    ];
+    expect((resolveRulesForRow(rules, "income", options) ?? []).length).toBe(0);
+    expect((resolveRulesForRow(rules, "expense", options) ?? []).length).toBe(1);
+  });
+});
+
+describe("fallbackCategoryName (shared preview/commit fallback label)", () => {
+  it("maps the unmatched expense fallback to Other and the income one to Other Income", () => {
+    expect(fallbackCategoryName("income")).toBe("Other Income");
+    expect(fallbackCategoryName("expense")).toBe("Other");
+    expect(fallbackCategoryName("transfer")).toBe("Other");
   });
 });

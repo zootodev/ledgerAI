@@ -19,11 +19,15 @@ export class RulesCategorizer implements Categorizer {
     this.businessRules = options.businessRules;
   }
 
-  async categorize(description: string): Promise<CategorizationResult> {
+  async categorize(
+    description: string,
+    rowType?: "income" | "expense",
+  ): Promise<CategorizationResult> {
     const { categoryName, confidence, matched, businessRule } = categorizeByRules(
       description,
       undefined,
       this.businessRules,
+      rowType,
     );
     const needsReview = !matched || confidence < REVIEW_THRESHOLD;
     return { categoryName, confidence, needsReview, businessRule };

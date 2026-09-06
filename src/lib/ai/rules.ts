@@ -24,6 +24,42 @@ export interface MatchRule {
 
 const LOW_CONFIDENCE = 0.5;
 
+/**
+ * The category TYPE of every built-in default target. All built-in rules map
+ * to expense categories; income rows must never be suggested an expense
+ * category, so a built-in match is gated on `categoryMatchesRowType`.
+ */
+export const DEFAULT_CATEGORY_TYPES: Readonly<Record<string, "income" | "expense">> = {
+  Transportation: "expense",
+  Banking: "expense",
+  Utilities: "expense",
+  Other: "expense",
+  Marketing: "expense",
+  Inventory: "expense",
+  Rent: "expense",
+  Salaries: "expense",
+  Software: "expense",
+  Taxes: "expense",
+  Food: "expense",
+  Equipment: "expense",
+};
+
+/**
+ * Whether a category's type matches the row's type. When the row type is
+ * unknown (undefined) the check is skipped so legacy/direct callers that do
+ * not supply a row type keep the previous behavior. A transfer row never
+ * matches a category.
+ */
+export function categoryMatchesRowType(
+  categoryType: "income" | "expense" | undefined,
+  rowType: "income" | "expense" | "transfer" | undefined,
+): boolean {
+  if (rowType === undefined) return true;
+  if (rowType === "transfer") return false;
+  if (categoryType === undefined) return true;
+  return categoryType === rowType;
+}
+
 const DEFAULT_RULES: MatchRule = {
   merchants: {
     UBER: "Transportation",
@@ -105,6 +141,7 @@ export function categorizeByRules(
   description: string,
   rules: MatchRule = DEFAULT_RULES,
   businessRules?: CategoryRuleDto[],
+  rowType?: "income" | "expense",
 ): RuleMatch {
   const text = description.trim();
 
@@ -142,6 +179,7 @@ export function categorizeByRules(
 
   // 3) Built-in exact merchant lookup.
   for (const [merchant, category] of Object.entries(rules.merchants)) {
+    if (!categoryMatchesRowType(DEFAULT_CATEGORY_TYPES[category], rowType)) continue;
     if (upper.includes(merchant)) {
       return { categoryName: category, confidence: 0.94, matched: true };
     }
@@ -149,6 +187,7 @@ export function categorizeByRules(
 
   // 4) Built-in keyword patterns (medium confidence).
   for (const entry of rules.keywords) {
+    if (!categoryMatchesRowType(DEFAULT_CATEGORY_TYPES[entry.category], rowType)) continue;
     if (entry.pattern.test(text)) {
       return {
         categoryName: entry.category,

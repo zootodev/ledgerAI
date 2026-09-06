@@ -19,6 +19,11 @@ import {
   getExistingFingerprints,
   commitImport,
 } from "@/lib/services/imports";
+import { categorizeImportRow } from "@/lib/import/index";
+import type {
+  NormalizedImportRow,
+  ImportCategoryOption,
+} from "@/lib/import/types";
 
 const userA = { id: "auth-user-a", email: "a@example.com", name: "User A" };
 const businessA = { id: "biz-a", name: "A Ltd", currency: "NGN" };
@@ -876,5 +881,183 @@ describe("commitImport", () => {
     expect(result.inFileDuplicates).toBe(1);
     expect(result.existingDuplicates).toBe(0);
     expect(mockPrisma.transaction.createMany.mock.calls[0][0].data).toHaveLength(1);
+  });
+
+  // ---------------------------------------------------------------
+  // Type-aware rules (Phase 7B-1): built-ins + learned rules only apply
+  // when the target category type matches the row type.
+  // ---------------------------------------------------------------
+
+  it("suggests Other (needs review) for an INCOME MTN row and commits it to Other Income", async () => {
+    const statement = ["Date,Description,Amount", "2026-03-01,PAYMENT - MTN MOBILE MONEY,+5000.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.upsert.mockReset();
+    mockPrisma.categoryRule.upsert.mockResolvedValue({} as never);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-type-income-mtn" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({ fileName: "income-mtn.csv" }),
+    );
+    expect(result.imported).toBe(1);
+
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    // The expense built-in Utilities rule must NOT be suggested for income,
+    // so the row falls to Other Income.
+    expect(created).toMatchObject({
+      type: "income",
+      categoryId: SYS_OTHER_INCOME,
+      aiCategory: "Other Income",
+    });
+  });
+
+  it("suggests Utilities for an EXPENSE MTN row and commits it to Utilities", async () => {
+    const statement = ["Date,Description,Amount", "2026-03-01,PAYMENT - MTN MOBILE MONEY,-5000.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.upsert.mockReset();
+    mockPrisma.categoryRule.upsert.mockResolvedValue({} as never);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-type-expense-mtn" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({ fileName: "expense-mtn.csv" }),
+    );
+    expect(result.imported).toBe(1);
+
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created).toMatchObject({
+      type: "expense",
+      categoryId: SYS_UTILITIES,
+      aiCategory: "Utilities",
+    });
+  });
+
+  it("does not let a wrong-type learned rule leak into an income row", async () => {
+    // SHOPRITE is learned to Food (expense). An INCOME SHOPRITE row must NOT
+    // be funneled to Food — the expense-targeting rule is dropped for income.
+    const statement = ["Date,Description,Amount", "2026-03-01,SHOPRITE MALL,+22000.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.upsert.mockReset();
+    mockPrisma.categoryRule.upsert.mockResolvedValue({} as never);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([
+      {
+        id: "rule-shoprite",
+        businessId: businessA.id,
+        matchType: "merchant",
+        pattern: "SHOPRITE",
+        categoryId: SYS_FOOD,
+        categoryName: "Food",
+        createdAt: new Date("2026-09-01T00:00:00.000Z"),
+      },
+    ]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-type-leak" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({ fileName: "income-shoprite.csv" }),
+    );
+    expect(result.imported).toBe(1);
+
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created).toMatchObject({
+      type: "income",
+      categoryId: SYS_OTHER_INCOME,
+      aiCategory: "Other Income",
+    });
+    expect(created.categoryId).not.toBe(SYS_FOOD);
+  });
+
+  it("keeps transfers transfer-only (no category, never a type mismatch)", async () => {
+    const statement = ["Date,Description,Type,Amount", "2026-03-01,MOBILE MONEY,transfer,15000.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.upsert.mockReset();
+    mockPrisma.categoryRule.upsert.mockResolvedValue({} as never);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-type-transfer" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({
+        fileName: "transfer.csv",
+        mapping: { date: "Date", description: "Description", type: "Type", amount: "Amount" },
+      }),
+    );
+    expect(result.imported).toBe(1);
+
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created.type).toBe("transfer");
+    expect(created.categoryId).toBeNull();
+  });
+
+  it("produces the same type split in the preview and the commit for MTN income", async () => {
+    // Preview path (deterministic, no DB mocks) versus commit path.
+    const options: ImportCategoryOption[] = [
+      { id: SYS_OTHER_INCOME, name: "Other Income", type: "income" },
+      { id: SYS_UTILITIES, name: "Utilities", type: "expense" },
+      { id: SYS_TRANSPORTATION, name: "Transportation", type: "expense" },
+      { id: SYS_OTHER, name: "Other", type: "expense" },
+    ];
+    const incomeRow: NormalizedImportRow = {
+      rowIndex: 0,
+      sourceRow: 2,
+      date: "2026-03-01",
+      rawDate: "01/03/2026",
+      description: "PAYMENT - MTN MOBILE MONEY",
+      amount: "5000.00",
+      type: "income",
+      reference: null,
+      category: null,
+      errors: [],
+      warnings: [],
+    };
+    const preview = await categorizeImportRow(incomeRow, { categoryOptions: options });
+    // The engine flags the income MTN as unmatched (built-in Utilities is
+    // expense-only). The preview label is now the income fallback "Other
+    // Income" so it matches what the commit writes below.
+    expect(preview.categoryName).toBe("Other Income");
+    expect(preview.needsReview).toBe(true);
+
+    // The commit path must resolve that suggestion to the Other Income option.
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
+    mockPrisma.categoryRule.upsert.mockReset();
+    mockPrisma.categoryRule.upsert.mockResolvedValue({} as never);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-type-parity" });
+
+    const statement = ["Date,Description,Amount", "2026-03-01,PAYMENT - MTN MOBILE MONEY,+5000.00"].join("\n");
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({ fileName: "parity.csv" }),
+    );
+    expect(result.imported).toBe(1);
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created).toMatchObject({ categoryId: SYS_OTHER_INCOME, aiCategory: "Other Income" });
   });
 });

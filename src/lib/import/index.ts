@@ -36,6 +36,7 @@ export {
   categorizeImportRows,
   matchByName,
   resolveRulesForRow,
+  fallbackCategoryName,
 } from "./categorize";
 export {
   buildImportPreview,

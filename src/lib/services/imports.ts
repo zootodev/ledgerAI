@@ -9,8 +9,10 @@ import {
   validateMapping,
   categorizeImportRow,
   matchByName,
+  fallbackCategoryName,
 } from "@/lib/import/index";
 import { extractMerchantKey } from "@/lib/ai/merchant-key";
+import { categoryMatchesRowType } from "@/lib/ai/rules";
 import { persistLearnedRules } from "@/lib/services/rules";
 import type { CategoryRuleLearnInput } from "@/lib/validation/rules";
 import { canonicalAmount } from "@/lib/import/dedupe";
@@ -359,7 +361,9 @@ async function resolveCategory(
   if (row.type === "transfer") return null;
 
   if (selectedId) {
-    const found = options.find((o) => o.id === selectedId && o.type === row.type);
+    const found = options.find(
+      (o) => o.id === selectedId && categoryMatchesRowType(o.type, row.type),
+    );
     if (found) return found;
   }
 
@@ -378,7 +382,7 @@ async function resolveCategory(
     if (bySuggestion) return bySuggestion;
   }
 
-  const fallbackName = row.type === "income" ? "Other Income" : "Other";
+  const fallbackName = fallbackCategoryName(row.type);
   return matchByName(options, fallbackName, row.type) ?? null;
 }
 
@@ -392,7 +396,9 @@ function resolveBusinessRuleOption(
   type: "income" | "expense",
 ): ImportCategoryOption | null {
   if (rule.categoryId) {
-    const byId = options.find((o) => o.id === rule.categoryId && o.type === type);
+    const byId = options.find(
+      (o) => o.id === rule.categoryId && categoryMatchesRowType(o.type, type),
+    );
     if (byId) return byId;
   }
   return matchByName(options, rule.categoryName, type);
