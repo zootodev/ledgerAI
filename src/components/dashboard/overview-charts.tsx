@@ -1,4 +1,5 @@
-import { TrendingUp } from "lucide-react";
+import { FileUp, TrendingUp } from "lucide-react";
+import Link from "next/link";
 import { getAnalyticsTrends, type AnalyticsQuery, type AnalyticsTrends } from "@/lib/services";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
@@ -6,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 
 export interface OverviewChartsProps {
   /** Already-validated page range; when omitted the charts show all time. */
@@ -35,7 +37,14 @@ export async function OverviewCharts({ range }: OverviewChartsProps) {
       <EmptyState
         icon={<TrendingUp className="h-6 w-6" />}
         title="No chart data yet"
-        description="Add transactions to see revenue and profit trends here."
+        description="Add transactions or import a bank statement to see revenue and profit trends here."
+        action={
+          <Link href="/import">
+            <Button variant="outline" leftIcon={<FileUp className="h-4 w-4" />}>
+              Import a statement
+            </Button>
+          </Link>
+        }
       />
     );
   }

@@ -1,0 +1,505 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+vi.mock("@/lib/auth/server", () => ({
+  getCurrentUser: vi.fn(),
+}));
+
+vi.mock("@/lib/db/client", () => ({
+  getPrismaClient: vi.fn(),
+}));
+
+vi.mock("@/generated/prisma/client", () => ({
+  PrismaClient: class {},
+}));
+
+import { getCurrentUser } from "@/lib/auth/server";
+import { getPrismaClient } from "@/lib/db/client";
+import {
+  listImportHistory,
+  getExistingFingerprints,
+  commitImport,
+} from "@/lib/services/imports";
+
+const userA = { id: "auth-user-a", email: "a@example.com", name: "User A" };
+const businessA = { id: "biz-a", name: "A Ltd", currency: "NGN" };
+
+const SYS_OTHER_INCOME = "00000000-0000-4000-8000-000000000001";
+const SYS_TRANSPORTATION = "00000000-0000-4000-8000-000000000002";
+const SYS_RENT = "00000000-0000-4000-8000-000000000003";
+const SYS_OTHER = "00000000-0000-4000-8000-000000000004";
+
+function makeDecimal(value: number) {
+  return { toString: () => value.toFixed(2) };
+}
+
+function makeCategoryRow(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: SYS_OTHER,
+    businessId: null,
+    name: "Other",
+    type: "expense",
+    isSystem: true,
+    createdAt: new Date("2026-01-10"),
+    ...overrides,
+  };
+}
+
+const mockPrisma = {
+  business: { findFirst: vi.fn() },
+  account: { findFirst: vi.fn() },
+  transaction: {
+    findMany: vi.fn(),
+    createMany: vi.fn(),
+  },
+  category: { findMany: vi.fn() },
+  import: { findMany: vi.fn(), create: vi.fn() },
+  $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockPrisma)),
+};
+
+const mockedGetPrismaClient = vi.mocked(getPrismaClient);
+const mockedGetCurrentUser = vi.mocked(getCurrentUser);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockedGetPrismaClient.mockReturnValue(mockPrisma as never);
+});
+
+const csvBytes = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+/**
+ * 5-row statement:
+ *   l2 UBER ride +2500.00            income, included, categorized Transportation
+ *   l3 UBER ride +2500.00            duplicate-in-file of l2 (skipped)
+ *   l4 Rent payment -150000.00       expense, included, categorized Rent
+ *   l5 BROKEN "abc" amount           invalid (never importable)
+ *   l6 Stripe payout +4000.00        duplicate of an existing DB row (skipped)
+ */
+const STATEMENT = [
+  "Date,Description,Amount",
+  "2026-01-05,UBER ride,-2500.00",
+  "2026-01-05,UBER ride,-2500.00",
+  "12/02/2026,Rent payment,-150000.00",
+  "13/02/2026,BROKEN,abc",
+  "14/02/2026,Stripe payout,+4000.00",
+].join("\n");
+
+const ALL_SELECTED = [
+  { rowIndex: 0, include: true, categoryId: null },
+  { rowIndex: 1, include: true, categoryId: null },
+  { rowIndex: 2, include: true, categoryId: null },
+  { rowIndex: 3, include: true, categoryId: null },
+  { rowIndex: 4, include: true, categoryId: null },
+];
+
+function commitInput(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    fileName: "statement.csv",
+    fileType: "csv",
+    mapping: { date: "Date", description: "Description", amount: "Amount" },
+    accountId: null,
+    selections: ALL_SELECTED,
+    ...overrides,
+  } as Parameters<typeof commitImport>[1];
+}
+
+/**
+ * The exact manual-test statement the user reported: the same merchant and
+ * amount recurs on different dates ("Client payment" on 08-01 and 08-04,
+ * "Office supplies" on 08-02 and 08-05) and the file never had those rows
+ * flagged in review. Debit/Credit columns instead of Amount.
+ */
+const USER_STATEMENT = [
+  "Date,Description,Debit,Credit,Category",
+  "2026-08-01,Client payment,,150000,Sales",
+  "2026-08-02,Office supplies,25000,,Office",
+  "2026-08-03,Internet subscription,10000,,Utilities",
+  "2026-08-04,Client payment,,150000,",
+  "2026-08-05,Office supplies,25000,",
+].join("\n");
+
+const USER_MAPPING = {
+  date: "Date",
+  description: "Description",
+  debit: "Debit",
+  credit: "Credit",
+  category: "Category",
+};
+
+const USER_ALL_SELECTED = [
+  { rowIndex: 0, include: true, categoryId: null },
+  { rowIndex: 1, include: true, categoryId: null },
+  { rowIndex: 2, include: true, categoryId: null },
+  { rowIndex: 3, include: true, categoryId: null },
+  { rowIndex: 4, include: true, categoryId: null },
+];
+
+describe("listImportHistory", () => {
+  beforeEach(() => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    mockPrisma.business.findFirst.mockResolvedValue(businessA);
+  });
+
+  it("scopes the import list to the session business and sorts newest first", async () => {
+    mockPrisma.import.findMany.mockResolvedValue([
+      {
+        id: "imp-1",
+        businessId: businessA.id,
+        accountId: null,
+        filename: "sep.csv",
+        fileType: "csv",
+        status: "committed",
+        transactionsFound: 3,
+        transactionsImported: 2,
+        errors: { invalidRows: 1, errors: [{ sourceRow: 4, message: "invalid amount" }] },
+        createdAt: new Date("2026-09-01"),
+        completedAt: new Date("2026-09-01"),
+      },
+    ]);
+
+    const items = await listImportHistory(5);
+    expect(items).toHaveLength(1);
+    expect(mockPrisma.import.findMany.mock.calls[0][0].where.businessId).toBe(
+      businessA.id,
+    );
+    expect(mockPrisma.import.findMany.mock.calls[0][0].orderBy.createdAt).toBe("desc");
+    expect(items[0].transactionsImported).toBe(2);
+    expect(items[0].errors?.invalidRows).toBe(1);
+    expect(items[0].createdAt).toContain("2026");
+  });
+
+  it("returns null errors for clean imports", async () => {
+    mockPrisma.import.findMany.mockResolvedValue([
+      {
+        id: "imp-2",
+        businessId: businessA.id,
+        accountId: null,
+        filename: "clean.xlsx",
+        fileType: "xlsx",
+        status: "committed",
+        transactionsFound: 1,
+        transactionsImported: 1,
+        errors: null,
+        createdAt: new Date("2026-09-02"),
+        completedAt: new Date("2026-09-02"),
+      },
+    ]);
+    const [item] = await listImportHistory();
+    expect(item.errors).toBeNull();
+  });
+});
+
+describe("getExistingFingerprints", () => {
+  beforeEach(() => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    mockPrisma.business.findFirst.mockResolvedValue(businessA);
+  });
+
+  it("scopes to the session business and canonicalizes amounts to two decimals", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      {
+        date: new Date("2026-02-14"),
+        type: "income",
+        description: "Stripe payout",
+        amount: makeDecimal(4000),
+        reference: null,
+      },
+      {
+        date: new Date("2026-02-15"),
+        type: "expense",
+        description: "Data purchase",
+        amount: makeDecimal(950.5),
+        reference: null,
+      },
+    ]);
+
+    const fps = await getExistingFingerprints();
+    expect(fps).toHaveLength(2);
+    expect(fps[0]).toContain("stripe payout");
+    expect(fps[0]).toContain("4000.00");
+    expect(fps[1]).toContain("950.50");
+    expect(mockPrisma.transaction.findMany.mock.calls[0][0].where.businessId).toBe(
+      businessA.id,
+    );
+  });
+});
+
+describe("commitImport", () => {
+  beforeEach(() => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    mockPrisma.business.findFirst.mockResolvedValue(businessA);
+  });
+
+  it("re-derives rows from the bytes and writes only valid, included, new rows", async () => {
+    // Existing DB already contains the "Stripe payout +4000 income" row on 14/02.
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      {
+        date: new Date("2026-02-14"),
+        type: "income",
+        description: "Stripe payout",
+        amount: makeDecimal(4000),
+        reference: null,
+      },
+    ]);
+    mockPrisma.category.findMany.mockResolvedValue([
+      makeCategoryRow({ id: SYS_OTHER_INCOME, name: "Other Income", type: "income" }),
+      makeCategoryRow({ id: SYS_TRANSPORTATION, name: "Transportation" }),
+      makeCategoryRow({ id: SYS_RENT, name: "Rent" }),
+      makeCategoryRow({ id: SYS_OTHER, name: "Other" }),
+    ]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 2 });
+    mockPrisma.import.create.mockResolvedValue({
+      id: "imp-3",
+      businessId: businessA.id,
+      filename: "statement.csv",
+    });
+
+    const result = await commitImport(csvBytes(STATEMENT), commitInput());
+
+    expect(result.total).toBe(5);
+    expect(result.imported).toBe(2);
+    // Row 4 (Stripe) already exists in the ledger; row 1 (UBER) is an
+    // exact duplicate of the already-committed row 0 within this file.
+    expect(result.existingDuplicates).toBe(1);
+    expect(result.inFileDuplicates).toBe(1);
+    expect(result.invalid).toBe(1);
+    expect(result.excluded).toBe(0);
+
+    // createMany received exactly the two imported rows.
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data as Array<
+      Record<string, unknown>
+    >;
+    expect(created).toHaveLength(2);
+
+    const uber = created.find((t) => t.description === "UBER ride");
+    expect(uber).toMatchObject({
+      businessId: businessA.id,
+      accountId: null,
+      type: "expense",
+      amount: "2500.00",
+      source: "csv",
+      categoryId: SYS_TRANSPORTATION,
+      aiCategory: "Transportation",
+    });
+
+    const rent = created.find((t) => t.description === "Rent payment");
+    expect(rent).toMatchObject({
+      type: "expense",
+      amount: "150000.00",
+      categoryId: SYS_RENT,
+      aiCategory: "Rent",
+    });
+
+    // Import ledger record mirrors the run.
+    const importData = mockPrisma.import.create.mock.calls[0][0].data as Record<
+      string,
+      unknown
+    >;
+    expect(importData.status).toBe("committed");
+    expect(importData.transactionsFound).toBe(5);
+    expect(importData.transactionsImported).toBe(2);
+    expect(importData.fileType).toBe("csv");
+    expect(importData.errors).toMatchObject({
+      invalidRows: 1,
+      existingDuplicates: 1,
+      inFileDuplicates: 1,
+      excluded: 0,
+    });
+  });
+
+  it("flags same-merchant rows on different dates and excludes them by default", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([makeCategoryRow()]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 3 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-9" });
+
+    // Conservative default selection (what the wizard produces): only the
+    // three "new" rows are INCLUDED, rows 3 and 4 (in-file duplicates on
+    // later dates) are not.
+    const result = await commitImport(
+      csvBytes(USER_STATEMENT),
+      commitInput({
+        fileName: "user.csv",
+        mapping: USER_MAPPING,
+        selections: [
+          { rowIndex: 0, include: true, categoryId: null },
+          { rowIndex: 1, include: true, categoryId: null },
+          { rowIndex: 2, include: true, categoryId: null },
+          { rowIndex: 3, include: false, categoryId: null },
+          { rowIndex: 4, include: false, categoryId: null },
+        ],
+      }),
+    );
+    expect(result.total).toBe(5);
+    expect(result.imported).toBe(3);
+    expect(result.excluded).toBe(2);
+    expect(result.inFileDuplicates).toBe(0);
+    expect(result.existingDuplicates).toBe(0);
+    expect(result.invalid).toBe(0);
+  });
+
+  it("keeps duplicate-dated rows when the user explicitly selects them (unique exact rows only)", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([makeCategoryRow()]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 5 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-10" });
+
+    const result = await commitImport(
+      csvBytes(USER_STATEMENT),
+      commitInput({ fileName: "user.csv", mapping: USER_MAPPING, selections: USER_ALL_SELECTED }),
+    );
+    expect(result.total).toBe(5);
+    expect(result.imported).toBe(5);
+    // Different dates -> the exact (date-bearing) rows are distinct, so
+    // nothing is counted as an in-file duplicate and none are lost.
+    expect(result.inFileDuplicates).toBe(0);
+    expect(result.excluded).toBe(0);
+    expect(result.existingDuplicates).toBe(0);
+  });
+
+  it("reports existing duplicates and in-file duplicates in one commit summary", async () => {
+    // "Client payment" 08-01 and "Internet subscription" 08-03 already exist.
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      { date: new Date("2026-08-01"), type: "income", description: "Client payment", amount: makeDecimal(150000), reference: null },
+      { date: new Date("2026-08-03"), type: "expense", description: "Internet subscription", amount: makeDecimal(10000), reference: null },
+    ]);
+    mockPrisma.category.findMany.mockResolvedValue([makeCategoryRow()]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 3 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-11" });
+
+    const result = await commitImport(
+      csvBytes(USER_STATEMENT),
+      commitInput({ fileName: "user.csv", mapping: USER_MAPPING, selections: USER_ALL_SELECTED }),
+    );
+    expect(result.total).toBe(5);
+    expect(result.imported).toBe(3); // 08-02 supplies, 08-04 payment, 08-05 supplies
+    expect(result.existingDuplicates).toBe(2);
+    expect(result.inFileDuplicates).toBe(0);
+    expect(result.excluded).toBe(0);
+    expect(result.invalid).toBe(0);
+  });
+
+  it("re-importing a fully committed statement reports 0 imported and 5 existing duplicates", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      { date: new Date("2026-08-01"), type: "income", description: "Client payment", amount: makeDecimal(150000), reference: null },
+      { date: new Date("2026-08-02"), type: "expense", description: "Office supplies", amount: makeDecimal(25000), reference: null },
+      { date: new Date("2026-08-03"), type: "expense", description: "Internet subscription", amount: makeDecimal(10000), reference: null },
+      { date: new Date("2026-08-04"), type: "income", description: "Client payment", amount: makeDecimal(150000), reference: null },
+      { date: new Date("2026-08-05"), type: "expense", description: "Office supplies", amount: makeDecimal(25000), reference: null },
+    ]);
+    mockPrisma.category.findMany.mockResolvedValue([makeCategoryRow()]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 0 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-12" });
+
+    const result = await commitImport(
+      csvBytes(USER_STATEMENT),
+      commitInput({ fileName: "user.csv", mapping: USER_MAPPING, selections: USER_ALL_SELECTED }),
+    );
+    // The confusing "Committed 0/5 rows" case from manual testing.
+    expect(result.total).toBe(5);
+    expect(result.imported).toBe(0);
+    expect(result.existingDuplicates).toBe(5);
+    expect(result.invalid).toBe(0);
+    expect(result.excluded).toBe(0);
+    expect(mockPrisma.transaction.createMany).not.toHaveBeenCalled();
+  });
+
+  it("skips duplicates that already exist in the ledger even when included", async () => {
+    // Everything in the file matches an existing row (same events).
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      { date: new Date("2026-01-05"), type: "expense", description: "UBER ride", amount: makeDecimal(2500), reference: null },
+      { date: new Date("2026-02-12"), type: "expense", description: "Rent payment", amount: makeDecimal(150000), reference: null },
+      { date: new Date("2026-02-13"), type: "expense", description: "BROKEN", amount: makeDecimal(1), reference: null },
+      { date: new Date("2026-02-14"), type: "income", description: "Stripe payout", amount: makeDecimal(4000), reference: null },
+    ]);
+    mockPrisma.category.findMany.mockResolvedValue([makeCategoryRow()]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 0 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-4" });
+
+    const result = await commitImport(csvBytes(STATEMENT), commitInput());
+    expect(result.imported).toBe(0);
+    expect(result.existingDuplicates).toBe(4);
+    expect(result.invalid).toBe(1);
+    expect(result.excluded).toBe(0);
+    expect(mockPrisma.transaction.createMany).not.toHaveBeenCalled();
+  });
+
+  it("honors user category overrides and falls back to Other for unknown rows", async () => {
+    const statement = ["Date,Description,Amount", "2026-03-01,Mystery charge,-300.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([
+      makeCategoryRow({ id: SYS_OTHER_INCOME, name: "Other Income", type: "income" }),
+      makeCategoryRow({ id: SYS_OTHER, name: "Other" }),
+    ]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-5" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({
+        fileName: "one.csv",
+        selections: [{ rowIndex: 0, include: true, categoryId: SYS_OTHER }],
+      }),
+    );
+    expect(result.imported).toBe(1);
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created.categoryId).toBe(SYS_OTHER);
+    expect(created.aiCategory).toBe("Other");
+  });
+
+  it("rejects a mapping whose columns do not exist in the file", async () => {
+    await expect(
+      commitImport(
+        csvBytes(STATEMENT),
+        commitInput({ mapping: { date: "Date", description: "Nope", amount: "Amount" } }),
+      ),
+    ).rejects.toThrow("Column mapping problem");
+  });
+
+  it("skips rows the user did not select", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([makeCategoryRow()]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-6" });
+
+    const result = await commitImport(
+      csvBytes(STATEMENT),
+      commitInput({
+        selections: [{ rowIndex: 0, include: true, categoryId: null }],
+      }),
+    );
+    expect(result.imported).toBe(1);
+    // The valid Rent row, the duplicate UBER row, and the valid Stripe
+    // row are all deselected.
+    expect(result.excluded).toBe(3);
+    expect(result.existingDuplicates).toBe(0);
+    expect(result.inFileDuplicates).toBe(0);
+    expect(result.invalid).toBe(1);
+  });
+
+  it("never attaches an account that belongs to another business", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([makeCategoryRow()]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-7" });
+    // The account is not found for this business -> the id is scrubbed.
+    mockPrisma.account.findFirst.mockResolvedValue(undefined);
+
+    const result = await commitImport(
+      csvBytes(["Date,Description,Amount", "2026-03-01,Mystery charge,-300.00"].join("\n")),
+      commitInput({ accountId: "acc-other-biz", fileName: "one.csv" }),
+    );
+    expect(result.imported).toBe(1);
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created.accountId).toBeNull();
+    expect(mockPrisma.account.findFirst.mock.calls[0][0].where).toEqual({
+      id: "acc-other-biz",
+      businessId: businessA.id,
+    });
+  });
+});

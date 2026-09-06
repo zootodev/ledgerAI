@@ -7,6 +7,12 @@ export type { CategoryInput } from "./category";
 export { businessUpdateSchema } from "./business";
 export type { BusinessUpdateInput } from "./business";
 export {
+  importMappingSchema,
+  importCommitInputSchema,
+  importCommitSelectionRowSchema,
+} from "./import";
+export type { ImportMappingInput, ImportCommitInput } from "./import";
+export {
   analyticsQuerySchema,
   analyticsTrendsQuerySchema,
   ANALYTICS_GROUP_BY,

@@ -54,3 +54,12 @@ export type {
   AnalyticsTrendsQuery,
   AnalyticsTrendPoint,
 } from "./analytics";
+export {
+  listImportHistory,
+  getExistingFingerprints,
+  commitImport,
+} from "./imports";
+export type {
+  ImportHistoryItem,
+  ImportCommitServiceResult,
+} from "./imports";

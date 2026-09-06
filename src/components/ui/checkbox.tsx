@@ -30,8 +30,9 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
           "flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border",
           "bg-surface text-on-accent",
           "transition-colors",
-          checked && !indeterminate && "border-brand bg-brand",
-          indeterminate && "border-brand bg-brand",
+          "group-focus-within:ring-2 group-focus-within:ring-brand/40",
+          checked && !indeterminate && "border-brand bg-brand shadow-sm ring-2 ring-brand/25",
+          indeterminate && "border-brand bg-brand shadow-sm ring-2 ring-brand/25",
           !checked && !indeterminate && "border-border-strong",
           "group-hover:border-brand",
           "disabled:opacity-50",
@@ -41,7 +42,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
         {indeterminate ? (
           <Minus className="h-3 w-3" />
         ) : checked ? (
-          <Check className="h-3 w-3" />
+          <Check className="h-3 w-3" strokeWidth={3} />
         ) : null}
       </span>
     );
