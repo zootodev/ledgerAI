@@ -6,6 +6,7 @@ import type { ImportPreviewRow } from "@/lib/import/types";
 function row(overrides: Partial<ImportPreviewRow> = {}): ImportPreviewRow {
   return {
     rowIndex: 0,
+    displayRow: 1,
     sourceRow: 2,
     date: "2026-08-01",
     description: "Client payment",
@@ -111,5 +112,41 @@ describe("ImportRowsTable duplicate review UI", () => {
     expect(html).not.toContain(IMPORT_CTRL);
     expect(html).not.toContain("Already exists");
     expect(html).not.toContain("Duplicate in this file");
+  });
+
+  it("numbers rows 1-based from the display ordinal (first data row is #1, last is #N)", () => {
+    const html = renderTable([
+      row({ rowIndex: 0, displayRow: 1, sourceRow: 2 }),
+      row({ rowIndex: 1, displayRow: 2, sourceRow: 3, description: "UBER trip", amount: "2500.00" }),
+      row({ rowIndex: 2, displayRow: 3, sourceRow: 4, description: "Office rent", amount: "120000.00" }),
+    ]);
+    expect(html).toContain("#1");
+    expect(html).toContain("#2");
+    expect(html).toContain("#3");
+    // The first data row renders #1 (not the physical file line #2).
+    const firstHashIdx = html.indexOf(">#");
+    expect(html.slice(firstHashIdx, firstHashIdx + 3)).toBe(">#1");
+  });
+
+  it("shows the in-file duplicate's referenced row with 1-based display numbering while duplicateOfRow stays unchanged", () => {
+    const duplicate = row({
+      rowIndex: 2,
+      displayRow: 3,
+      description: "Office supplies",
+      amount: "25000.00",
+      type: "expense",
+      duplicate: "duplicate_in_file",
+      duplicateOfRow: 0,
+    });
+    const html = renderTable([
+      row({ rowIndex: 0, displayRow: 1, description: "Office supplies", amount: "25000.00" }),
+      duplicate,
+    ]);
+
+    // The leader is data row #1 (rowIndex 0), so the human-facing hint is #1.
+    expect(html).toContain("Same as row #1 in this upload.");
+    // The underlying value used for identity is untouched.
+    expect(duplicate.duplicateOfRow).toBe(0);
+    expect(html).not.toContain("Same as row #2 in this upload.");
   });
 });

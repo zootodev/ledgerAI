@@ -18,12 +18,18 @@ export function isCategoryRuleMatchType(value: unknown): value is "merchant" | "
   return categoryRuleMatchTypeSchema.safeParse(value).success;
 }
 
-/** List the current business's learned category rules, newest first. */
+/**
+ * List the current business's learned category rules, alphabetically by
+ * pattern (A→Z), oldest first as the tiebreak. Persisted patterns are
+ * normalized UPPERCASE (every learning path derives the pattern from
+ * extractMerchantKey), so a plain Prisma `pattern asc, createdAt asc` is
+ * already case-insensitive — no service-layer re-sort is needed or added.
+ */
 export async function listCategoryRules(): Promise<CategoryRuleDto[]> {
   const { prisma, business } = await requireAuthContext();
   const rules = await prisma.categoryRule.findMany({
     where: { businessId: business.id },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ pattern: "asc" }, { createdAt: "asc" }],
   });
   return rules.map(toDto);
 }

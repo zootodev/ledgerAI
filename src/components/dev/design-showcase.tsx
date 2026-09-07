@@ -164,7 +164,11 @@ export function DesignShowcase() {
               <Textarea placeholder="Add a note about this business…" />
             </Field>
             <div className="flex flex-col gap-3 sm:col-span-2">
-              <Checkbox label="Enable automatic categorization" />
+              <div className="flex flex-wrap items-center gap-6 pt-1">
+                <Checkbox label="Enable automatic categorization" />
+                <Checkbox label="Enable automatic categorization" defaultChecked />
+                <Checkbox label="Permission group (some selected)" indeterminate defaultChecked />
+              </div>
               <Switch checked={true} onCheckedChange={() => {}} label="Send weekly summary email" />
             </div>
           </div>

@@ -30,7 +30,7 @@ const TRANSFER_CATEGORY = "Transfer";
 const FILE_CATEGORY_CONFIDENCE = 0.9;
 
 /**
- * The deterministic fallback surname for an unmatched row of a given type.
+ * The deterministic fallback name for an unmatched row of a given type.
  * The rules engine only knows the expense "Other"; income rows must surface
  * as "Other Income" so the review label matches what the commit layer
  * resolves. Preview and commit both derive the fallback from here.

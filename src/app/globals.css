@@ -139,12 +139,26 @@ input[type="time"]::-webkit-date-and-time-value {
   min-height: 1.5em;
 }
 /* iOS zooms into focused <input> elements whose font-size is below 16px;
-   the date input inherits text-sm (0.875rem) from the Input component. */
+   the date input inherits text-sm (0.875rem) from the Input component.
+   Text inputs, selects and textareas are also text-sm and trigger the same
+   zoom; the override below covers every text-entry control so desktop
+   sizing (text-sm) is untouched. checkbox/radio/range/file are excluded —
+   they are not text entry, so they never trigger zoom-on-focus. */
 @media (pointer: coarse) {
   input[type="date"],
   input[type="datetime-local"],
   input[type="month"],
-  input[type="time"] {
+  input[type="time"],
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="password"],
+  input[type="number"],
+  input:not([type]),
+  select,
+  textarea {
     font-size: 1rem;
   }
 }

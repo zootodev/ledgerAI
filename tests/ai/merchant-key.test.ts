@@ -3,8 +3,11 @@ import {
   extractMerchantKey,
   MERCHANT_KEY_STOPWORDS,
   TRANSFER_CONTEXT_TOKENS,
+  HARD_TRANSFER_MARKERS,
+  SOFT_TRANSFER_MARKERS,
   BANK_TOKENS,
   SHORT_BRAND_ALLOWLIST,
+  HONORIFIC_TITLES,
 } from "../../src/lib/ai/merchant-key";
 
 describe("extractMerchantKey (deterministic merchant key extraction)", () => {
@@ -61,6 +64,60 @@ describe("extractMerchantKey (deterministic merchant key extraction)", () => {
     expect(extractMerchantKey("IFT TO SELF 009988")).toBeNull();
   });
 
+  it("phase 7B-2: a bare soft marker (TO/FROM/BY) is only a transfer when adjacent to a hard marker or a bank token", () => {
+    // A plain preposition inside a merchant description is skipped, not null.
+    expect(extractMerchantKey("PAYMENT TO NETFLIX")).toBe("NETFLIX");
+
+    // Soft marker immediately adjacent to a HARD marker -> transfer.
+    expect(extractMerchantKey("TRANSFER TO SAVINGS")).toBeNull();
+    expect(extractMerchantKey("NIP FROM JOHN DOE")).toBeNull();
+    expect(extractMerchantKey("GTB TRF TO ADEBAYO")).toBeNull();
+    expect(extractMerchantKey("TRF FROM MRS OLA")).toBeNull();
+
+    // Soft marker immediately adjacent to a BANK token -> transfer.
+    expect(extractMerchantKey("UBA TO JOHN")).toBeNull();
+  });
+
+  it("phase 7B-2: documents the upheld ambiguity (generic lead word wins; brand is unreachable without forced stopwords)", () => {
+    // The first-candidate extractor returns the first surviving token. The
+    // location/activity lead words ABUJA/DELIVERY/RIDE are NOT merchant-key
+    // stopwords (that would be an arbitrary global-word workaround), and
+    // location/business/activity recognition is deferred to a later phase.
+    // Under those constraints UBER/JUMIA/BOLT are unreachable here: the
+    // exact first-candidate ambiguity is pinned below, not the ideal brand.
+    expect(extractMerchantKey("TRIP TO ABUJA UBER")).toBe("ABUJA");
+    expect(extractMerchantKey("DELIVERY FROM JUMIA")).toBe("DELIVERY");
+    expect(extractMerchantKey("RIDE BY BOLT")).toBe("RIDE");
+  });
+
+  it("phase 7B-2: records the actual output for a bare-soft lead-in with no surviving merchant", () => {
+    // FROM is skipped as a plain stopword; ABC is 3 chars and not on the
+    // short-brand allowlist; LTD is a stopword. Nothing survives -> null.
+    expect(extractMerchantKey("FROM ABC LTD")).toBeNull();
+  });
+
+  it("phase 7B-2: an honorific title before the first candidate nulls the description (person-name rule stays eliminated)", () => {
+    // MR JOHN DOE must never re-learn JOHN; DR ADJAYE CLINIC / ALHAJI BAKERY
+    // are rejected too — name vs business discrimination is deliberately
+    // deferred, so no title leads to a learned key.
+    expect(extractMerchantKey("DR ADJAYE CLINIC")).toBeNull();
+    expect(extractMerchantKey("MR JOHN DOE")).toBeNull();
+    expect(extractMerchantKey("ALHAJI BAKERY")).toBeNull();
+  });
+
+  it("exports the split hard/soft transfer marker tiers and their union", () => {
+    for (const t of ["TRF", "TFR", "TRANSFER", "NIP", "FT", "IFT", "NEFT"]) {
+      expect(HARD_TRANSFER_MARKERS.has(t)).toBe(true);
+    }
+    for (const t of ["TO", "FROM", "BY"]) {
+      expect(SOFT_TRANSFER_MARKERS.has(t)).toBe(true);
+    }
+    // The legacy union still contains every marker from both tiers.
+    for (const t of ["TRF", "TFR", "TRANSFER", "NIP", "FT", "IFT", "NEFT", "TO", "FROM", "BY"]) {
+      expect(TRANSFER_CONTEXT_TOKENS.has(t)).toBe(true);
+    }
+  });
+
   it("allows short brands from the allowlist", () => {
     expect(extractMerchantKey("PAYMENT - MTN MOBILE MONEY")).toBe("MTN");
     expect(extractMerchantKey("MTN")).toBe("MTN");
@@ -108,9 +165,25 @@ describe("extractMerchantKey (deterministic merchant key extraction)", () => {
       "FEES", "COMMISSION", "VAT", "TAX", "STAMP", "DUTY", "LEVY", "BILL",
       "BILLS", "SUBSCRIPTION", "MONTHLY", "ANNUAL", "SALARY", "WAGES", "LOAN",
       "REPAYMENT", "INTEREST", "REFUND", "REVERSAL", "CUSTOMER", "CLIENT",
-      "VENDOR", "SUPPLIER", "MR", "MRS", "MISS", "DR", "ENGR", "ALHAJI", "CHIEF",
+      "VENDOR", "SUPPLIER",
     ]) {
       expect(MERCHANT_KEY_STOPWORDS.has(stop)).toBe(true);
+    }
+  });
+
+  it("exports the honorific title set used to reject person-shaped descriptions", () => {
+    for (const title of ["MR", "MRS", "MISS", "DR", "ENGR", "ALHAJI", "CHIEF"]) {
+      expect(HONORIFIC_TITLES.has(title)).toBe(true);
+      expect(MERCHANT_KEY_STOPWORDS.has(title)).toBe(false);
+    }
+  });
+
+  it("deliberately does NOT treat location/activity words as global stopwords", () => {
+    // The ABUJA/DELIVERY/RIDE workaround is refused: arbitrary generic words
+    // are not merchant-key stopwords. They survive as first candidates; the
+    // UBER/JUMIA/BOLT recovery is a documented ambiguity awaiting recognition.
+    for (const word of ["ABUJA", "DELIVERY", "RIDE"]) {
+      expect(MERCHANT_KEY_STOPWORDS.has(word)).toBe(false);
     }
   });
 

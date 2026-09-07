@@ -73,11 +73,33 @@ describe("buildImportPreview", () => {
     );
     expect(rows[0].needsReview).toBe(true);
   });
+
+  it("adds a 1-based displayRow ordinal but keeps the underlying rowIndex values unchanged", () => {
+    const src = [
+      row({ rowIndex: 0, sourceRow: 2 }),
+      row({ rowIndex: 1, sourceRow: 5, description: "Rent payment" }),
+      row({ rowIndex: 2, sourceRow: 9, description: "Client payment" }),
+    ];
+    const duplicates = new Map<number, { duplicate: "new" | "duplicate_in_file"; duplicateOfRow?: number }>([
+      [2, { duplicate: "duplicate_in_file", duplicateOfRow: 0 }],
+    ]);
+    const { rows } = buildImportPreview(src, new Map(), duplicates);
+
+    expect(rows.map((r) => r.displayRow)).toEqual([1, 2, 3]);
+
+    // Display numbering is additive only — the row identity used by
+    // selections, override keys, importAnyway flags, duplicate references
+    // and the commit payload is unchanged.
+    expect(rows.map((r) => r.rowIndex)).toEqual([0, 1, 2]);
+    expect(rows.map((r) => r.sourceRow)).toEqual([2, 5, 9]);
+    expect(rows[2].duplicateOfRow).toBe(0);
+  });
 });
 
 describe("shouldIncludeByDefault", () => {
   const preview = (overrides: Partial<ImportPreviewRow> = {}): ImportPreviewRow => ({
     rowIndex: 0,
+    displayRow: 1,
     sourceRow: 2,
     date: "2026-01-05",
     description: "UBER ride",

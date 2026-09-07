@@ -105,6 +105,9 @@ export type DuplicateStatus =
 export interface ImportPreviewRow {
   rowIndex: number;
   sourceRow: number;
+  /** 1-based data-row ordinal for DISPLAY ("Row" column, duplicate hints).
+   *  Presentational only: rowIndex stays the authoritative row identity. */
+  displayRow: number;
   date: string;
   description: string;
   amount: string;
@@ -114,7 +117,8 @@ export interface ImportPreviewRow {
   suggestedCategory: string;
   confidence: number;
   duplicate: DuplicateStatus;
-  /** sourceRow of the first in-file occurrence this row duplicates. */
+  /** rowIndex (0-based data index) of the first in-file occurrence this
+   *  row duplicates. Display numbering is derived (+1) at render time. */
   duplicateOfRow?: number;
   /** Hard validation errors (invalid date/amount/missing field). */
   errors: string[];

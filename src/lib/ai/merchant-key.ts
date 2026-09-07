@@ -78,6 +78,18 @@ export const MERCHANT_KEY_STOPWORDS: ReadonlySet<string> = new Set([
   "CLIENT",
   "VENDOR",
   "SUPPLIER",
+]);
+
+/**
+ * HONORIFIC titles: person-name lead-ins (MR JOHN DOE, DR ADJAYE CLINIC,
+ * ALHAJI BAKERY). A title seen before the first candidate merchant token
+ * means the description is person-shaped, and the toxic person-name rule
+ * (Phase 7B-1 elimination) would re-appear if we continued to the next token.
+ * A title therefore nulls the description immediately. This is intentionally
+ * conservative: distinguishing "DR ADJAYE CLINIC" (business) from "MR JOHN
+ * DOE" (person) is deferred and would require name/business discrimination.
+ */
+export const HONORIFIC_TITLES: ReadonlySet<string> = new Set([
   "MR",
   "MRS",
   "MISS",
@@ -88,21 +100,38 @@ export const MERCHANT_KEY_STOPWORDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Tokens that mark an inter-account transfer (money moving between the user's
- * own accounts), never a merchant purchase. A transfer marker seen BEFORE the
- * first candidate key means the whole description is a transfer -> null.
+ * HARD transfer markers: tokens that unambiguously denote an inter-account
+ * transfer even on their own. A hard marker seen BEFORE the first candidate
+ * key means the whole description is a transfer -> null immediately.
  */
-export const TRANSFER_CONTEXT_TOKENS: ReadonlySet<string> = new Set([
+export const HARD_TRANSFER_MARKERS: ReadonlySet<string> = new Set([
   "TRF",
   "TFR",
   "TRANSFER",
   "NIP",
-  "FROM",
-  "TO",
-  "BY",
   "FT",
   "IFT",
   "NEFT",
+]);
+
+/**
+ * SOFT transfer markers: common English prepositions that only denote a
+ * transfer when they sit IMMEDIATELY next to a hard marker or a bank token
+ * ("TRANSFER TO SAVINGS", "UBA TO JOHN", "TRF FROM MRS OLA"). Otherwise
+ * they are prepositions inside an ordinary merchant description
+ * ("PAYMENT TO NETFLIX") and are skipped as plain stopwords — they never
+ * null the description on their own.
+ */
+export const SOFT_TRANSFER_MARKERS: ReadonlySet<string> = new Set([
+  "TO",
+  "FROM",
+  "BY",
+]);
+
+/** Union of both tiers; anything importing the legacy constant still works. */
+export const TRANSFER_CONTEXT_TOKENS: ReadonlySet<string> = new Set([
+  ...HARD_TRANSFER_MARKERS,
+  ...SOFT_TRANSFER_MARKERS,
 ]);
 
 /**
@@ -167,18 +196,46 @@ const DIGITS_ONLY = /^\d+$/;
  *    "UBER.COM" and "UBER-EATS" all yield the first token UBER.
  * 3. Drop bank/provider name tokens and stopwords, then pure-digit,
  *    date-like and shorter-than-4 tokens (unless allowlisted).
- * 4. A transfer-context marker seen BEFORE the first candidate key means the
+ * 4. A HARD transfer marker seen BEFORE the first candidate key means the
  *    description is an inter-account transfer -> null immediately.
- * 5. Return the first surviving token, truncated to 40 chars.
- * 6. Null when nothing survives — the caller must not learn.
+ * 5. A SOFT marker (TO/FROM/BY) counts as a transfer marker ONLY when it is
+ *    immediately adjacent (previous or next token) to a HARD marker or a
+ *    bank token; that also nulls the description. Otherwise it is a plain
+ *    stopword: skipped, does not null.
+ * 6. An HONORIFIC title (MR/MRS/MISS/DR/ENGR/ALHAJI/CHIEF) before the first
+ *    candidate means the description is person-shaped -> null. Name vs
+ *    business discrimination is deferred, so DR ADJAYE CLINIC is rejected
+ *    along with MR JOHN DOE.
+ * 7. Return the first surviving token, truncated to 40 chars.
+ * 8. Null when nothing survives — the caller must not learn.
  */
 export function extractMerchantKey(description: string): string | null {
   const normalized = normalizeText(description).toUpperCase();
   const tokens = normalized.split(/[^A-Z0-9]+/).filter((t) => t !== "");
-  for (const token of tokens) {
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
     if (BANK_TOKENS.has(token)) continue;
-    // A transfer marker before the first candidate means it is a transfer.
-    if (TRANSFER_CONTEXT_TOKENS.has(token)) return null;
+    // A hard transfer marker before the first candidate means it is a transfer.
+    if (HARD_TRANSFER_MARKERS.has(token)) return null;
+    if (SOFT_TRANSFER_MARKERS.has(token)) {
+      // Only adjacent to a hard marker or a bank token is it plumbing.
+      const prev = i > 0 ? tokens[i - 1] : "";
+      const next = i + 1 < tokens.length ? tokens[i + 1] : "";
+      if (
+        HARD_TRANSFER_MARKERS.has(prev) ||
+        BANK_TOKENS.has(prev) ||
+        HARD_TRANSFER_MARKERS.has(next) ||
+        BANK_TOKENS.has(next)
+      ) {
+        return null;
+      }
+      continue; // plain preposition inside a merchant description
+    }
+    // An honorific title before the first candidate means the description is
+    // person-shaped (MR JOHN DOE). Continuing would recreate the toxic
+    // person-name rule, so the description is rejected as a whole. No name or
+    // business discrimination is attempted.
+    if (HONORIFIC_TITLES.has(token)) return null;
     if (MERCHANT_KEY_STOPWORDS.has(token)) continue;
     if (DIGITS_ONLY.test(token)) continue;
     if (DATE_LIKE.test(token)) continue;

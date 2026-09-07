@@ -69,7 +69,7 @@ beforeEach(() => {
 });
 
 describe("listCategoryRules", () => {
-  it("lists only the current business's rules, newset first, as DTOs", async () => {
+  it("lists only the current business's rules, pattern asc then createdAt asc, as DTOs", async () => {
     mockPrisma.categoryRule.findMany.mockResolvedValue([
       makeRuleRow({ createdAt: new Date("2026-09-02T00:00:00.000Z") }),
       makeRuleRow({ id: "other", matchType: "keyword", pattern: "WINE", createdAt: new Date("2026-09-01T00:00:00.000Z") }),
@@ -79,7 +79,7 @@ describe("listCategoryRules", () => {
 
     expect(mockPrisma.categoryRule.findMany).toHaveBeenCalledWith({
       where: { businessId: businessA.id },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ pattern: "asc" }, { createdAt: "asc" }],
     });
     expect(rules).toEqual([
       {
@@ -101,6 +101,29 @@ describe("listCategoryRules", () => {
         createdAt: "2026-09-01T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("requests A→Z by pattern with createdAt asc tiebreak and returns the db order unchanged", async () => {
+    // The DB performs the sort via the Prisma orderBy array; the service must
+    // NOT re-sort. Stored patterns are normalized uppercase (every learning
+    // path derives them from extractMerchantKey), so plain `pattern asc` is
+    // already case-insensitive.
+    mockPrisma.categoryRule.findMany.mockResolvedValue([
+      makeRuleRow({ id: "a", pattern: "AIRTEL", createdAt: new Date("2026-09-03T00:00:00.000Z") }),
+      makeRuleRow({ id: "b", pattern: "MTN", createdAt: new Date("2026-09-01T00:00:00.000Z") }),
+      makeRuleRow({ id: "c", pattern: "SPOTIFY", createdAt: new Date("2026-09-02T00:00:00.000Z") }),
+    ]);
+
+    const rules = await listCategoryRules();
+
+    expect(mockPrisma.categoryRule.findMany).toHaveBeenCalledWith({
+      where: { businessId: businessA.id },
+      orderBy: [{ pattern: "asc" }, { createdAt: "asc" }],
+    });
+    // DTO order is exactly the DB order: any A→Z guarantee lives in the
+    // orderBy clause, not in a service-layer localeCompare or re-sort.
+    expect(rules.map((r) => r.pattern)).toEqual(["AIRTEL", "MTN", "SPOTIFY"]);
+    expect(rules.map((r) => r.pattern).every((p) => p === p.toUpperCase())).toBe(true);
   });
 
   it("coerces a null categoryName to an empty string in the DTO", async () => {

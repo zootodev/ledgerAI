@@ -65,4 +65,19 @@ describe("RulesManager", () => {
     const html = renderToStaticMarkup(<RulesManager rules={rules} />);
     expect(html).toContain("2 rules");
   });
+
+  it("renders rules in the order supplied by the service (A→Z)", () => {
+    const rules = [
+      makeRule({ id: "a", pattern: "AIRTEL", createdAt: "2026-08-15T10:00:00.000Z" }),
+      makeRule({ id: "b", pattern: "MTN", createdAt: "2026-08-16T10:00:00.000Z" }),
+      makeRule({ id: "c", pattern: "SPOTIFY", createdAt: "2026-08-17T10:00:00.000Z" }),
+    ];
+    const html = renderToStaticMarkup(<RulesManager rules={rules} />);
+    const airtelIdx = html.indexOf("AIRTEL");
+    const mtnIdx = html.indexOf("MTN");
+    const spotifyIdx = html.indexOf("SPOTIFY");
+    expect(airtelIdx).toBeGreaterThan(-1);
+    expect(mtnIdx).toBeGreaterThan(airtelIdx);
+    expect(spotifyIdx).toBeGreaterThan(mtnIdx);
+  });
 });

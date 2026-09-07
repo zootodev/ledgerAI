@@ -27,22 +27,21 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
     const checkbox = (
       <span
         className={cn(
-          "flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border",
-          "bg-surface text-on-accent",
+          "flex h-6 w-6 shrink-0 items-center justify-center rounded border",
+          (checked || indeterminate)
+            ? "border-brand bg-brand text-on-accent shadow-sm ring-2 ring-brand/25"
+            : "border-border-strong bg-surface",
           "transition-colors",
           "group-focus-within:ring-2 group-focus-within:ring-brand/40",
-          checked && !indeterminate && "border-brand bg-brand shadow-sm ring-2 ring-brand/25",
-          indeterminate && "border-brand bg-brand shadow-sm ring-2 ring-brand/25",
-          !checked && !indeterminate && "border-border-strong",
           "group-hover:border-brand",
           "disabled:opacity-50",
           className,
         )}
       >
         {indeterminate ? (
-          <Minus className="h-3 w-3" />
+          <Minus className="h-3.5 w-3.5" strokeWidth={3} />
         ) : checked ? (
-          <Check className="h-3 w-3" strokeWidth={3} />
+          <Check className="h-3.5 w-3.5" strokeWidth={3} />
         ) : null}
       </span>
     );
@@ -50,7 +49,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
     return (
       <label
         className={cn(
-          "group inline-flex cursor-pointer items-start gap-2 select-none",
+          "group inline-flex min-h-10 cursor-pointer select-none items-center gap-2",
           props.disabled && "cursor-not-allowed opacity-60",
         )}
       >

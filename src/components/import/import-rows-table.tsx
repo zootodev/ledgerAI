@@ -79,12 +79,12 @@ export function ImportRowsTable({
       },
     },
     {
-      key: "sourceRow",
+      key: "row",
       header: "Row",
-      sortValue: (row) => row.sourceRow,
+      sortValue: (row) => row.displayRow,
       className: "min-w-14 text-muted tabular-nums",
       headerClassName: "min-w-14",
-      cell: (row) => <span className="tabular-nums">#{row.sourceRow}</span>,
+      cell: (row) => <span className="tabular-nums">#{row.displayRow}</span>,
     },
     {
       key: "date",
@@ -168,7 +168,7 @@ export function ImportRowsTable({
             value={categoryOverrides[row.rowIndex] ?? ""}
             onChange={(e) => onCategoryChange(row.rowIndex, e.target.value)}
             className="w-44"
-            aria-label={`Category for row ${row.sourceRow}`}
+            aria-label={`Category for row ${row.displayRow}`}
           >
             <option value="">
               Use suggestion · {row.suggestedCategory ?? "Other"}
@@ -224,6 +224,15 @@ export function ImportRowsTable({
             {inFile && (
               <p className="max-w-64 text-xs text-muted">
                 This transaction looks identical to another transaction in this upload.
+              </p>
+            )}
+            {inFile && row.duplicateOfRow !== undefined && (
+              // duplicateOfRow is the leader's 0-based rowIndex; its
+              // displayRow is always rowIndex + 1, so the human-facing
+              // "same as row N" is derived here without touching the
+              // underlying duplicateOfRow value.
+              <p className="max-w-64 text-xs text-muted">
+                Same as row #{row.duplicateOfRow + 1} in this upload.
               </p>
             )}
           </div>

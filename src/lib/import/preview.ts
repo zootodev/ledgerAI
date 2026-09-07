@@ -32,7 +32,7 @@ export function buildImportPreview(
   suggestions: Map<number, ImportSuggestion>,
   duplicateTags: Map<number, { duplicate: DuplicateStatus; duplicateOfRow?: number }>,
 ): BuiltPreview {
-  const rows: ImportPreviewRow[] = normalized.map((row) => {
+  const rows: ImportPreviewRow[] = normalized.map((row, index) => {
     const suggestion = suggestions.get(row.rowIndex) ?? {
       categoryName: "Other",
       confidence: 0,
@@ -45,6 +45,8 @@ export function buildImportPreview(
 
     return {
       rowIndex: row.rowIndex,
+      /* Presentational 1-based data-row ordinal; rowIndex stays untouched. */
+      displayRow: index + 1,
       sourceRow: row.sourceRow,
       date: row.date,
       description: row.description,
