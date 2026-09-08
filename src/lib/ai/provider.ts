@@ -9,9 +9,10 @@
 // this is the single swap point.
 // ============================================================
 
-import type { AIService, Categorizer } from "./types";
+import type { AIService, Categorizer, InsightGenerator } from "./types";
 import type { CategoryRuleDto } from "../../types";
 import { RulesCategorizer } from "./rules-categorizer";
+import { DeterministicInsightGenerator } from "./insight-generator";
 
 export type AiProviderName = "rules" | string;
 
@@ -26,7 +27,18 @@ export function getAIService(options: AIServiceOptions = {}): AIService {
   const providerName: AiProviderName = configured && configured !== "" ? configured : "rules";
 
   const categorizer = createCategorizer(providerName, options.categoryRules);
-  return { categorizer };
+  const insightGenerator = createInsightGenerator(providerName);
+  return { categorizer, insightGenerator };
+}
+
+function createInsightGenerator(providerName: AiProviderName): InsightGenerator {
+  switch (providerName) {
+    // Future LLM providers implement the InsightGenerator interface here.
+    // Without a key/impl the deterministic templates are always used, so
+    // the AI layer works with no API key while keeping the swappable seam.
+    default:
+      return new DeterministicInsightGenerator();
+  }
 }
 
 function createCategorizer(

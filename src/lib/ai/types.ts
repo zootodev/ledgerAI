@@ -28,8 +28,10 @@ export interface Categorizer {
   ): Promise<CategorizationResult>;
 }
 
-/** Interface for future insight narration (LLM). Deterministic MVP uses templates. */
+/** Interface for insight narration. Deterministic MVP uses templates. */
 export interface InsightGenerator {
+  /** Narrate/count a batch of pre-derived insights (template or LLM). */
+  generateInsights(insights: unknown[]): Promise<unknown[]>;
   generateInsight(input: unknown): Promise<string>;
 }
 
