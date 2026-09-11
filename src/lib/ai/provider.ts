@@ -9,10 +9,12 @@
 // this is the single swap point.
 // ============================================================
 
-import type { AIService, Categorizer, InsightGenerator } from "./types";
+import type { AIService, Categorizer, FinancialAssistant, InsightGenerator } from "./types";
 import type { CategoryRuleDto } from "../../types";
 import { RulesCategorizer } from "./rules-categorizer";
 import { DeterministicInsightGenerator } from "./insight-generator";
+import { DeterministicFinancialAssistant } from "./financial-assistant";
+import type { QuestionUnderstanding } from "./understanding";
 
 export type AiProviderName = "rules" | string;
 
@@ -28,7 +30,29 @@ export function getAIService(options: AIServiceOptions = {}): AIService {
 
   const categorizer = createCategorizer(providerName, options.categoryRules);
   const insightGenerator = createInsightGenerator(providerName);
-  return { categorizer, insightGenerator };
+  const assistant = createAssistant(providerName);
+  const understanding = createUnderstanding(providerName);
+  return { categorizer, insightGenerator, assistant, understanding };
+}
+
+function createUnderstanding(
+  providerName: AiProviderName,
+): QuestionUnderstanding | undefined {
+  // A real LLM provider implements QuestionUnderstanding (see
+  // ai/understanding.ts) and returns a configured instance here, with
+  // classify() constrained by the semantic output schema. The rules engine
+  // never does: understanding is left to the deterministic semantic layer,
+  // so no external service is ever called without an explicit provider.
+  void providerName;
+  return undefined;
+}
+
+function createAssistant(providerName: AiProviderName): FinancialAssistant {
+  switch (providerName) {
+    // Future LLM providers implement the FinancialAssistant interface here.
+    default:
+      return new DeterministicFinancialAssistant();
+  }
 }
 
 function createInsightGenerator(providerName: AiProviderName): InsightGenerator {

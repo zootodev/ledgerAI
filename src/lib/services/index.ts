@@ -59,6 +59,16 @@ export {
   getExistingFingerprints,
   commitImport,
 } from "./imports";
+export {
+  listConversations,
+  getConversationWithMessages,
+  renameConversation,
+  deleteConversation,
+  deleteAllConversations,
+  persistAssistantExchange,
+  ConversationNotFoundError,
+} from "./assistant-conversations";
+export type { PersistExchangeResult } from "./assistant-conversations";
 export type {
   ImportHistoryItem,
   ImportCommitServiceResult,

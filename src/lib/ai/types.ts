@@ -13,6 +13,7 @@
 // ============================================================
 
 import type { CategorizationResult } from "../../types";
+import type { QuestionUnderstanding } from "./understanding";
 
 /** Anything that can categorize an unclassified transaction description. */
 export interface Categorizer {
@@ -45,4 +46,12 @@ export interface AIService {
   categorizer: Categorizer;
   insightGenerator?: InsightGenerator;
   assistant?: FinancialAssistant;
+  /**
+   * Optional question-understanding seam (src/lib/ai/understanding.ts). The
+   * rules provider leaves this unset, keeping the deterministic classifier
+   * authoritative; an explicitly configured provider may inject constrained,
+   * Zod-validated structured intent only where the deterministic
+   * understanding can't classify a genuinely financial turn.
+   */
+  understanding?: QuestionUnderstanding;
 }

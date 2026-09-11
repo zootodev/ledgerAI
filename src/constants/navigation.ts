@@ -6,6 +6,7 @@ import {
   TrendingDown,
   FileBarChart,
   Sparkles,
+  MessageSquareText,
   Upload,
   Settings,
 } from "lucide-react";
@@ -24,6 +25,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Expenses", href: "/expenses", icon: TrendingDown, section: "main" },
   { label: "Reports", href: "/reports", icon: FileBarChart, section: "analysis" },
   { label: "AI Insights", href: "/insights", icon: Sparkles, section: "analysis" },
+  { label: "Ask LedgerAI", href: "/ask", icon: MessageSquareText, section: "analysis" },
   { label: "Import", href: "/import", icon: Upload, section: "manage" },
   { label: "Settings", href: "/settings", icon: Settings, section: "manage" },
 ];

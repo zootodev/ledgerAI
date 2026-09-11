@@ -66,6 +66,7 @@ model Business {
   imports      Import[]
   insights     Insight[]
   categoryRules CategoryRule[]
+  assistantConversations AssistantConversation[]
 
   @@index([userId])
   @@map("businesses")
@@ -198,4 +199,41 @@ model CategoryRule {
   @@index([businessId])
   @@unique([businessId, matchType, pattern])
   @@map("category_rules")
+}
+
+// ---------- Ask LedgerAI conversations ----------
+
+// A persistent, business-scoped Q&A conversation. Stores only the user's
+// question text and the assistant's final displayed answer text — no
+// transaction rows, account/category IDs, raw metrics, or engine objects.
+// `updatedAt` is bumped on every exchange so the history list can order by
+// recency, and deleting a conversation cascades to its messages.
+model AssistantConversation {
+  id         String   @id @default(uuid()) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  title      String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  messages AssistantMessage[]
+
+  @@index([businessId, updatedAt])
+  @@map("assistant_conversations")
+}
+
+// One turn in a conversation. `role` is "user" | "assistant"; `content` is
+// the question text (user) or the final narrated answer text (assistant).
+// No financial internals are ever stored here.
+model AssistantMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  role           String // "user" | "assistant"
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("assistant_messages")
 }
