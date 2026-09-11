@@ -57,7 +57,7 @@ export async function OverviewCharts({ range }: OverviewChartsProps) {
   }));
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 xl:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Revenue vs expenses</CardTitle>
@@ -94,7 +94,7 @@ export async function OverviewCharts({ range }: OverviewChartsProps) {
 /** Skeleton chart cards shown while the trend data is loading. */
 export function ChartsFallback() {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 xl:grid-cols-2">
       {["Revenue vs expenses", "Net profit trend"].map((title) => (
         <Card key={title}>
           <CardHeader>

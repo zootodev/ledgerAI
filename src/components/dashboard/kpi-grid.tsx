@@ -49,7 +49,7 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Revenue"
           value={formatAmount(summary.revenue, currency)}
@@ -94,7 +94,7 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
 /** Skeleton grid shown while the analytics summary is loading. */
 export function KpiGridFallback() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard label="Revenue" value="—" loading />
       <StatCard label="Expenses" value="—" loading />
       <StatCard label="Net profit" value="—" loading />

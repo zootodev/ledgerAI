@@ -88,6 +88,6 @@ function initials(name: string): string {
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((n) => n[0]?.toUpperCase())
+    .map((n) => Array.from(n)[0]?.toUpperCase())
     .join("");
 }
