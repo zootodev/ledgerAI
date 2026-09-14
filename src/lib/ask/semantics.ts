@@ -105,6 +105,8 @@ export const semanticQuestionSchema = z.discriminatedUnion("classification", [
     /** Which metric a comparison should report (null = everything relevant). */
     target: semanticTargetSchema.nullable().optional(),
     comparison: semanticComparisonSchema.nullable().optional(),
+    /** Explicit second window for a two-window comparison. */
+    comparisonPeriod: semanticPeriodSchema.optional(),
     /**
      * Question framing for hypothetical/comparison turns ("If I spent less…").
      * Optional so existing factual payloads remain valid.

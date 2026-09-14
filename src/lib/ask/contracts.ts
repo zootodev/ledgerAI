@@ -198,6 +198,7 @@ export const assistantQuerySchema = z.discriminatedUnion("intent", [
       category: z.string().max(80).nullable(),
       target: comparisonTargetSchema.nullable().optional(),
       period: assistantPeriodSchema,
+      comparisonPeriod: assistantPeriodSchema.optional(),
     })
     .strict(),
 ]);

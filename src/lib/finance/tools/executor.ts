@@ -63,7 +63,12 @@ export async function computeMetricsFor(
 ): Promise<AssistantMetrics> {
   const period = resolvePeriod(query.period, now);
   const bounded = Boolean(period.from && period.to);
-  const prior = bounded ? shiftRangeBack(period.from!, period.to!) : null;
+  const explicitComparison = query.comparisonPeriod
+    ? resolvePeriod(query.comparisonPeriod, now)
+    : null;
+  const prior = explicitComparison?.from && explicitComparison.to
+    ? [explicitComparison.from, explicitComparison.to] as [string, string]
+    : bounded ? shiftRangeBack(period.from!, period.to!) : null;
 
   const balance =
     query.intent === "balance"
@@ -101,7 +106,14 @@ export async function computeMetricsFor(
     categoryTotals = await categorySpends(prisma, businessId, currentWhere, priorWhere);
   }
 
-  return citeMetrics(period, currentGroups, priorGroups, categoryTotals, balance);
+  return citeMetrics(
+    period,
+    currentGroups,
+    priorGroups,
+    categoryTotals,
+    balance,
+    query.intent === "periodComparison" && prior !== null,
+  );
 }
 
 function citeMetrics(
@@ -110,10 +122,11 @@ function citeMetrics(
   priorGroups: TypeGroup[],
   categoryTotals: AssistantCategorySpend[],
   balance: number | null,
+  retainEmptyPrior: boolean,
 ): AssistantMetrics {
   return {
     summary: summarizeGroups(currentGroups),
-    priorSummary: priorGroups.length > 0 ? summarizeGroups(priorGroups) : null,
+    priorSummary: priorGroups.length > 0 || retainEmptyPrior ? summarizeGroups(priorGroups) : null,
     categoryTotals,
     balance,
     count: countGroups(currentGroups),

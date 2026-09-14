@@ -146,6 +146,7 @@ describe("semantic intent mapping (parseAssistantQuestion)", () => {
       category: null,
       target: "income",
       period: { kind: "month", month: 5, year: 2026 },
+      comparisonPeriod: { kind: "month", month: 4, year: 2026 },
     });
   });
 
@@ -235,9 +236,86 @@ describe("follow-up detection (analyzeFollowUp)", () => {
       amount: null,
     });
   });
+
+  it("marks referential spend objects and comparison-direction questions for owned-context resolution", () => {
+    expect(analyzeFollowUp("How much did I spend on it?", NOW)).toEqual({
+      kind: "categorySpend",
+    });
+    expect(analyzeFollowUp("Was that higher or lower?", NOW)).toEqual({
+      kind: "comparisonDirection",
+    });
+    expect(classifyAssistantQuestion("How much did I spend on it?", NOW)).toEqual({
+      kind: "clarification",
+      reason: "needs_subject",
+    });
+  });
 });
 
 describe("hypothetical / comparison semantics (understand)", () => {
+  it("preserves both explicitly named windows instead of deriving a second prior window", () => {
+    expect(parseAssistantQuestion("How did my expenses this month compare to last month?", NOW)).toEqual({
+      intent: "periodComparison",
+      category: null,
+      target: "expenses",
+      period: { kind: "thisMonth" },
+      comparisonPeriod: { kind: "lastMonth" },
+    });
+
+    expect(parseAssistantQuestion("How does my income in June 2026 compare to May 2026?", NOW)).toEqual({
+      intent: "periodComparison",
+      category: null,
+      target: "income",
+      period: { kind: "month", month: 5, year: 2026 },
+      comparisonPeriod: { kind: "month", month: 4, year: 2026 },
+    });
+  });
+
+  it("parses 'than' comparisons keeping the base and comparison windows", () => {
+    const expected = {
+      intent: "periodComparison",
+      category: null,
+      target: "expenses",
+      period: { kind: "thisMonth" },
+      comparisonPeriod: { kind: "lastMonth" },
+    } as const;
+
+    expect(parseAssistantQuestion("Did I spend more this month than last month?", NOW)).toEqual(expected);
+    expect(parseAssistantQuestion("Did I spend less this month than last month?", NOW)).toEqual(expected);
+    expect(parseAssistantQuestion("Was I spending more this month than last month?", NOW)).toEqual(expected);
+  });
+
+  it("parses verb-first 'compare X with/to Y' keeping the base and comparison windows", () => {
+    const expected = {
+      intent: "periodComparison",
+      category: null,
+      target: "expenses",
+      period: { kind: "thisMonth" },
+      comparisonPeriod: { kind: "lastMonth" },
+    } as const;
+
+    expect(parseAssistantQuestion("Compare my spending this month with last month", NOW)).toEqual(expected);
+    expect(parseAssistantQuestion("Compare my spending this month to last month", NOW)).toEqual(expected);
+
+    const explicit = {
+      intent: "periodComparison",
+      category: null,
+      target: null,
+      period: { kind: "month", month: 5, year: 2026 },
+      comparisonPeriod: { kind: "month", month: 4, year: 2026 },
+    } as const;
+
+    expect(parseAssistantQuestion("Compare June with May", NOW)).toEqual(explicit);
+    expect(parseAssistantQuestion("Compare June to May", NOW)).toEqual(explicit);
+  });
+
+  it("never collapses an explicit comparison into last_month without a comparison period", () => {
+    const parsed = parseAssistantQuestion("Did I spend more this month than last month?", NOW);
+    expect(parsed?.period).toEqual({ kind: "thisMonth" });
+    expect(parsed?.comparisonPeriod).toEqual({ kind: "lastMonth" });
+    expect(parsed?.period).not.toEqual({ kind: "lastMonth" });
+    expect(parsed?.comparisonPeriod).not.toBeUndefined();
+  });
+
   it("resolves a rhetorical profit hypothetical to expenseImpact+hypothetical", () => {
     expect(parseAssistantQuestion("If I spent less on others, would my profit increase than before?", NOW)).toEqual({
       intent: "expenseImpact",
@@ -571,7 +649,7 @@ describe("new narrations (answerFromMetrics)", () => {
       NOW,
     );
     expect(single.text).toBe(
-      "Compared to May 2026, your income went from ₦400,000 to ₦1,000,000 (+150%).",
+      "Compared to May 2–May 31, 2026, your income went from ₦400,000 to ₦1,000,000 (+150%).",
     );
 
     const whole = answerFromMetrics(
@@ -580,7 +658,7 @@ describe("new narrations (answerFromMetrics)", () => {
       "NGN",
       NOW,
     );
-    expect(whole.text).toContain("Compared to May 2026");
+    expect(whole.text).toContain("Compared to May 2–May 31, 2026");
     expect(whole.text).toContain("revenue went from ₦400,000 to ₦1,000,000 (+150%)");
     expect(whole.text).toContain("expenses went from ₦300,000 to ₦600,000 (+100%)");
     expect(whole.text).toContain("profit went from ₦100,000 to ₦400,000 (+300%)");

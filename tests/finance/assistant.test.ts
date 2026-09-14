@@ -182,6 +182,48 @@ describe("resolvePeriod", () => {
 });
 
 describe("answerFromMetrics", () => {
+  it("labels a partial prior range truthfully instead of calling it a whole month", () => {
+    const answer = answerFromMetrics(
+      {
+        intent: "periodComparison",
+        category: null,
+        target: "expenses",
+        period: { kind: "custom", from: "2026-09-02", to: "2026-10-01", label: "last 30 days" },
+      },
+      metrics({
+        summary: summarizePeriod(900_000, 184_100, 0),
+        priorSummary: summarizePeriod(800_000, 187_600, 0),
+      }),
+      "NGN",
+      NOW,
+    );
+
+    expect(answer.text).toContain("August 3–September 1, 2026");
+    expect(answer.text).not.toContain("Compared to August 2026");
+  });
+
+  it("compares against a verified zero when the explicit prior window has no activity", () => {
+    const answer = answerFromMetrics(
+      {
+        intent: "periodComparison",
+        category: null,
+        target: "expenses",
+        period: { kind: "thisMonth" },
+        comparisonPeriod: { kind: "lastMonth" },
+      },
+      metrics({
+        summary: summarizePeriod(510_000, 73_250, 0),
+        priorSummary: summarizePeriod(0, 0, 0),
+      }),
+      "NGN",
+      NOW,
+    );
+
+    expect(answer.kind).toBe("answer");
+    expect(answer.text).toContain("₦0");
+    expect(answer.text).toContain("July 2026");
+  });
+
   it("answers a balance question from the cumulative figure", () => {
     const a = answerFromMetrics(
       { intent: "balance", category: null, period: { kind: "thisMonth" } },

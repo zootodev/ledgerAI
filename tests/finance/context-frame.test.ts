@@ -222,6 +222,47 @@ describe("buildContextFrame period chain", () => {
 });
 
 describe("resolveAgainstFrames", () => {
+  it("resolves 'spend on it' only from the preceding owned category query", () => {
+    const f = frame(
+      "How much did I spend on rent last month?",
+      "Spending on rent in July 2026 was ₦300,000.",
+    );
+    const resolution = resolveAgainstFrames(
+      "How much did I spend on it?",
+      fragment("How much did I spend on it?"),
+      [f],
+      NOW,
+    );
+    expect(resolution.kind).toBe("resolved");
+    if (resolution.kind !== "resolved") return;
+    expect(resolution.query).toMatchObject({
+      intent: "categorySpend",
+      category: "Rent",
+      period: { kind: "lastMonth" },
+    });
+  });
+
+  it("resolves higher-or-lower only after an owned period comparison", () => {
+    const f = frame(
+      "How did my expenses this month compare to last month?",
+      "Compared to July 2026, your expenses went from ₦91,875 to ₦73,250 (-20.3%).",
+    );
+    const resolution = resolveAgainstFrames(
+      "Was that higher or lower?",
+      fragment("Was that higher or lower?"),
+      [f],
+      NOW,
+    );
+    expect(resolution.kind).toBe("resolved");
+    if (resolution.kind !== "resolved") return;
+    expect(resolution.query).toMatchObject({
+      intent: "periodComparison",
+      target: "expenses",
+      period: { kind: "thisMonth" },
+      comparisonPeriod: { kind: "lastMonth" },
+    });
+  });
+
   it("inherits intent and category for a period-only follow-up", () => {
     const f = frame(
       "How much did I spend on rent?",

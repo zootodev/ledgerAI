@@ -236,4 +236,82 @@ describe("executePlan", () => {
       }
     }
   });
+
+  it("uses the explicitly requested comparison range for arbitrary tenant data", async () => {
+    const groupBy = vi
+      .fn()
+      .mockResolvedValueOnce([
+        typeGroup("income", 840_000),
+        typeGroup("expense", 73_250),
+      ])
+      .mockResolvedValueOnce([
+        typeGroup("income", 790_000),
+        typeGroup("expense", 91_875),
+      ]);
+    const prisma = { transaction: { groupBy }, category: { findMany: vi.fn() } };
+
+    await executePlan(
+      ctxWith(prisma),
+      answerPlan({
+        query: {
+          intent: "periodComparison",
+          target: "expenses",
+          category: null,
+          period: { kind: "thisMonth" },
+          comparisonPeriod: { kind: "lastMonth" },
+        },
+        toolKeys: ["period.compare"],
+      }),
+    );
+
+    const priorWhere = groupBy.mock.calls[1][0].where;
+    expect(priorWhere.businessId).toBe("biz-a");
+    expect(priorWhere.date.gte).toEqual(new Date("2026-07-01T00:00:00.000Z"));
+    expect(priorWhere.date.lte).toEqual(new Date("2026-07-31T23:59:59.999Z"));
+  });
+
+  it("uses the explicit comparison period instead of shiftRangeBack, and keeps shiftRangeBack as the absent-comparison fallback", async () => {
+    const basePeriod = { kind: "month", month: 5, year: 2026 } as const;
+
+    const explicitGroupBy = vi
+      .fn()
+      .mockResolvedValueOnce([typeGroup("expense", 100)])
+      .mockResolvedValueOnce([typeGroup("expense", 50)]);
+    await executePlan(
+      ctxWith({ transaction: { groupBy: explicitGroupBy }, category: { findMany: vi.fn() } }),
+      answerPlan({
+        query: {
+          intent: "periodComparison",
+          target: "expenses",
+          category: null,
+          period: basePeriod,
+          comparisonPeriod: { kind: "month", month: 4, year: 2026 },
+        },
+        toolKeys: ["period.compare"],
+      }),
+    );
+    const explicitPriorWhere = explicitGroupBy.mock.calls[1][0].where;
+    expect(explicitPriorWhere.date.gte).toEqual(new Date("2026-05-01T00:00:00.000Z"));
+    expect(explicitPriorWhere.date.lte).toEqual(new Date("2026-05-31T23:59:59.999Z"));
+
+    const fallbackGroupBy = vi
+      .fn()
+      .mockResolvedValueOnce([typeGroup("expense", 100)])
+      .mockResolvedValueOnce([typeGroup("expense", 50)]);
+    await executePlan(
+      ctxWith({ transaction: { groupBy: fallbackGroupBy }, category: { findMany: vi.fn() } }),
+      answerPlan({
+        query: {
+          intent: "periodComparison",
+          target: "expenses",
+          category: null,
+          period: basePeriod,
+        },
+        toolKeys: ["period.compare"],
+      }),
+    );
+    const fallbackPriorWhere = fallbackGroupBy.mock.calls[1][0].where;
+    expect(fallbackPriorWhere.date.gte).toEqual(new Date("2026-05-02T00:00:00.000Z"));
+    expect(fallbackPriorWhere.date.lte).toEqual(new Date("2026-05-31T23:59:59.999Z"));
+  });
 });

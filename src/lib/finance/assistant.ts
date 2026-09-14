@@ -54,6 +54,8 @@ export interface AssistantQuery {
   category: string | null;
   /** Which metric a period comparison reports (null = everything). */
   target?: ComparisonTarget | null;
+  /** Explicit baseline window for a two-window comparison, when named. */
+  comparisonPeriod?: AssistantQuery["period"];
   period:
     | { kind: "thisMonth" | "lastMonth" | "thisYear" | "allTime" }
     | { kind: "month"; month: number; year: number }
@@ -238,12 +240,18 @@ export function queryFromSemantic(
     case "income_vs_expenses":
       return { intent: "incomeVsExpenses", category: null, period };
     case "period_comparison":
+      {
+        const comparisonPeriod = semantic.comparisonPeriod
+          ? toAssistantPeriod(semantic.comparisonPeriod)
+          : null;
       return {
         intent: "periodComparison",
         category: semantic.entity ?? null,
         target: semantic.target ?? null,
         period,
+        ...(comparisonPeriod ? { comparisonPeriod } : {}),
       };
+      }
   }
 }
 
@@ -427,6 +435,38 @@ export function priorPeriodLabel(
     case "custom":
       return null;
   }
+}
+
+/** Human label for exactly the verified range, including partial windows. */
+export function rangeLabel(from: string, to: string): string {
+  const start = new Date(`${from}T00:00:00.000Z`);
+  const end = new Date(`${to}T00:00:00.000Z`);
+  const startMonth = start.getUTCMonth();
+  const endMonth = end.getUTCMonth();
+  const startYear = start.getUTCFullYear();
+  const endYear = end.getUTCFullYear();
+  const monthEnd = new Date(Date.UTC(startYear, startMonth + 1, 0)).getUTCDate();
+  if (startYear === endYear && startMonth === endMonth && start.getUTCDate() === 1 && end.getUTCDate() === monthEnd) {
+    return monthLabel(startMonth, startYear);
+  }
+  const startPart = `${MONTH_NAMES[startMonth]} ${start.getUTCDate()}`;
+  const endPart = `${MONTH_NAMES[endMonth]} ${end.getUTCDate()}`;
+  return startYear === endYear
+    ? `${startPart}–${endPart}, ${startYear}`
+    : `${startPart}, ${startYear}–${endPart}, ${endYear}`;
+}
+
+/** Label the exact comparison range actually used by the executor. */
+export function comparisonPeriodLabel(query: AssistantQuery, now: Date): string | null {
+  if (query.comparisonPeriod) return resolvePeriod(query.comparisonPeriod, now).label;
+  const current = resolvePeriod(query.period, now);
+  if (!current.from || !current.to) return null;
+  const start = new Date(`${current.from}T00:00:00.000Z`);
+  const end = new Date(`${current.to}T00:00:00.000Z`);
+  const span = Math.max(end.getTime() - start.getTime(), 0);
+  const priorEnd = new Date(start.getTime() - 1);
+  const priorStart = new Date(priorEnd.getTime() - span);
+  return rangeLabel(priorStart.toISOString().slice(0, 10), priorEnd.toISOString().slice(0, 10));
 }
 
 /* ------------------------------------------------------------
@@ -709,7 +749,7 @@ export function answerFromMetrics(
       if (noActivity(metrics.summary) && noActivity(metrics.priorSummary)) {
         return insufficient();
       }
-      const priorLabel = priorPeriodLabel(query.period, now) ?? "the prior period";
+      const priorLabel = comparisonPeriodLabel(query, now) ?? "the prior period";
       const target = query.target ?? null;
 
       if (target === null) {

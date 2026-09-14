@@ -76,7 +76,7 @@ function runtimeAI(fixture?: string): AskAiRuntime {
       shadowSampleRate: 1,
     },
     providers: {
-      interpreter: { name: "fixture", configured: true, interpret: interpreter.interpret },
+      interpreter: { name: "fixture", configured: true, model: null, interpret: interpreter.interpret },
       narrationPlanner: { name: "fixture", configured: false, plan: vi.fn() },
     },
   };

@@ -78,6 +78,7 @@ function runtimeAI(
       interpreter: {
         name: "fake",
         configured: true,
+        model: null,
         interpret: interpreter.interpret,
       },
       narrationPlanner: {

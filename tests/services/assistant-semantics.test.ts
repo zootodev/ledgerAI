@@ -202,7 +202,7 @@ describe("period comparison (income, explicit months)", () => {
       where: { date: { gte: Date; lte: Date } };
     };
     expect(prior.where.date.lte.toISOString()).toBe("2026-05-31T23:59:59.999Z");
-    expect(prior.where.date.gte.toISOString()).toBe("2026-05-02T00:00:00.000Z");
+    expect(prior.where.date.gte.toISOString()).toBe("2026-05-01T00:00:00.000Z");
   });
 });
 

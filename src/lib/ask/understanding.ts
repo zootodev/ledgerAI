@@ -461,6 +461,71 @@ export function parsePeriod(textValue: string, now: Date): SemanticPeriod | null
   return null;
 }
 
+/**
+ * Read both sides of an explicit comparison. Keeping the windows separate is
+ * essential: "this month vs last month" must never become "last month vs its
+ * mechanically-derived prior range".
+ */
+function parseComparisonPeriods(textValue: string, now: Date): {
+  period: SemanticPeriod;
+  comparisonPeriod: SemanticPeriod;
+} | null {
+  const text = prepareQuestion(textValue);
+
+  const bothNamedSides = (
+    left: SemanticPeriod | null,
+    right: SemanticPeriod | null,
+  ): { period: SemanticPeriod; comparisonPeriod: SemanticPeriod } | null => {
+    if (!left || !right) return null;
+    if (
+      left.kind === "conversation_reference" ||
+      right.kind === "conversation_reference"
+    ) {
+      return null;
+    }
+    return { period: left, comparisonPeriod: right };
+  };
+
+  // 1. "vs" / "versus" junctions are position-independent.
+  const spread = /\b(?:versus|vs\.?)\b/.exec(text);
+  if (spread && spread.index !== undefined) {
+    const pair = bothNamedSides(
+      parsePeriod(text.slice(0, spread.index), now),
+      parsePeriod(text.slice(spread.index + spread[0].length), now),
+    );
+    if (pair) return pair;
+  }
+
+  // 2. Verb-first "compare X with/to Y": the connector may occur after the
+  //    metric/entity phrase ("Compare my spending this month with last month",
+  //    "Compare June to May"). Both sides must still name concrete periods.
+  const verb = /\bcompare(?:d|ing)?\b/.exec(text);
+  if (verb && verb.index !== undefined) {
+    const sep = /\b(?:to|with)\b/.exec(text.slice(verb.index + verb[0].length));
+    if (sep && sep.index !== undefined) {
+      const junction = verb.index + verb[0].length + sep.index;
+      const pair = bothNamedSides(
+        parsePeriod(text.slice(0, junction), now),
+        parsePeriod(text.slice(junction + sep[0].length), now),
+      );
+      if (pair) return pair;
+    }
+  }
+
+  // 3. "than" comparisons ("Did I spend more this month than last month?").
+  //    Both sides must name concrete periods so this is never a best guess.
+  const than = /\bthan\b/.exec(text);
+  if (than && than.index !== undefined) {
+    const pair = bothNamedSides(
+      parsePeriod(text.slice(0, than.index), now),
+      parsePeriod(text.slice(than.index + 4), now),
+    );
+    if (pair) return pair;
+  }
+
+  return null;
+}
+
 /* ------------------------------------------------------------
  * Hypothetical / counterfactual reasoning ("If I spent less…")
  * ------------------------------------------------------------ */
@@ -524,6 +589,10 @@ const AMOUNT_ANCHOR =
 /** "spend that on", "paid this for" — a category-less referential object. */
 const SPEND_REFERENTIAL =
   /(?:spend|spent|spending|paid|cost)\s+(that|it|this)\b(?!\s+(?:month|year|week|day))/;
+
+/** A category object supplied only by an owned prior turn ("spend on it"). */
+const REFERENTIAL_CATEGORY_SPEND =
+  /\b(?:spend|spent|spending|paid|paying|cost|costs)\s+(?:on|for)\s+(that|it|this)\b(?!\s+(?:month|year|week|day))/;
 
 /** "the amount", "that figure", "this sum" — a register noun that names an
  *  amount figure without giving a number of its own. */
@@ -804,6 +873,8 @@ export type FollowUpAnalysis =
       referential: boolean;
     }
   | { kind: "clarificationSelection"; selection: "both" }
+  | { kind: "categorySpend" }
+  | { kind: "comparisonDirection" }
   | {
       kind: "amountConfirmation";
       /** A user-stated figure in the turn (null = register-only reference). */
@@ -857,6 +928,15 @@ export function analyzeFollowUp(question: string, now: Date): FollowUpAnalysis {
   // classification (never invents meaning).
   if (isBothSelectionText(question)) {
     return { kind: "clarificationSelection", selection: "both" };
+  }
+
+  // "How much did I spend on it?" has a spending verb but no category of its
+  // own. It is never permission to silently widen into total spending.
+  if (REFERENTIAL_CATEGORY_SPEND.test(text)) return { kind: "categorySpend" };
+
+  // A direction-only question is meaningful only after our owned comparison.
+  if (/\b(?:was|is|were)\s+(?:that|it|this)\s+(?:higher|lower|more|less)\b/.test(text)) {
+    return { kind: "comparisonDirection" };
   }
 
   // Prior-window reference: no period token, but explicitly asks for earlier.
@@ -942,6 +1022,7 @@ export function understand(
   const impact = containsAny(text, IMPACT_PHRASES);
   const distribution = containsAny(text, DISTRIBUTION_PHRASES);
   const compare = containsAny(text, COMPARE_PHRASES);
+  const comparisonPeriods = compare ? parseComparisonPeriods(question, now) : null;
   const whereMoneyGo = /where (does|did)\b.*money go/.test(text);
   const category = detectCategory(text);
 
@@ -988,6 +1069,10 @@ export function understand(
   //    than guess or call a financial turn out of scope; the service layer
   //    resolves these against owned conversation context when one exists.
   if (isBareReference(text)) {
+    return { classification: "clarification", reason: "needs_subject" };
+  }
+
+  if (REFERENTIAL_CATEGORY_SPEND.test(text)) {
     return { classification: "clarification", reason: "needs_subject" };
   }
 
@@ -1039,8 +1124,11 @@ export function understand(
     return { classification: "query", intent: "top_category", period };
   }
 
-  // 7. expense impact — "what made my revenue/profit lower" reasoning.
-  if (impact && (income || expense || profit)) {
+  // 7. expense impact — "what made my revenue/profit lower" reasoning. An
+  //     explicit two-window comparison ("Did I spend less this month than last
+  //     month?") is a dual-window comparison, not causal reasoning, so it goes
+  //     to the comparison branch instead.
+  if (impact && (income || expense || profit) && !comparisonPeriods) {
     return {
       classification: "query",
       intent: "expense_impact",
@@ -1072,8 +1160,10 @@ export function understand(
     };
   }
 
-  // 10. explicit period comparison with a target metric when one is named.
-  if (compare && (income || expense || profit || balance || hasMoneyishScope(text))) {
+  // 10. explicit period comparison with a target metric when one is named — or
+  //     with no metric at all when both periods themselves are named explicitly
+  //     ("Compare June with May" needs no "spend"/"income" word).
+  if (compare && (income || expense || profit || balance || hasMoneyishScope(text) || comparisonPeriods !== null)) {
     let comparisonTarget: "income" | "expenses" | "profit" | "balance" | null = null;
     if (income && !expense && !profit && !balance) comparisonTarget = "income";
     else if (expense && !income && !profit && !balance) comparisonTarget = "expenses";
@@ -1082,10 +1172,11 @@ export function understand(
     return {
       classification: "query",
       intent: "period_comparison",
-      period,
+      period: comparisonPeriods?.period ?? period,
       entity: category ?? null,
       target: comparisonTarget,
       comparison: "previous_period",
+      comparisonPeriod: comparisonPeriods?.comparisonPeriod,
     };
   }
 

@@ -557,6 +557,32 @@ function resolveHypotheticalFragment(
   return { kind: "none" };
 }
 
+/** Resolve a category object pronoun only from an owned category-bearing turn. */
+function resolveCategorySpendReference(frames: FinancialContextFrame[]): FrameResolution {
+  for (const frame of frames) {
+    if (!frame.query?.category) continue;
+    return {
+      kind: "resolved",
+      query: {
+        intent: "categorySpend",
+        category: frame.query.category,
+        period: frame.query.period,
+      },
+      evidence: { kind: "semantic_relationship", frame },
+    };
+  }
+  return { kind: "none" };
+}
+
+/** Direction-only follow-ups are valid only against a prior owned comparison. */
+function resolveComparisonDirection(frames: FinancialContextFrame[]): FrameResolution {
+  for (const frame of frames) {
+    if (frame.query?.intent !== "periodComparison") continue;
+    return { kind: "resolved", query: frame.query, evidence: { kind: "continuity", frame } };
+  }
+  return { kind: "none" };
+}
+
 /**
  * Amount anchor / register continuation: only against an anchored spending
  * total we ourselves narrated, within the engine's tolerance when the user
@@ -663,6 +689,10 @@ export function resolveAgainstFrames(
       return resolveAmountAnchor(fragment, frames);
     case "clarificationSelection":
       return resolveClarificationSelection(frames);
+    case "categorySpend":
+      return resolveCategorySpendReference(frames);
+    case "comparisonDirection":
+      return resolveComparisonDirection(frames);
     case "none":
       return { kind: "none" };
   }
