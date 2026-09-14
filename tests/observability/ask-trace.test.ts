@@ -13,6 +13,7 @@ function fullTrace(): AskTrace {
     deterministicDisposition: "query",
     providerAttempted: true,
     providerOutcome: "accepted",
+    providerStatus: "ok",
     schemaValid: true,
     policyOutcome: "executed",
     toolKeys: ["summary.get"],
@@ -32,6 +33,7 @@ describe("createAskTrace", () => {
     expect(trace.mode).toBe("deterministic");
     expect(trace.providerAttempted).toBe(false);
     expect(trace.providerOutcome).toBe("not_used");
+    expect(trace.providerStatus).toBe("not_attempted");
     expect(trace.traceId).toBeTruthy();
   });
 

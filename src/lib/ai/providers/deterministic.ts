@@ -26,6 +26,7 @@ import {
 export class DeterministicInterpreter implements AskInterpreterProvider {
   readonly name = "deterministic";
   readonly configured = false;
+  readonly model: string | null = null;
 
   async interpret(_input: AskTurnMessages, _options: AskProviderOptions): Promise<unknown> {
     void _input;

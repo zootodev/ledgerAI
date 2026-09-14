@@ -12,6 +12,11 @@ import { randomUUID } from "node:crypto";
 
 export type AskTraceMode = "deterministic" | "hybrid";
 export type AskTraceProviderOutcome = "accepted" | "fallback" | "not_used";
+export type AskTraceProviderStatus =
+  | "ok"
+  | "transport_error"
+  | "timeout"
+  | "not_attempted";
 export type AskTracePolicyOutcome = "executed" | "clarified" | "unsupported";
 export type AskTraceContextResolution =
   | "explicit_exact"
@@ -37,6 +42,8 @@ export interface AskTrace {
   providerOutcome: AskTraceProviderOutcome;
   schemaValid: boolean;
   policyOutcome: AskTracePolicyOutcome;
+  /** Transport health of the attempt (never raw output). */
+  providerStatus: AskTraceProviderStatus;
   toolKeys: string[];
   contextResolution: AskTraceContextResolution;
   resultKind: "answer" | "clarification" | "unsupported";
@@ -69,6 +76,7 @@ export function createAskTrace(partial: Partial<AskTrace> = {}): AskTrace {
     providerOutcome: "not_used",
     schemaValid: true,
     policyOutcome: "unsupported",
+    providerStatus: "not_attempted",
     toolKeys: [],
     contextResolution: "none",
     resultKind: "unsupported",

@@ -39,6 +39,8 @@ export interface AskProviderOptions {
 export interface AskInterpreterProvider {
   readonly name: string;
   readonly configured: boolean;
+  /** Deployment-pinned model identifier, or null for the deterministic fallback. */
+  readonly model: string | null;
   interpret(input: AskTurnMessages, options: AskProviderOptions): Promise<unknown>;
 }
 

@@ -47,7 +47,7 @@ interface ChatCompletionResponse {
 export class OpenAiCompatibleClient {
   private readonly baseUrl: string;
   private readonly apiKey?: string;
-  private readonly model: string;
+  private readonly modelName: string;
   private readonly fetchImpl: typeof fetch;
   private readonly maxTokens: number;
   private readonly deadlineMs: number;
@@ -59,7 +59,7 @@ export class OpenAiCompatibleClient {
     if (!model || model.length === 0) {
       throw new Error("openai-compatible: AI_MODEL is required when a provider is configured.");
     }
-    this.model = model;
+    this.modelName = model;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.maxTokens = options.maxTokens ?? 600;
     this.deadlineMs = options.deadlineMs ?? 12_000;
@@ -68,6 +68,11 @@ export class OpenAiCompatibleClient {
   /** True when we have a usable key (missing key => provider stays off). */
   get credentialReady(): boolean {
     return Boolean(this.apiKey && this.apiKey.length > 0);
+  }
+
+  /** Deployment-pinned model id (metadata only; never secrets). */
+  get model(): string {
+    return this.modelName;
   }
 
   async complete(
@@ -79,7 +84,7 @@ export class OpenAiCompatibleClient {
     }
 
     const body = {
-      model: this.model,
+      model: this.modelName,
       messages,
       temperature: 0,
       max_tokens: this.maxTokens,
@@ -179,6 +184,11 @@ export class OpenAiCompatibleInterpreter implements AskInterpreterProvider {
   // path wins — matching "Provider disabled/no key => deterministic path".
   get configured(): boolean {
     return this.client.credentialReady;
+  }
+
+  /** Exposes the deployment-pinned model as metadata (never a secret). */
+  get model(): string {
+    return this.client.model;
   }
 
   async interpret(input: AskTurnMessages, options: AskProviderOptions): Promise<unknown> {

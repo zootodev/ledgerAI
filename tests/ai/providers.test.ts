@@ -25,6 +25,7 @@ describe("deterministic providers", () => {
   it("interpreter never fabricates meaning (unsupported, zero confidence)", async () => {
     const interpreter = new DeterministicInterpreter();
     expect(interpreter.configured).toBe(false);
+    expect(interpreter.model).toBeNull();
     const outcome = await interpreter.interpret(MESSAGES, { signal: new AbortController().signal });
     expect(outcome).toMatchObject({ disposition: "unsupported", confidence: 0 });
   });
@@ -158,6 +159,7 @@ describe("OpenAiCompatible adatpers", () => {
       model: "gpt-4o-mini",
     });
     expect(withKey.configured).toBe(true);
+    expect(withKey.model).toBe("gpt-4o-mini");
   });
 
   it("planner sends a redacted manifest (ids + display only)", async () => {

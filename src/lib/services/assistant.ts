@@ -43,6 +43,7 @@ import {
   getAskAi,
   type AskAiRuntime,
 } from "@/lib/ai/ask-provider";
+import { maybeShadowTelemetry } from "@/lib/ai/ask-shadow";
 import {
   understandingOutputSchema,
   type UnderstandingOutput,
@@ -199,7 +200,24 @@ export async function askAssistantQuestion(
   // SHADOW mode: deterministic answer stands; the interpreter runs as
   // off-path telemetry on a sample so we can measure would-be canary hits.
   if (ai.config.mode === "shadow" && ai.config.interpreterEnabled) {
-    maybeTraceShadowInterpreter(ai, parsed.data, conversationId, now, traceId);
+    maybeShadowTelemetry({
+      ai,
+      question: parsed.data,
+      classification,
+      traceId,
+      now,
+      loadFrames: async () => {
+        if (!conversationId) return [];
+        const context = await requireAuthContext();
+        return loadContextFrames(
+          context.prisma,
+          context.business.id,
+          conversationId,
+          now,
+          false,
+        );
+      },
+    });
   }
 
   // CANARY mode: only where the deterministic classifier stays undecided
@@ -235,59 +253,6 @@ export async function askAssistantQuestion(
 
   const { prisma, business } = await requireAuthContext();
   return answerAndPersist(prisma, business, query, parsed.data, conversationId, now, ai);
-}
-
-/** Off-path shadow telemetry: fire-and-forget interpreter call + trace. */
-function maybeTraceShadowInterpreter(
-  ai: AskAiRuntime,
-  parsedQuestion: string,
-  conversationId: string | null,
-  now: Date,
-  traceId: string,
-): void {
-  if (!ai.providers.interpreter.configured) return;
-  if (ai.config.shadowSampleRate <= 0) return;
-  if (Math.random() >= ai.config.shadowSampleRate) return;
-  void (async () => {
-    try {
-      let frames: FinancialContextFrame[] = [];
-      if (conversationId) {
-        const context = await requireAuthContext();
-        frames = await loadContextFrames(
-          context.prisma,
-          context.business.id,
-          conversationId,
-          now,
-          false,
-        );
-      }
-      const surface = buildInterpreterSurface(frames);
-      const messages = buildInterpreterMessages({ now, question: parsedQuestion, surface });
-      const raw = await ai.providers.interpreter.interpret(messages, {
-        signal: AbortSignal.timeout(8000),
-      });
-      const parsed = interpretationSchema.safeParse(raw);
-      emitAskTrace(
-        createAskTrace({
-          traceId,
-          mode: "deterministic",
-          deterministicDisposition: "unsupported",
-          providerAttempted: true,
-          providerOutcome: "not_used",
-          schemaValid: parsed.success,
-          policyOutcome: parsed.success && parsed.data.disposition === "query"
-            ? "executed"
-            : "unsupported",
-          contextResolution: "none",
-          resultKind: "unsupported",
-          promptVersion: "ask-interpreter/v1",
-          provider: ai.providers.interpreter.name,
-        }),
-      );
-    } catch {
-      // Shadow telemetry never affects the served answer.
-    }
-  })();
 }
 
 async function answerAndPersist(
