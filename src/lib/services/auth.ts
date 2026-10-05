@@ -2,6 +2,8 @@ import { getSupabaseServer } from "@/lib/auth/supabase";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { getCurrentUser } from "@/lib/auth/server";
 import { getPrismaClient } from "@/lib/db/client";
+import { profileUpdateSchema } from "@/lib/validation/index";
+import { zErrorMessage } from "@/lib/validation/index";
 
 export interface SignUpInput {
   email: string;
@@ -114,6 +116,80 @@ export async function signIn(input: SignInInput): Promise<AuthResult> {
 export async function signOut(): Promise<void> {
   const supabaseServer = await getSupabaseServer();
   if (supabaseServer) await supabaseServer.auth.signOut();
+}
+
+/**
+ * Request a password-reset email. The link leads through the existing auth
+ * callback (which exchanges the PKCE code and sanitizes `next`) to the
+ * /reset-password page, so the recovery session is established server-side.
+ * Supabase intentionally returns success even for unknown emails, so this
+ * never leaks whether an account exists — callers should show a neutral
+ * message.
+ */
+export async function requestPasswordReset(
+  email: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await assertServerClient();
+  const redirectTo = `${(await getAppBaseUrl())}/auth/callback?next=/reset-password`;
+
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    email.trim().toLowerCase(),
+    { redirectTo },
+  );
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Update the password for the currently authenticated (recovery) session.
+ * The recovery session is only present after the user follows the emailed
+ * link; the /reset-password page guards on it, and this service re-checks so
+ * an expired/absent session is never silently accepted.
+ */
+export async function updatePassword(
+  password: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return {
+      ok: false,
+      error: "Your password-reset session has expired. Please request a new link.",
+    };
+  }
+
+  const supabase = await assertServerClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Update the authenticated user's display name (Supabase metadata + the
+ * public.users profile used for tenant ownership). Rejects on invalid input
+ * or when no user is signed in.
+ */
+export async function updateOwnProfile(
+  name: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const parsed = profileUpdateSchema.safeParse({ name });
+  if (!parsed.success) {
+    return { ok: false, error: zErrorMessage(parsed.error) };
+  }
+
+  const user = await getCurrentUser();
+  if (!user) {
+    return { ok: false, error: "You must be signed in." };
+  }
+
+  const supabase = await assertServerClient();
+  const { error } = await supabase.auth.updateUser({
+    data: { name: parsed.data.name },
+  });
+  if (error) return { ok: false, error: error.message };
+
+  await syncUserProfile(user.id, user.email, parsed.data.name);
+  return { ok: true };
 }
 
 /**

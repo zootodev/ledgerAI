@@ -69,6 +69,7 @@ function shadowRuntime(interpreter: OpenAiCompatibleInterpreter): AskAiRuntime {
       narrationEnabled: false,
       structuredStateWrite: false,
       shadowSampleRate: 1,
+      askV2Enabled: false,
     },
     providers: {
       interpreter,

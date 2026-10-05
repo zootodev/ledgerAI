@@ -1,7 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { signIn, signUp, signOut } from "@/lib/services/auth";
+import {
+  signIn,
+  signUp,
+  signOut,
+  requestPasswordReset,
+  updatePassword,
+} from "@/lib/services/auth";
 import type { AuthResult } from "@/lib/services/auth";
 
 export interface AuthFormState {
@@ -81,4 +87,59 @@ export async function signupAction(
 export async function signOutAction(): Promise<void> {
   await signOut();
   redirect("/login");
+}
+
+export async function forgotPasswordAction(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim();
+
+  if (!email) {
+    return { error: "Enter your email address." };
+  }
+
+  try {
+    const result = await requestPasswordReset(email);
+    if (!result.ok) return { error: result.error };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Unable to send a reset link right now.",
+    };
+  }
+
+  // Neutral on purpose: we never reveal whether the account exists.
+  return {
+    success:
+      "If an account exists for that email, we've sent a link to reset your password.",
+  };
+}
+
+export async function updatePasswordAction(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+
+  if (!password || !confirm) {
+    return { error: "Enter and confirm your new password." };
+  }
+  if (password.length < 8) {
+    return { error: "Password must be at least 8 characters." };
+  }
+  if (password !== confirm) {
+    return { error: "Passwords don't match." };
+  }
+
+  try {
+    const result = await updatePassword(password);
+    if (!result.ok) return { error: result.error };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Unable to update your password right now.",
+    };
+  }
+
+  return { success: "Your password has been updated. You can sign in now." };
 }

@@ -43,6 +43,15 @@ export function LoginForm() {
           />
         </Field>
 
+        <div className="-mt-1 text-right">
+          <Link
+            href="/forgot-password"
+            className="text-sm font-medium text-brand hover:underline"
+          >
+            Forgot your password?
+          </Link>
+        </div>
+
         <Button type="submit" loading={pending} fullWidth className="mt-2">
           Sign in
         </Button>

@@ -16,6 +16,8 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   section?: "main" | "analysis" | "manage";
+  /** Optional short status tag rendered beside the label (e.g. "Soon"). */
+  badge?: string;
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -25,7 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Expenses", href: "/expenses", icon: TrendingDown, section: "main" },
   { label: "Reports", href: "/reports", icon: FileBarChart, section: "analysis" },
   { label: "AI Insights", href: "/insights", icon: Sparkles, section: "analysis" },
-  { label: "Ask LedgerAI", href: "/ask", icon: MessageSquareText, section: "analysis" },
+  { label: "Ask LedgerAI", href: "/ask-v2", icon: MessageSquareText, section: "analysis", badge: "Soon" },
   { label: "Import", href: "/import", icon: Upload, section: "manage" },
   { label: "Settings", href: "/settings", icon: Settings, section: "manage" },
 ];

@@ -96,14 +96,19 @@ const FORBIDDEN_KEYS = [
   "question",
   "answer",
   "categoryName",
+  "category",
   "amount",
   "income",
   "expenses",
   "netProfit",
   "balance",
   "revenue",
+  "transactionId",
+  "transactions",
   "prompt",
   "rawOutput",
+  "apiKey",
+  "authorization",
 ];
 
 /**

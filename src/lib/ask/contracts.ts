@@ -143,6 +143,26 @@ export type AssistantPeriodSchema = z.infer<typeof assistantPeriodSchema>;
 
 const comparisonTargetSchema = semanticTargetSchema;
 
+/**
+ * Phase 15 — optional category complement (remainder) scope on an engine query.
+ * Carries semantic scope only, never financial values:
+ *   { kind: "aggregate" }            = every category BEYOND the top five of a
+ *                                      period's spending distribution; and
+ *   { kind: "excluding", category }  = the distribution EXCLUDING one named
+ *                                      category (canonical, verified against the
+ *                                      trusted owned category set by policy).
+ * The trusted finance layer derives every figure it represents.
+ */
+export const assistantQueryComplementSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("aggregate") }).strict(),
+  z
+    .object({ kind: z.literal("excluding"), category: z.string().min(1).max(80) })
+    .strict(),
+]);
+export type AssistantQueryComplement = z.infer<
+  typeof assistantQueryComplementSchema
+>;
+
 /** Mirrors the trusted AssistantQuery discriminated union (§5). */
 export const assistantQuerySchema = z.discriminatedUnion("intent", [
   z.object({ intent: z.literal("balance"), category: z.string().max(80).nullable(), period: assistantPeriodSchema }).strict(),
@@ -156,6 +176,17 @@ export const assistantQuerySchema = z.discriminatedUnion("intent", [
   z
     .object({
       intent: z.literal("categorySpend"),
+      category: z.string().min(1).max(80),
+      period: assistantPeriodSchema,
+    })
+    .strict(),
+  // Phase 17 — category share. A named category's share of a period's total
+  // spending (always expressed against the same trusted period total the
+  // engine used), alongside its amount. Shares are semantic intent only: the
+  // engine never stores a percentage in the query.
+  z
+    .object({
+      intent: z.literal("categoryShare"),
       category: z.string().min(1).max(80),
       period: assistantPeriodSchema,
     })
@@ -176,6 +207,14 @@ export const assistantQuerySchema = z.discriminatedUnion("intent", [
       intent: z.literal("spendingDistribution"),
       category: z.string().max(80).nullable(),
       period: assistantPeriodSchema,
+      // Phase 15 — optional complement (category remainder) scope. Absent means
+      // the plain top-five distribution. Present:
+      //   { kind: "aggregate" }         = every category BEYOND the top five;
+      //   { kind: "excluding", category } = the distribution EXCLUDING one named
+      //     category (canonical, resolved by the trusted policy layer).
+      // v1 never emits this field, so v1 behavior is unchanged; carries semantic
+      // scope only, never financial values (the engine derives those).
+      complement: assistantQueryComplementSchema.optional(),
     })
     .strict(),
   z

@@ -24,7 +24,9 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/use-toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TransactionForm, type TransactionFormValues } from "@/components/transactions/transaction-form";
@@ -41,6 +43,12 @@ export interface TransactionsViewProps {
   params: TransactionListQuery;
   accounts: AccountServiceData[];
   categories: CategoryServiceData[];
+  /** Sets an error panel in place of the table (with a working retry). */
+  loadError?: string | null;
+  /** Transactions loaded but the supporting account list failed. */
+  accountsError?: string | null;
+  /** Transactions loaded but the supporting category list failed. */
+  categoriesError?: string | null;
   currency: string;
   title: string;
   /** Locks the list to a single transaction type (income/expense pages). */
@@ -71,6 +79,9 @@ export function TransactionsView({
   params,
   accounts,
   categories,
+  loadError,
+  accountsError,
+  categoriesError,
   currency,
   title,
   lockedType,
@@ -107,6 +118,27 @@ export function TransactionsView({
       params.dateFrom ||
       params.dateTo,
   );
+
+  // Partial-failure state: the list loaded, but support data (accounts /
+  // categories) did not. The table stays visible with safe placeholders, plus
+  // a non-blocking warning and a retry that re-runs the server load.
+  const supportError =
+    !loadError && (accountsError || categoriesError)
+      ? {
+          title:
+            accountsError && categoriesError
+              ? "Some details couldn't be loaded"
+              : accountsError
+                ? "Account details couldn't be loaded"
+                : "Category details couldn't be loaded",
+          detail:
+            accountsError && categoriesError
+              ? "Your transactions are shown, but account names, category names and the filters are unavailable until you retry."
+              : accountsError
+                ? "Your transactions are shown, but account names and the account filter are unavailable until you retry."
+                : "Your transactions are shown, but category names and the category filter are unavailable until you retry.",
+        }
+      : null;
 
   /** Push a query-patch onto the URL, keeping the other current filters. */
   const push = React.useCallback(
@@ -316,13 +348,30 @@ export function TransactionsView({
               {lockedType ? TRANSACTION_TYPE_LABELS[lockedType] : "All transactions"}
             </h1>
             <p className="mt-1 text-muted">
-              {result.total} {result.total === 1 ? "record" : "records"} · {businessName}
+              {loadError
+                ? "Your records couldn't be loaded."
+                : `${result.total} ${result.total === 1 ? "record" : "records"} · ${businessName}`}
             </p>
           </div>
           <Button onClick={openCreate} leftIcon={<Plus className="h-4 w-4" />}>
             Add transaction
           </Button>
         </div>
+
+        {supportError && (
+          <Alert tone="warning" title={supportError.title}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>{supportError.detail}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.refresh()}
+              >
+                Try again
+              </Button>
+            </div>
+          </Alert>
+        )}
 
         <Card className="overflow-hidden">
           <div className="flex w-full flex-wrap items-start gap-3 border-b border-border px-4 py-3">
@@ -470,6 +519,15 @@ export function TransactionsView({
             }}
             loading={isPending}
             onRowClick={openEdit}
+            error={
+              loadError ? (
+                <ErrorState
+                  title="Couldn't load transactions"
+                  description={loadError}
+                  onRetry={() => router.refresh()}
+                />
+              ) : undefined
+            }
             empty={
               <EmptyState
                 icon={<ArrowLeftRight className="h-6 w-6" />}

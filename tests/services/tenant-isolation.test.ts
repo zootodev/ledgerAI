@@ -261,10 +261,100 @@ describe("transactions service (tenant-isolated data access)", () => {
     mockPrisma.transaction.findMany.mockResolvedValue([]);
     mockPrisma.transaction.count.mockResolvedValue(0);
 
-    await listTransactions({ page: 2, pageSize: 999 });
+    const result = await listTransactions({ page: 2, pageSize: 999 });
     const args = mockPrisma.transaction.findMany.mock.calls[0][0];
-    expect(args.skip).toBe(100);
     expect(args.take).toBe(100);
+    // Zero rows -> one page -> the requested page 2 is clamped back to page 1.
+    expect(args.skip).toBe(0);
+    expect(result.page).toBe(1);
+    expect(result.pages).toBe(1);
+  });
+
+  it("clamps an out-of-range page to the last valid page", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      makeTransactionRow(),
+      makeTransactionRow(),
+    ]);
+    mockPrisma.transaction.count.mockResolvedValue(45);
+
+    const result = await listTransactions({ page: 99, pageSize: 20 });
+
+    expect(result.page).toBe(3);
+    expect(result.pages).toBe(3);
+    expect(result.total).toBe(45);
+    const args = mockPrisma.transaction.findMany.mock.calls[0][0];
+    expect(args.skip).toBe(40); // last page starts at row 41
+    expect(args.take).toBe(20);
+  });
+
+  it("clamps a negative page to the first page", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(45);
+
+    const result = await listTransactions({ page: -5, pageSize: 20 });
+
+    expect(result.page).toBe(1);
+    const args = mockPrisma.transaction.findMany.mock.calls[0][0];
+    expect(args.skip).toBe(0);
+  });
+
+  it("clamps to page 1 when there are zero rows", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(0);
+
+    const result = await listTransactions({ page: 7, pageSize: 20 });
+
+    expect(result.page).toBe(1);
+    expect(result.pages).toBe(1);
+    const args = mockPrisma.transaction.findMany.mock.calls[0][0];
+    expect(args.skip).toBe(0);
+  });
+
+  it("leaves an exact-divisible last page intact", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(60);
+
+    const result = await listTransactions({ page: 3, pageSize: 20 });
+
+    expect(result.pages).toBe(3);
+    expect(result.page).toBe(3);
+    const args = mockPrisma.transaction.findMany.mock.calls[0][0];
+    expect(args.skip).toBe(40);
+  });
+
+  it("still shows page 2 rows when page 2 is in range", async () => {
+    const rows = [
+      makeTransactionRow({ id: UUID_OWNED, description: "page-2-row-a" }),
+      makeTransactionRow({ id: UUID_OWNED_2, description: "page-2-row-b" }),
+    ];
+    mockPrisma.transaction.findMany.mockResolvedValue(rows);
+    mockPrisma.transaction.count.mockResolvedValue(25);
+
+    const result = await listTransactions({ page: 2, pageSize: 20 });
+
+    expect(result.page).toBe(2);
+    expect(result.pages).toBe(2);
+    expect(result.items.map((i) => i.description)).toEqual([
+      "page-2-row-a",
+      "page-2-row-b",
+    ]);
+    const args = mockPrisma.transaction.findMany.mock.calls[0][0];
+    expect(args.skip).toBe(20);
+  });
+
+  it("falls back to safe defaults for an unparseable page value", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(45);
+
+    const result = await listTransactions({
+      page: "abc" as unknown as number,
+      pageSize: 20,
+    });
+
+    expect(result.page).toBe(1);
+    const args = mockPrisma.transaction.findMany.mock.calls[0][0];
+    expect(args.skip).toBe(0);
+    expect(args.take).toBe(20);
   });
 
   it("serializes Decimal fields to strings without float drift", async () => {
@@ -532,7 +622,7 @@ describe("transaction reference validation (ownership at write time)", () => {
 
   it("allows a create referencing the session's own account and category", async () => {
     mockPrisma.account.findFirst.mockResolvedValue({ id: UUID_OWNED });
-    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED });
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED, name: "Sales", type: "income" });
     mockPrisma.transaction.create.mockResolvedValue(
       makeTransactionRow({
         accountId: UUID_OWNED,
@@ -556,7 +646,7 @@ describe("transaction reference validation (ownership at write time)", () => {
   });
 
   it("allows a create referencing a built-in system category", async () => {
-    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_SYSTEM });
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_SYSTEM, name: "Royalties", type: "income" });
     mockPrisma.transaction.create.mockResolvedValue(
       makeTransactionRow({ categoryId: UUID_SYSTEM }),
     );
@@ -600,6 +690,77 @@ describe("transaction reference validation (ownership at write time)", () => {
     expect(data.fingerprint).toContain("refund");
     expect(data.amount).toBe("50.00");
   });
+
+  it("falls back to a safe default query when list params are malformed", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(0);
+
+    // A genuinely unparseable page value must not throw — it degrades to the
+    // default (page 1, pageSize 20) instead of 500ing the page.
+    await listTransactions({
+      page: "abc" as unknown as number,
+    } as never);
+
+    const findCall = mockPrisma.transaction.findMany.mock.calls[0][0];
+    expect(findCall.skip).toBe(0);
+    expect(findCall.take).toBe(20);
+  });
+});
+
+describe("transaction category enforcement (Phase 24 D4/D5)", () => {
+  beforeEach(() => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    mockPrisma.business.findFirst.mockResolvedValue(businessA);
+  });
+
+  const validInput = {
+    date: "2026-08-01",
+    description: "Sales receipt",
+    amount: "1000.00",
+    type: "income" as const,
+    reference: "INV-7",
+  };
+
+  it("rejects a transfer that carries a category (server-side guard)", async () => {
+    await expect(
+      createTransaction({ ...validInput, type: "transfer", categoryId: UUID_OWNED }),
+    ).rejects.toThrow("Transfers can't have a category.");
+
+    expect(mockPrisma.category.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.transaction.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a category whose type doesn't match the transaction type", async () => {
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED, name: "Food", type: "expense" });
+
+    await expect(
+      createTransaction({ ...validInput, categoryId: UUID_OWNED }),
+    ).rejects.toThrow("is for expense transactions and can't be used on income transactions");
+
+    expect(mockPrisma.transaction.create).not.toHaveBeenCalled();
+  });
+
+  it("applies the same category-type rule on update", async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue({ id: UUID_OWNED });
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED, name: "Food", type: "expense" });
+
+    await expect(
+      updateTransaction(UUID_OWNED, { ...validInput, categoryId: UUID_OWNED }),
+    ).rejects.toThrow("is for expense transactions and can't be used on income transactions");
+
+    expect(mockPrisma.transaction.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts a matching category type on create", async () => {
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED, name: "Sales", type: "income" });
+    mockPrisma.transaction.create.mockResolvedValue(
+      makeTransactionRow({ categoryId: UUID_OWNED, type: "income" }),
+    );
+
+    const created = await createTransaction({ ...validInput, categoryId: UUID_OWNED });
+    expect(created.id).toBe(UUID_OWNED);
+    expect(mockPrisma.transaction.create).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("transaction edit learning (Phase 7)", () => {
@@ -626,7 +787,7 @@ describe("transaction edit learning (Phase 7)", () => {
 
   it("learns a merchant rule when an edit moves a row away from its AI suggestion", async () => {
     mockPrisma.transaction.findFirst.mockResolvedValue(aiCategorizedRow);
-    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED_2, name: "Food" });
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED_2, name: "Food", type: "expense" });
     mockPrisma.transaction.update.mockResolvedValue(
       makeTransactionRow({ categoryId: UUID_OWNED_2, type: "expense" }),
     );
@@ -666,7 +827,7 @@ describe("transaction edit learning (Phase 7)", () => {
       description: "UBER *TRIP",
       type: "expense",
     });
-    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED_2, name: "Food" });
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED_2, name: "Food", type: "expense" });
     mockPrisma.transaction.update.mockResolvedValue(
       makeTransactionRow({ categoryId: UUID_OWNED_2, type: "expense" }),
     );
@@ -689,7 +850,7 @@ describe("transaction edit learning (Phase 7)", () => {
       description: "META ADS SPEND",
       type: "expense",
     });
-    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_MARKETING, name: "Marketing" });
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_MARKETING, name: "Marketing", type: "expense" });
     mockPrisma.transaction.update.mockResolvedValue(
       makeTransactionRow({ categoryId: UUID_MARKETING, type: "expense" }),
     );
@@ -738,11 +899,13 @@ describe("transaction edit learning (Phase 7)", () => {
     });
     mockPrisma.transaction.update.mockResolvedValue(makeTransactionRow({ type: "transfer" }));
 
+    // Transfers can't carry a category, so the edit has none — and must never
+    // trigger a rule learn.
     await updateTransaction(UUID_OWNED, {
       ...validInput,
       description: "UBER *TRIP",
       type: "transfer",
-      categoryId: UUID_OWNED_2,
+      categoryId: undefined,
     });
 
     expect(mockPrisma.categoryRule.upsert).not.toHaveBeenCalled();
@@ -750,7 +913,7 @@ describe("transaction edit learning (Phase 7)", () => {
 
   it("never lets a learning failure fail the user's edit", async () => {
     mockPrisma.transaction.findFirst.mockResolvedValue(aiCategorizedRow);
-    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED_2, name: "Food" });
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_OWNED_2, name: "Food", type: "expense" });
     mockPrisma.transaction.update.mockResolvedValue(
       makeTransactionRow({ categoryId: UUID_OWNED_2, type: "expense" }),
     );

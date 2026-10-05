@@ -72,6 +72,7 @@ function runtimeAI(
       narrationEnabled: false,
       structuredStateWrite: false,
       shadowSampleRate: 1,
+      askV2Enabled: false,
       ...overrides,
     },
     providers: {

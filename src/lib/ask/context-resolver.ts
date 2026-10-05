@@ -54,6 +54,7 @@ export function intentToSemanticKind(intent: AssistantIntent): string {
     topCategory: "top_category",
     lowestCategory: "lowest_category",
     categorySpend: "category_spend",
+    categoryShare: "category_share",
     expenseImpact: "expense_impact",
     spendingDistribution: "spending_distribution",
     expenseBreakdown: "expense_breakdown",

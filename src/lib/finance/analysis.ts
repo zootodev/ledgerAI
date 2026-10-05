@@ -23,6 +23,58 @@ export interface CategoryShare {
   share: number;
 }
 
+/** The number of categories a deterministic distribution answer names up front
+ * (the ranked top of the distribution); the complement is everything beyond it. */
+export const DISTRIBUTION_DISPLAY_LIMIT = 5;
+
+export interface CategoryComplement {
+  /** Complement members in distribution order (amount desc, ties alphabetical). */
+  members: CategoryShare[];
+  /** Sum of the members' RAW amounts (never 100 − sum of rounded displayed shares). */
+  totalAmount: number;
+  /** The members' share of the distribution total, rounded to one decimal. */
+  totalShare: number;
+  count: number;
+}
+
+/**
+ * The complement of a ranked category distribution:
+ *   - `exclude` empty -> every category BEYOND the top `displayLimit`
+ *     ("the remaining categories", "the rest");
+ *   - `exclude` non-empty -> every category EXCEPT the excluded ones
+ *     ("categories apart from X"), case-insensitive exact name match.
+ * Derives only from the trusted `distribution()` output and the caller-supplied
+ * `total` (the same total the full distribution was computed against), so the
+ * share denominator is consistent by construction. Never computes a remainder
+ * as 100 minus displayed shares. Pure, deterministic, single-datapoint safe.
+ */
+export function complementDistribution(
+  breakdown: CategoryShare[],
+  total: number,
+  exclude: string[] = [],
+  displayLimit = DISTRIBUTION_DISPLAY_LIMIT,
+): CategoryComplement {
+  const excluded = new Set(
+    exclude
+      .map((c) => c.trim().toLowerCase())
+      .filter((c) => c.length > 0),
+  );
+  const members =
+    excluded.size === 0
+      ? breakdown.slice(displayLimit)
+      : breakdown.filter((c) => !excluded.has(c.categoryName.toLowerCase()));
+  const totalAmount = round(
+    members.reduce((sum, c) => sum + c.amount, 0),
+    2,
+  );
+  return {
+    members,
+    totalAmount,
+    totalShare: total > 0 ? round((totalAmount / total) * 100, 1) : 0,
+    count: members.length,
+  };
+}
+
 /** Categories with actual (positive) activity, sorted by amount desc. */
 export function activeCategories(totals: CategoryTotal[]): CategoryTotal[] {
   return totals
@@ -92,8 +144,8 @@ export interface Delta {
 export function comparisonDelta(current: number, prior: number): Delta {
   const pct = percentChange(current, prior);
   if (pct === null) return { pct: null, direction: "none" };
-  if (pct > 0) return { pct: round(pct, 1), direction: "up" };
-  if (pct < 0) return { pct: round(pct, 1), direction: "down" };
+  if (pct > 0) return { pct, direction: "up" };
+  if (pct < 0) return { pct, direction: "down" };
   return { pct: 0, direction: "flat" };
 }
 

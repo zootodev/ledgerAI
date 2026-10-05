@@ -39,6 +39,14 @@ export interface DataTableProps<T> {
     pageSize: number;
     total: number;
     onPageChange: (page: number) => void;
+    /**
+     * Pagination drives ONLY the footer counts + page buttons. The table
+     * renders `data` exactly as provided — callers that page client-side must
+     * pass the current page's rows, and callers that page server-side (like
+     * the transactions list) pass the server-returned page as-is. The table
+     * never slices `data` itself, so an already-paginated slice is never
+     * sliced a second time.
+     */
   };
   loading?: boolean;
   empty?: React.ReactNode;
@@ -89,15 +97,17 @@ export function DataTable<T>({
     1,
     Math.ceil(totalCount / (pagination?.pageSize ?? pageSize)),
   );
-  const currentPage = pagination?.page ?? 1;
+  // Footer page number, clamped for DISPLAY only. The table renders `data` as
+  // given and never paginates, but a caller that passes a page past the end
+  // (e.g. a stale query after filters shrink the results) must not surface a
+  // misleading "Showing 1961 – 45 of 45" footer. Callers still own real page
+  // state; this only keeps the footer countable.
+  const rawPage = pagination?.page ?? 1;
+  const currentPage = Math.min(Math.max(rawPage, 1), totalPages);
 
-  const displayedData = React.useMemo(() => {
-    if (pagination) {
-      const start = (pagination.page - 1) * pagination.pageSize;
-      return sortedData.slice(start, start + pagination.pageSize);
-    }
-    return sortedData;
-  }, [sortedData, pagination]);
+  // The table renders the rows it is given. `pagination` only drives the
+  // footer; callers are responsible for passing the current page's rows.
+  const displayedData = sortedData;
 
   const handleSortClick = (col: Column<T>) => {
     if (!col.sortValue) return;

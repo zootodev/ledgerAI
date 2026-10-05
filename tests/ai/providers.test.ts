@@ -236,4 +236,16 @@ describe("getAskAi selector (server env)", () => {
     expect(config.mode).toBe("shadow");
     expect(config.shadowSampleRate).toBe(1);
   });
+
+  it("parses ASK_V2_ENABLED with a safe default OFF, independent of mode", () => {
+    expect(readAskAiConfig({} as NodeJS.ProcessEnv).askV2Enabled).toBe(false);
+    expect(
+      readAskAiConfig({ ASK_V2_ENABLED: "true", ASK_LLM_MODE: "off" } as unknown as NodeJS.ProcessEnv)
+        .askV2Enabled,
+    ).toBe(true);
+    expect(
+      readAskAiConfig({ ASK_V2_ENABLED: "false", ASK_LLM_MODE: "canary" } as unknown as NodeJS.ProcessEnv)
+        .askV2Enabled,
+    ).toBe(false);
+  });
 });

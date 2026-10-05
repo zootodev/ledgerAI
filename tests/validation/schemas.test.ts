@@ -22,9 +22,10 @@ describe("transactionInputSchema", () => {
     }
   });
 
-  it("rejects a zero amount", () => {
-    expect(transactionInputSchema.safeParse({ ...base, amount: "0" }).success).toBe(false);
-    expect(transactionInputSchema.safeParse({ ...base, amount: "0.00" }).success).toBe(false);
+  it("rejects a zero amount in every textual form", () => {
+    for (const amount of ["0", "0.00", "0.0", "00", "000.00"]) {
+      expect(transactionInputSchema.safeParse({ ...base, amount }).success).toBe(false);
+    }
   });
 
   it("rejects malformed amounts (negatives, >2 decimals, non-numeric)", () => {

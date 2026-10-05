@@ -62,6 +62,13 @@ export interface AskAiConfig {
   narrationEnabled: boolean;
   structuredStateWrite: boolean;
   shadowSampleRate: number;
+  /**
+   * Independent /ask-v2 surface gate (Phase 18C). Deliberately separate from
+   * the v1 AI-mode flags above: deploying the v2 route must never auto-arm
+   * the v1 AI canary seam, and v1 mode flags must never control v2 delivery.
+   * Safe default OFF — existing deployments do not expose v2 on deploy.
+   */
+  askV2Enabled: boolean;
 }
 
 const TRUE = new Set(["1", "true", "yes", "on"]);
@@ -80,6 +87,7 @@ export function readAskAiConfig(env: NodeJS.ProcessEnv = process.env): AskAiConf
     interpreterEnabled: bool(env.ASK_LLM_INTERPRETER_ENABLED),
     narrationEnabled: bool(env.ASK_LLM_NARRATION_ENABLED),
     structuredStateWrite: bool(env.ASK_STRUCTURED_STATE_WRITE),
+    askV2Enabled: bool(env.ASK_V2_ENABLED),
     shadowSampleRate: Number.isFinite(sampleRaw)
       ? Math.min(Math.max(sampleRaw, 0), 1)
       : 0,

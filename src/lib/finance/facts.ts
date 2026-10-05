@@ -15,7 +15,12 @@ import {
   type NarrationManifest,
 } from "@/lib/ask/contracts";
 import { resolvePeriod, type AssistantMetrics, type AssistantQuery } from "@/lib/finance/assistant";
-import { round } from "@/lib/finance/engine";
+import { percentChange, round } from "@/lib/finance/engine";
+import {
+  complementDistribution,
+  DISTRIBUTION_DISPLAY_LIMIT,
+  distribution,
+} from "@/lib/finance/analysis";
 
 /** Trusted money rendering — keeping this slow-path narration sample
  * consistent with the deterministic narration is a GOAL, so the same
@@ -30,6 +35,14 @@ export function formatFactMoney(value: number, currency: string): string {
 
 export function formatFactPercent(value: number): string {
   return `${round(value, 0).toLocaleString("en-NG")}%`;
+}
+
+/** Signed percentage with sign + locale digits, matching
+ *  answerFromMetrics' formatSignedPercent so the manifest and the
+ *  deterministic renderer cite the identical value ("-8%", "+43%"). */
+export function formatFactSignedPercent(value: number): string {
+  const rounded = round(Math.abs(value), 0);
+  return `${value > 0 ? "+" : "-"}${rounded.toLocaleString("en-NG")}%`;
 }
 
 export interface FactManifestInput {
@@ -103,14 +116,18 @@ export function buildFactManifest(input: FactManifestInput): BuiltFactManifest |
     case "income":
       add("money", money(metrics.summary.revenue), true);
       if (metrics.priorSummary) {
-        add("relation", `prior ${periodAgoLabel(query, now)}: ${money(metrics.priorSummary.revenue)}`, true);
+        const priorLabel = periodAgoLabel(query, now);
+        add("relation", `prior ${priorLabel}: ${money(metrics.priorSummary.revenue)}`, true);
+        addDeltaRelation(add, priorLabel, metrics.summary.revenue, metrics.priorSummary.revenue);
       }
       break;
 
     case "expenses":
       add("money", money(metrics.summary.expenses), true);
       if (metrics.priorSummary) {
-        add("relation", `prior ${periodAgoLabel(query, now)}: ${money(metrics.priorSummary.expenses)}`, true);
+        const priorLabel = periodAgoLabel(query, now);
+        add("relation", `prior ${priorLabel}: ${money(metrics.priorSummary.expenses)}`, true);
+        addDeltaRelation(add, priorLabel, metrics.summary.expenses, metrics.priorSummary.expenses);
       }
       break;
 
@@ -162,7 +179,43 @@ export function buildFactManifest(input: FactManifestInput): BuiltFactManifest |
           ) ?? null;
         add("money", money(total?.amount ?? 0), true);
         if (metrics.priorSummary && total && total.priorAmount >= 0) {
-          add("money", `prior ${periodAgoLabel(query, now)}: ${money(total.priorAmount)}`, true);
+          const priorLabel = periodAgoLabel(query, now);
+          add("money", `prior ${priorLabel}: ${money(total.priorAmount)}`, true);
+          addDeltaRelation(add, priorLabel, total.amount, total.priorAmount);
+        }
+      }
+      break;
+
+    // Phase 17 — category share. Certifies the trusted share of the period's
+    // expenses derived the same way the deterministic renderer derives it
+    // (distribution against the same period total). Share is REQUIRED and is
+    // NEVER the prior-period change — the delta, when present, is a separate
+    // non-required relation so the narrator may not swap one for the other.
+    case "categoryShare":
+      add("category", query.category ?? "all", true);
+      {
+        const active = metrics.categoryTotals.filter((c) => c.amount > 0);
+        const total =
+          metrics.summary.expenses > 0
+            ? round(metrics.summary.expenses, 2)
+            : round(active.reduce((sum, c) => sum + c.amount, 0), 2);
+        const found =
+          distribution(active, total).find(
+            (c) => c.categoryName.toLowerCase() === query.category?.toLowerCase(),
+          ) ?? null;
+        const amount = found?.amount ?? 0;
+        const share = found?.share ?? 0;
+        add("money", money(amount), true);
+        add("percent", formatFactPercent(share), true);
+        if (metrics.priorSummary) {
+          const priorLabel = periodAgoLabel(query, now);
+          const totalRow = metrics.categoryTotals.find(
+            (c) => c.categoryName.toLowerCase() === query.category?.toLowerCase(),
+          );
+          if (totalRow && totalRow.priorAmount >= 0) {
+            add("money", `prior ${priorLabel}: ${money(totalRow.priorAmount)}`, true);
+            addDeltaRelation(add, priorLabel, totalRow.amount, totalRow.priorAmount);
+          }
         }
       }
       break;
@@ -197,7 +250,9 @@ export function buildFactManifest(input: FactManifestInput): BuiltFactManifest |
         add("money", `after ${money(Math.max(shifted, 0))}`, true);
       }
       if (metrics.priorSummary) {
+        const priorLabel = periodAgoLabel(query, now);
         add("relation", `prior net profit ${money(metrics.priorSummary.netProfit)}`, false);
+        addDeltaRelation(add, priorLabel, metrics.summary.revenue, metrics.priorSummary.revenue);
       }
       break;
     }
@@ -228,8 +283,48 @@ export function buildFactManifest(input: FactManifestInput): BuiltFactManifest |
         metrics.summary.expenses > 0
           ? round(metrics.summary.expenses, 2)
           : round(active.reduce((sum, c) => sum + c.amount, 0), 2);
+
+      // Phase 15 — category complement (remainder) facts. Every figure the
+      // deterministic complement answer cites is certified here so the narrator
+      // may reword the complement without inventing a number. Member category
+      // facts are capped (members beyond the cap are never named by the
+      // deterministic text, and an unverified name stays rejectable). The full
+      // period-wide total is NOT a required fact for complement answers —
+      // neither the deterministic text nor the golden examples cite it — so it
+      // must not force coverage (mirrors the Phase 12 delta lesson).
+      if (query.complement) {
+        const computed = complementDistribution(
+          distribution(active, total),
+          total,
+          query.complement.kind === "excluding"
+            ? [query.complement.category]
+            : [],
+        );
+        if (computed.members.length === 0) {
+          add("relation", "no remaining categories", true);
+          if (query.complement.kind === "excluding") {
+            add("category", query.complement.category, false);
+          }
+          break;
+        }
+        add("money", `${money(computed.totalAmount)} total`, true);
+        add("percent", formatFactPercent(computed.totalShare), true);
+        // Members are REQUIRED only when the deterministic complement text
+        // actually names them (count ≤ the display limit). For a large bulk
+        // remainder the text cites only the combined figure + share, so naming
+        // the members must not be forced — mirroring the Phase 12 delta lesson.
+        const membersNamed = computed.members.length <= DISTRIBUTION_DISPLAY_LIMIT;
+        for (const c of computed.members.slice(0, 20)) {
+          add("category", c.categoryName, membersNamed);
+        }
+        if (query.complement.kind === "excluding") {
+          add("category", query.complement.category, false);
+        }
+        break;
+      }
+
       add("money", `${money(total)} total`, true);
-      const remaining = Math.min(5, active.length);
+      const remaining = Math.min(DISTRIBUTION_DISPLAY_LIMIT, active.length);
       for (const c of active.slice(0, remaining)) {
         add("category", c.categoryName, true);
         const share = total > 0 ? round((c.amount / total) * 100, 1) : 0;
@@ -274,6 +369,27 @@ export function buildFactManifest(input: FactManifestInput): BuiltFactManifest |
 
   const manifest = { answerKind: kind, facts, allowedTemplates: allowedTemplatesFor(kind) };
   return { manifest, moneyFactId };
+}
+
+/**
+ * Certify the exact prior-period percentage delta the deterministic renderer
+ * may display (answerFromMetrics deltaTail / categoryDeltaTail / the expense
+ * impact revenue sentence). Uses ONLY the trusted percentChange — never a
+ * calculation the engine itself would not render — and it is skipped whenever
+ * the renderer would skip it (no prior baseline). Marking it non-required keeps
+ * the delta available to the narrator without forcing every narration to cite
+ * it; the deterministic fallback stays inside the grounding contract.
+ */
+function addDeltaRelation(
+  add: (kind: FinancialFact["kind"], display: string, required: boolean) => void,
+  priorLabel: string | null,
+  current: number,
+  prior: number,
+): void {
+  if (priorLabel === null) return;
+  const delta = percentChange(current, prior);
+  if (delta === null) return;
+  add("relation", `vs prior ${priorLabel}: ${formatFactSignedPercent(delta)}`, false);
 }
 
 function pick(

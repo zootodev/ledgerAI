@@ -224,12 +224,17 @@ model AssistantConversation {
 
 // One turn in a conversation. `role` is "user" | "assistant"; `content` is
 // the question text (user) or the final narrated answer text (assistant).
-// No financial internals are ever stored here.
+// No financial internals are ever stored here. `metadata` carries the
+// ask-v2 VERIFIED turn anchor on the assistant row of a turn (Phase 9E) —
+// a strict, server-derived record of the trusted query/metrics/tool keys,
+// validated by the service layer before use; rows that predate this or were
+// never anchors hold NULL.
 model AssistantMessage {
   id             String   @id @default(uuid()) @db.Uuid
   conversationId String   @map("conversation_id") @db.Uuid
   role           String // "user" | "assistant"
   content        String
+  metadata       Json? // ask-v2 verified turn anchor (server-derived only)
   createdAt      DateTime @default(now()) @map("created_at")
 
   conversation AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

@@ -56,7 +56,9 @@ export const transactionInputSchema = z
       .transform((v) => (v === "" ? null : v)),
   })
   .superRefine((data, ctx) => {
-    if (data.amount === "0" || data.amount === "0.00") {
+    // "0", "0.0", "00", "000.00", etc. all pass the format regex but are
+    // economically zero; reject every numeric zero variant.
+    if (Number(data.amount) === 0) {
       ctx.addIssue({
         code: "custom",
         path: ["amount"],

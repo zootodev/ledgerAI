@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_SECTIONS } from "@/constants/navigation";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/cn";
 
 export interface SidebarProps extends React.HTMLAttributes<HTMLElement> {
@@ -13,12 +14,14 @@ export interface SidebarProps extends React.HTMLAttributes<HTMLElement> {
 function SidebarNavLink({
   href,
   label,
+  badge,
   icon: Icon,
   active,
   onNavigate,
 }: {
   href: string;
   label: string;
+  badge?: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
   onNavigate?: () => void;
@@ -39,7 +42,12 @@ function SidebarNavLink({
         className={cn("h-4.5 w-4.5", active ? "text-brand" : "text-subtle group-hover:text-secondary")}
         aria-hidden="true"
       />
-      {label}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge && (
+        <Badge className="px-1.5 text-[10px] uppercase tracking-wide">
+          {badge}
+        </Badge>
+      )}
     </Link>
   );
 }
@@ -64,6 +72,7 @@ export function Sidebar({ onNavigate, className }: SidebarProps) {
                   key={item.href}
                   href={item.href}
                   label={item.label}
+                  badge={item.badge}
                   icon={item.icon}
                   active={active}
                   onNavigate={onNavigate}

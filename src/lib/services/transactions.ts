@@ -83,7 +83,12 @@ export async function listTransactions(
 
   const direct: Record<string, unknown> = { ...params };
   // Coerce page/pageSize through the query schema so clamping is consistent.
-  const query = transactionListQuerySchema.parse(direct);
+  // A malformed/unparseable query must never 500 the page — fall back to a
+  // safe default list instead of throwing.
+  const queryParsed = transactionListQuerySchema.safeParse(direct);
+  const query = queryParsed.success
+    ? queryParsed.data
+    : transactionListQuerySchema.parse({});
 
   const where: Prisma.TransactionWhereInput = {
     businessId: business.id,
@@ -118,22 +123,28 @@ export async function listTransactions(
       ? flipOrder(orderBy)
       : orderBy;
 
-  const [items, total] = await Promise.all([
-    prisma.transaction.findMany({
-      where,
-      orderBy: effectiveOrder,
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-    }),
-    prisma.transaction.count({ where }),
-  ]);
+  // Paginate against the AUTHORITATIVE row count: the page is clamped to
+  // [1, pages] after the count. A stale/stuffed `?page=99` (or a page that
+  // goes out of range after filters shrink the set) must never render an
+  // empty body with a misleading footer — it falls back to the last valid
+  // page. Zero rows still yields page 1 (pages are never empty).
+  const total = await prisma.transaction.count({ where });
+  const pages = Math.max(1, Math.ceil(total / query.pageSize));
+  const page = Math.min(Math.max(query.page, 1), pages);
+
+  const items = await prisma.transaction.findMany({
+    where,
+    orderBy: effectiveOrder,
+    skip: (page - 1) * query.pageSize,
+    take: query.pageSize,
+  });
 
   return {
     items: items.map(toDto),
     total,
-    page: query.page,
+    page,
     pageSize: query.pageSize,
-    pages: Math.max(1, Math.ceil(total / query.pageSize)),
+    pages,
   };
 }
 
@@ -168,10 +179,16 @@ export async function getTransaction(id: string): Promise<TransactionServiceData
  * to the current business (or is a system category). This is the ownership
  * check for relational integrity: a client cannot attach a transaction to
  * another tenant's account or category by guessing its id.
+ *
+ * It also enforces the domain rules the UI already encodes:
+ *  - transfers never carry a category, and
+ *  - a category's type must match the transaction's type (an income category
+ *    can't be attached to an expense, and vice versa).
  */
 async function assertReferencedEntitiesBelong(
   prisma: PrismaClient,
   businessId: string,
+  type: TransactionServiceData["type"],
   accountId?: string | null,
   categoryId?: string | null,
 ): Promise<void> {
@@ -184,15 +201,24 @@ async function assertReferencedEntitiesBelong(
   }
 
   if (categoryId) {
+    if (type === "transfer") {
+      throw new Error("Transfers can't have a category.");
+    }
+
     // Categories may be either the business's own OR built-in system categories.
     const category = await prisma.category.findFirst({
       where: {
         id: categoryId,
         OR: [{ businessId: null }, { businessId }],
       },
-      select: { id: true },
+      select: { id: true, name: true, type: true },
     });
     if (!category) throw new Error("Category not found for this business.");
+    if (category.type !== type) {
+      throw new Error(
+        `The "${category.name}" category is for ${category.type} transactions and can't be used on ${type} transactions.`,
+      );
+    }
   }
 }
 
@@ -204,7 +230,13 @@ export async function createTransaction(input: TransactionInput): Promise<Transa
   }
 
   const { prisma, business } = await requireAuthContext();
-  await assertReferencedEntitiesBelong(prisma, business.id, parsed.data.accountId, parsed.data.categoryId);
+  await assertReferencedEntitiesBelong(
+    prisma,
+    business.id,
+    parsed.data.type,
+    parsed.data.accountId,
+    parsed.data.categoryId,
+  );
 
   const tx = await prisma.transaction.create({
     data: {
@@ -262,7 +294,13 @@ export async function updateTransaction(
   });
   if (!existing) throw new Error("Transaction not found.");
 
-  await assertReferencedEntitiesBelong(prisma, business.id, parsed.data.accountId, parsed.data.categoryId);
+  await assertReferencedEntitiesBelong(
+    prisma,
+    business.id,
+    parsed.data.type,
+    parsed.data.accountId,
+    parsed.data.categoryId,
+  );
 
   const updated = await prisma.transaction.update({
     where: { id: idParsed.data },

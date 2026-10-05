@@ -97,6 +97,7 @@ export async function computeMetricsFor(
   let categoryTotals: AssistantCategorySpend[] = [];
   if (
     query.intent === "categorySpend" ||
+    query.intent === "categoryShare" ||
     query.intent === "topCategory" ||
     query.intent === "lowestCategory" ||
     query.intent === "expenseImpact" ||

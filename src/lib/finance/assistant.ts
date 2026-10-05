@@ -14,9 +14,12 @@
 
 import { percentChange, round, type PeriodSummary } from "./engine";
 import {
+  complementDistribution,
   comparisonDelta,
+  DISTRIBUTION_DISPLAY_LIMIT,
   distribution,
   topContributors,
+  type CategoryShare,
 } from "./analysis";
 import {
   prepareQuestion,
@@ -39,6 +42,7 @@ export type AssistantIntent =
   | "topCategory"
   | "lowestCategory"
   | "categorySpend"
+  | "categoryShare"
   | "expenseImpact"
   | "spendingDistribution"
   | "expenseBreakdown"
@@ -76,6 +80,16 @@ export interface AssistantQuery {
    * AI output); the narration only ever brackets a computed total against it.
    */
   amountReference?: { value: number; source: "user_stated" | "previous_answer" };
+  /**
+   * Phase 15 — optional category complement (remainder) scope on a
+   * spendingDistribution query. Absent = the plain ranked distribution.
+   *   { kind: "aggregate" }             = every category BEYOND the top five;
+   *   { kind: "excluding", category }   = the distribution EXCLUDING one named
+   *     category (canonical, resolved by the trusted policy layer).
+   * Requests the deterministic renderer to answer the COMPLEMENT, the figures
+   * for which the trusted finance layer derives — never the LLM.
+   */
+  complement?: { kind: "aggregate" } | { kind: "excluding"; category: string };
 }
 
 /** The period a query implies, resolved against a real clock. */
@@ -607,6 +621,43 @@ export function answerFromMetrics(
       };
     }
 
+    // Phase 17 — category share. The share is ALWAYS derived from the trusted
+    // distribution against the SAME period total the engine computed — never
+    // from 100 minus displayed amounts, never from a prior-period change, and
+    // never by the narrator. The prior-period relation (if any) is kept as the
+    // existing deltaTail — a change, never a share.
+    case "categoryShare": {
+      const target = query.category;
+      const active = metrics.categoryTotals.filter((c) => c.amount > 0);
+      const total =
+        metrics.summary.expenses > 0
+          ? round(metrics.summary.expenses, 2)
+          : round(active.reduce((sum, c) => sum + c.amount, 0), 2);
+      const found =
+        distribution(active, total).find(
+          (c) => c.categoryName.toLowerCase() === target?.toLowerCase(),
+        ) ?? null;
+      const targetTotal =
+        metrics.categoryTotals.find(
+          (c) => c.categoryName.toLowerCase() === target?.toLowerCase(),
+        ) ?? { categoryName: target ?? "Other", amount: 0, priorAmount: 0 };
+      const amount = targetTotal.amount;
+      const share = found?.share ?? 0;
+      if (amount === 0) {
+        return {
+          kind: "answer",
+          text: `No spending on ${lower(target)} was recorded in ${period.label} — ${formatPercent(share)} of ${period.label} spending.`,
+          data: { categoryName: target, amount: 0, shareOfExpenses: share, period: period.label },
+        };
+      }
+      const tail = metrics.priorSummary ? categoryDeltaTail(targetTotal, money) : "";
+      return {
+        kind: "answer",
+        text: `Spending on ${lower(target)} in ${period.label} was ${money(amount)} — ${formatPercent(share)} of ${period.label} spending.${tail}`,
+        data: { categoryName: target, amount, shareOfExpenses: share, period: period.label },
+      };
+    }
+
     case "transactionCount": {
       if (!metrics.count || noActivity(metrics.summary)) return insufficient();
       const n = metrics.count.income + metrics.count.expenses + metrics.count.transfers;
@@ -713,7 +764,20 @@ export function answerFromMetrics(
           ? round(metrics.summary.expenses, 2)
           : round(active.reduce((sum, c) => sum + c.amount, 0), 2);
       const breakdown = distribution(active, total);
-      const shown = breakdown.length <= 5 ? breakdown : breakdown.slice(0, 5);
+
+      // Phase 15 — category complement / remainder: the user asks about the
+      // categories the plain top-five answer did not name ("the rest", "the
+      // other categories", "categories apart from X"). The trusted engine
+      // derives every figure; the LLM only ever marked the scope.
+      if (query.complement) {
+        const answer = complementNarration(query.complement, breakdown, total, period.label, money);
+        return { kind: "answer", text: answer.text, data: answer.data };
+      }
+
+      const shown =
+        breakdown.length <= DISTRIBUTION_DISPLAY_LIMIT
+          ? breakdown
+          : breakdown.slice(0, DISTRIBUTION_DISPLAY_LIMIT);
       const parts = shown.map((c) => `${cap(c.categoryName)} (${formatPercent(c.share)})`);
       let text = `In ${period.label} your spending broke down as ${joinList(parts)}.`;
       if (breakdown.length > shown.length) {
@@ -1008,6 +1072,9 @@ export function conversationTitle(query: AssistantQuery): string {
     case "categorySpend":
       topic = `${cap(query.category)} spending`;
       break;
+    case "categoryShare":
+      topic = `${cap(query.category)} spending share`;
+      break;
     case "transactionCount":
       topic = "Transaction count";
       break;
@@ -1140,4 +1207,75 @@ function lower(value: string | null): string {
 function joinList(parts: string[]): string {
   if (parts.length === 1) return parts[0];
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * Phase 15 — deterministic complement (category remainder) narration. Renders
+ * ONLY figures the trusted `complementDistribution` derives against the same
+ * distribution/total the plain answer used (never 100 − displayed shares, never
+ * an LLM figure). Every number the text cites is carried by the fact manifest
+ * (facts.ts buildFactManifest spendingDistribution complement branch), so the
+ * text is internally groundable and the narrator may reword it without inventing
+ * a figure.
+ *
+ * Naming rule: members are named only when they all fit (≤ 5 nameable); a large
+ * complement is reported as a total + share only, so grounding never needs an
+ * arbitrary count digit or an unbounded fact list.
+ */
+function complementNarration(
+  complement: NonNullable<AssistantQuery["complement"]>,
+  breakdown: CategoryShare[],
+  total: number,
+  periodLabel: string,
+  money: (v: number) => string,
+): { text: string; data: Record<string, unknown> } {
+  const computed = complementDistribution(
+    breakdown,
+    total,
+    complement.kind === "excluding" ? [complement.category] : [],
+  );
+  const members = computed.members;
+  const excluded =
+    complement.kind === "excluding" ? cap(complement.category) : null;
+
+  let text: string;
+  if (members.length === 0) {
+    text =
+      excluded === null
+        ? `There were no remaining categories — your ${periodLabel} spending was fully covered by the categories listed.`
+        : `There were no remaining categories apart from ${excluded} in ${periodLabel}.`;
+  } else if (members.length <= DISTRIBUTION_DISPLAY_LIMIT) {
+    const named = joinList(members.map((c) => cap(c.categoryName)));
+    const totalBit = `${money(computed.totalAmount)} in total, ${formatPercent(computed.totalShare)} of your ${periodLabel} spending`;
+    text =
+      excluded === null
+        ? `The remaining categories were ${named} — ${totalBit}.`
+        : `Apart from ${excluded}, the remaining categories were ${named} — ${totalBit}.`;
+  } else {
+    const totalBit = `${money(computed.totalAmount)} — ${formatPercent(computed.totalShare)} of your ${periodLabel} spending`;
+    text =
+      excluded === null
+        ? `The remaining categories totaled ${totalBit}.`
+        : `Apart from ${excluded}, your remaining spending totaled ${totalBit}.`;
+  }
+
+  return {
+    text,
+    data: {
+      complement: {
+        kind: complement.kind,
+        ...(excluded === null ? {} : { excludedCategory: excluded }),
+        categories: members.map((c) => ({
+          categoryName: c.categoryName,
+          amount: c.amount,
+          shareOfExpenses: c.share,
+        })),
+        totalAmount: computed.totalAmount,
+        totalShare: computed.totalShare,
+        count: computed.count,
+      },
+      total,
+      period: periodLabel,
+    },
+  };
 }

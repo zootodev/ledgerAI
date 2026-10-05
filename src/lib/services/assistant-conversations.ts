@@ -15,6 +15,7 @@ import { requireAuthContext } from "@/lib/services/auth-context";
 import { zErrorMessage } from "@/lib/validation/index";
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { ConversationMessage, ConversationSummary } from "@/lib/types/assistant";
+import type { AskV2TurnAnchor } from "@/lib/ask-v2/anchor";
 
 /** Raised when a conversation id fails a business-scoped lookup. */
 export class ConversationNotFoundError extends Error {
@@ -132,11 +133,25 @@ export async function findLastUserQuestionForContext(
  * says "the 187600" again. The caller has already derived the business id from
  * requireAuthContext; every read is scoped to that business.
  */
+/**
+ * One owned prior exchange: the user's question text, the assistant's final
+ * displayed answer, and the raw assistant-message metadata (a Phase 9E ask-v2
+ * verified turn anchor when one was written). `metadata` is unvalidated JSON —
+ * callers must validate it before use (ask-v2 does, via parseAskV2Anchor).
+ */
+export interface OwnedExchange {
+  content: string;
+  answer: string | null;
+  /** Raw assistant-message metadata; optional so legacy/unit mocks without it
+   *  remain valid (the DB path always populates it, null when absent). */
+  metadata?: unknown;
+}
+
 export async function findRecentOwnedExchanges(
   prisma: PrismaClient,
   businessId: string,
   conversationId: string,
-): Promise<{ content: string; answer: string | null }[]> {
+): Promise<OwnedExchange[]> {
   const conversation = await prisma.assistantConversation.findFirst({
     where: { id: conversationId, businessId },
     select: { id: true },
@@ -147,19 +162,26 @@ export async function findRecentOwnedExchanges(
     where: { conversationId: conversation.id },
     orderBy: { createdAt: "desc" },
     take: 4,
-    select: { role: true, content: true },
+    select: { role: true, content: true, metadata: true },
   });
 
   // Desc order pairs each user message with the assistant message that
   // answered it (the assistant turn created just before the user's next turn).
-  const exchanges: { content: string; answer: string | null }[] = [];
+  const exchanges: OwnedExchange[] = [];
   let pendingAnswer: string | null = null;
+  let pendingMetadata: unknown = null;
   for (const message of messages) {
     if (message.role === "assistant") {
       pendingAnswer = message.content;
+      pendingMetadata = message.metadata;
     } else if (message.role === "user") {
-      exchanges.push({ content: message.content, answer: pendingAnswer });
+      exchanges.push({
+        content: message.content,
+        answer: pendingAnswer,
+        metadata: pendingMetadata,
+      });
       pendingAnswer = null;
+      pendingMetadata = null;
     }
   }
   return exchanges;
@@ -212,6 +234,11 @@ export interface PersistExchangeResult {
  * Atomically persist one user -> assistant exchange. Creates the conversation
  * on first question (or continues when a valid, owned id is given). Touches
  * updatedAt so "most recent first" ordering reflects the latest turn.
+ *
+ * `anchor` (Phase 9E, optional) is the ask-v2 VERIFIED turn anchor derived
+ * server-side from trusted execution data; it is written on the assistant row
+ * in the SAME transaction. Omitted/null leaves metadata NULL (v1 /ask callers
+ * and non-answer turns are unaffected).
  */
 export async function persistAssistantExchange(
   prisma: PrismaClient,
@@ -220,6 +247,7 @@ export async function persistAssistantExchange(
   title: string,
   question: string,
   answerText: string,
+  anchor?: AskV2TurnAnchor | null,
 ): Promise<PersistExchangeResult> {
   return prisma.$transaction(async (tx) => {
     const conversation = conversationId
@@ -243,7 +271,12 @@ export async function persistAssistantExchange(
       select: { id: true },
     });
     const assistantMessage = await tx.assistantMessage.create({
-      data: { conversationId: existing.id, role: "assistant", content: answerText },
+      data: {
+        conversationId: existing.id,
+        role: "assistant",
+        content: answerText,
+        ...(anchor ? { metadata: anchor } : {}),
+      },
       select: { id: true },
     });
 

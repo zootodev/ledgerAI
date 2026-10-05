@@ -6,7 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Tabs } from "@/components/ui/tabs";
 
 export interface SettingsShellProps {
-  active: "accounts" | "categories" | "rules";
+  active: "profile" | "business" | "accounts" | "categories" | "rules";
   userName?: string;
   userEmail: string;
   businessName: string;
@@ -25,6 +25,8 @@ export function SettingsShell({
   const router = useRouter();
 
   const paths: Record<string, string> = {
+    profile: "/settings/profile",
+    business: "/settings/business",
     accounts: "/settings/accounts",
     categories: "/settings/categories",
     rules: "/settings/rules",
@@ -49,6 +51,8 @@ export function SettingsShell({
           value={active}
           onChange={(value: string) => router.push(paths[value] ?? "/settings/accounts")}
           items={[
+            { value: "profile", label: "Profile" },
+            { value: "business", label: "Business" },
             { value: "accounts", label: "Accounts" },
             { value: "categories", label: "Categories" },
             { value: "rules", label: "Rules" },

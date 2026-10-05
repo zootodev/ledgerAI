@@ -51,6 +51,18 @@ export function ImportRowsTable({
     setPage(1);
   }
 
+  // DataTable renders exactly the rows it is given (server or caller slices);
+  // the preview pages client-side, so slice the current page here. safePage is
+  // a defensive clamp: DataTable's footer buttons never navigate past the last
+  // page, but if a stale page ever outlived the preview shrinking (rows
+  // replaced with a shorter set before the reset-to-page-1 render lands), the
+  // slice must not silently fall off the end.
+  const safePage = Math.min(page, Math.max(1, Math.ceil(rows.length / PAGE_SIZE)));
+  const pageRows = React.useMemo(
+    () => rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [rows, safePage],
+  );
+
   const columns: Column<ImportPreviewRow>[] = [
     {
       key: "include",
@@ -244,10 +256,10 @@ export function ImportRowsTable({
   return (
     <DataTable
       columns={columns}
-      data={rows}
+      data={pageRows}
       rowKey={(row) => `row-${row.rowIndex}`}
       pagination={{
-        page,
+        page: safePage,
         pageSize: PAGE_SIZE,
         total: rows.length,
         onPageChange: setPage,

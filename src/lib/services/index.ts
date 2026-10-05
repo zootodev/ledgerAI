@@ -10,6 +10,9 @@ export {
   syncUserProfile,
   createInitialBusiness,
   ensureOnboarding,
+  requestPasswordReset,
+  updatePassword,
+  updateOwnProfile,
 } from "./auth";
 export type {
   SignUpInput,

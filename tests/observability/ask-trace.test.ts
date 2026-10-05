@@ -65,6 +65,14 @@ describe("redactionViolations", () => {
     expect(redactionViolations({ income: 1 })).toEqual(["income"]);
     expect(redactionViolations({ netProfit: 1_000 })).toEqual(["netProfit"]);
   });
+
+  it("flags transaction, category, and credential keys (Phase 18C boundary)", () => {
+    expect(redactionViolations({ transactionId: "tx-1" })).toEqual(["transactionId"]);
+    expect(redactionViolations({ transactions: [] })).toEqual(["transactions"]);
+    expect(redactionViolations({ category: "Rent" })).toEqual(["category"]);
+    expect(redactionViolations({ apiKey: "sk-123" })).toEqual(["apiKey"]);
+    expect(redactionViolations({ authorization: "Bearer x" })).toEqual(["authorization"]);
+  });
 });
 
 describe("emitAskTrace", () => {

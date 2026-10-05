@@ -33,6 +33,8 @@ export interface OpenAiCompatibleOptions {
   maxTokens?: number;
   /** Abort deadline for one attempt. */
   deadlineMs?: number;
+  /** Logical role of this client for redacted diagnostics only. */
+  operation?: string;
 }
 
 interface ChatCompletionResponse {
@@ -51,6 +53,7 @@ export class OpenAiCompatibleClient {
   private readonly fetchImpl: typeof fetch;
   private readonly maxTokens: number;
   private readonly deadlineMs: number;
+  private readonly operation: string;
 
   constructor(options: OpenAiCompatibleOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
@@ -63,6 +66,32 @@ export class OpenAiCompatibleClient {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.maxTokens = options.maxTokens ?? 600;
     this.deadlineMs = options.deadlineMs ?? 12_000;
+    this.operation = options.operation ?? "chat";
+  }
+
+  /**
+   * Redacted, ASK_DEBUG=1-only diagnostic line. Never logs the API key,
+   * Authorization header, request/response bodies, or prompts.
+   */
+  private debug(
+    category: "http" | "transport" | "malformed_json" | "timeout",
+    attempt: number,
+    startedAt: number,
+    extra: Record<string, string | number | null> = {},
+  ): void {
+    if (process.env.ASK_DEBUG !== "1") return;
+    console.error(
+      "[ask-provider] " +
+        JSON.stringify({
+          category,
+          provider: "openai-compatible",
+          operation: this.operation,
+          model: this.modelName,
+          attempt,
+          elapsedMs: Math.round(performance.now() - startedAt),
+          ...extra,
+        }),
+    );
   }
 
   /** True when we have a usable key (missing key => provider stays off). */
@@ -93,6 +122,7 @@ export class OpenAiCompatibleClient {
     };
 
     let attempt = 0;
+    const startedAt = performance.now();
     // One transport retry, always with the SAME body/purpose (spec §8).
     while (attempt < 2) {
       attempt += 1;
@@ -112,9 +142,17 @@ export class OpenAiCompatibleClient {
             await sleep(150);
             continue;
           }
+          this.debug("http", attempt, startedAt, {
+            status: response.status,
+            statusText: response.statusText,
+          });
           throw new Error(`openai-compatible: upstream ${response.status}`);
         }
         if (!response.ok) {
+          this.debug("http", attempt, startedAt, {
+            status: response.status,
+            statusText: response.statusText,
+          });
           throw new Error(`openai-compatible: upstream ${response.status}`);
         }
 
@@ -125,11 +163,27 @@ export class OpenAiCompatibleClient {
         }
         return JSON.parse(content) as unknown;
       } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") throw error;
+        const errorName = error instanceof Error ? error.name : "unknown";
+        if (errorName === "AbortError") {
+          this.debug("timeout", attempt, startedAt, { errorName }); // rethrown; typed upstream
+          throw error;
+        }
         if (isRetryableTransportError(error) && attempt < 2) {
           await sleep(150);
           continue;
         }
+        this.debug(
+          errorName === "SyntaxError" ? "malformed_json" : "transport",
+          attempt,
+          startedAt,
+          {
+            errorName,
+            errorMessage:
+              error instanceof Error
+                ? error.message.slice(0, 300)
+                : String(error).slice(0, 300),
+          },
+        );
         throw error;
       }
     }
@@ -176,7 +230,7 @@ export class OpenAiCompatibleInterpreter implements AskInterpreterProvider {
 
   constructor(name: string, options: Omit<OpenAiCompatibleOptions, "name">) {
     this.name = name;
-    this.client = new OpenAiCompatibleClient({ ...options, name });
+    this.client = new OpenAiCompatibleClient({ ...options, name, operation: "interpreter" });
   }
 
   // A key is what makes a provider "configured" (model presence checked at
@@ -211,7 +265,7 @@ export class OpenAiCompatibleNarrationPlanner implements NarrationPlannerProvide
 
   constructor(name: string, options: Omit<OpenAiCompatibleOptions, "name">) {
     this.name = name;
-    this.client = new OpenAiCompatibleClient({ ...options, name });
+    this.client = new OpenAiCompatibleClient({ ...options, name, operation: "narrator" });
   }
 
   get configured(): boolean {

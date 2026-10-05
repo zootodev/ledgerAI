@@ -13,6 +13,8 @@ export {
 export type { CategoryRuleLearnInput } from "./rules";
 export { businessUpdateSchema } from "./business";
 export type { BusinessUpdateInput } from "./business";
+export { profileUpdateSchema } from "./profile";
+export type { ProfileUpdateInput } from "./profile";
 export {
   importMappingSchema,
   importCommitInputSchema,

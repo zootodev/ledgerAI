@@ -66,6 +66,7 @@ function runtime(
       narrationEnabled: false,
       structuredStateWrite: false,
       shadowSampleRate,
+      askV2Enabled: false,
     },
     providers: {
       interpreter: interpreter as never,
