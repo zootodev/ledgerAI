@@ -22,12 +22,22 @@ vi.mock("@/lib/services/assistant-conversations", () => {
 });
 
 vi.mock("@/lib/services/auth-context", () => ({
+  requireAuthContext: vi.fn(),
   AuthorizationError: class AuthorizationError extends Error {
     constructor(message: string) {
       super(message);
       this.name = "AuthorizationError";
     }
   },
+}));
+
+const rateLimitMocks = vi.hoisted(() => ({
+  consumeConfiguredLimit: vi.fn(async () => ({ ok: true, remaining: 30, retryAfterSeconds: 0 })),
+}));
+
+vi.mock("@/lib/security/rate-limit", () => ({
+  ...rateLimitMocks,
+  RATE_LIMIT_EXCEEDED_MESSAGE: "Too many requests. Please slow down and try again shortly.",
 }));
 
 import {
@@ -47,9 +57,11 @@ import {
   deleteAllConversations,
   ConversationNotFoundError,
 } from "@/lib/services/assistant-conversations";
-import { AuthorizationError } from "@/lib/services/auth-context";
+import { requireAuthContext, AuthorizationError } from "@/lib/services/auth-context";
+import { consumeConfiguredLimit as consumeConfiguredLimitMock } from "@/lib/security/rate-limit";
 
 const mockAskAssistantQuestion = vi.mocked(askAssistantQuestion);
+const mockRequireAuthContext = vi.mocked(requireAuthContext);
 const mockListConversations = vi.mocked(listConversations);
 const mockGetConversation = vi.mocked(getConversationWithMessages);
 const mockRename = vi.mocked(renameConversation);
@@ -58,6 +70,17 @@ const mockDeleteAll = vi.mocked(deleteAllConversations);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRequireAuthContext.mockReset();
+  mockRequireAuthContext.mockResolvedValue({
+    user: { id: "u-1", email: "a@example.com" },
+    business: { id: "biz-1", name: "A Ltd", currency: "NGN" },
+    prisma: {} as never,
+  });
+  rateLimitMocks.consumeConfiguredLimit.mockResolvedValue({
+    ok: true,
+    remaining: 29,
+    retryAfterSeconds: 0,
+  });
   mockAskAssistantQuestion.mockReset();
   mockListConversations.mockReset();
   mockGetConversation.mockReset();
@@ -116,6 +139,20 @@ describe("askAssistant (server action)", () => {
     await expect(askAssistant("How much income?")).rejects.toBeInstanceOf(
       AuthorizationError,
     );
+  });
+
+  it("returns a rate-limit error instead of calling the assistant", async () => {
+    rateLimitMocks.consumeConfiguredLimit.mockResolvedValue({
+      ok: false,
+      remaining: 0,
+      retryAfterSeconds: 42,
+    });
+
+    const result = await askAssistant("How much income?");
+
+    expect(result).toEqual({ kind: "error", text: "Too many requests. Please slow down and try again shortly." });
+    expect(mockAskAssistantQuestion).not.toHaveBeenCalled();
+    expect(consumeConfiguredLimitMock).toHaveBeenCalledWith("ask:chat", "biz-1");
   });
 });
 

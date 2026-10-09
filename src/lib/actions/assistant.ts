@@ -18,7 +18,11 @@ import {
   deleteAllConversations,
   ConversationNotFoundError,
 } from "@/lib/services/assistant-conversations";
-import { AuthorizationError } from "@/lib/services/auth-context";
+import { requireAuthContext, AuthorizationError } from "@/lib/services/auth-context";
+import {
+  consumeConfiguredLimit,
+  RATE_LIMIT_EXCEEDED_MESSAGE,
+} from "@/lib/security/rate-limit";
 import type {
   ConversationMessage,
   ConversationSummary,
@@ -33,6 +37,11 @@ export async function askAssistant(
   conversationId?: string | null,
 ): Promise<AskAssistantReturn> {
   try {
+    const ctx = await requireAuthContext();
+    const decision = await consumeConfiguredLimit("ask:chat", ctx.business.id);
+    if (!decision.ok) {
+      return { kind: "error", text: RATE_LIMIT_EXCEEDED_MESSAGE };
+    }
     return await askAssistantQuestion(question, conversationId ?? null);
   } catch (error) {
     if (error instanceof AuthorizationError) throw error;

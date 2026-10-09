@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
+import { resolvePostAuthRedirect } from "@/lib/auth/redirect";
 import { getSupabaseServer } from "@/lib/auth/supabase";
 import { ensureOnboarding } from "@/lib/services/auth";
 
@@ -8,21 +9,13 @@ import { ensureOnboarding } from "@/lib/services/auth";
  * confirmation link (PKCE flow). Exchanges the `?code` for a session cookie,
  * provisions the user's profile + first business, and continues to the app.
  */
-function isInternalPath(value: string): boolean {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return false;
-  // Reject anything with control chars / whitespace / delimiters a malicious
-  // `next` could smuggle into the redirect target.
-  if (/[\u0000-\u0020\u007f]/.test(value)) return false;
-  return true;
-}
-
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const rawNext = url.searchParams.get("next");
-  const next = rawNext && isInternalPath(rawNext) ? rawNext : "/overview";
 
   const baseUrl = await getAppBaseUrl();
+  const next = resolvePostAuthRedirect(rawNext, baseUrl);
   const loginUrl = `${baseUrl}/login`;
 
   if (!code) {
@@ -41,7 +34,9 @@ export async function GET(request: Request) {
 
   // Only reached with a freshly exchanged, genuinely authenticated session.
   // Idempotent: profile upsert + first-business lookup-or-create.
-  await ensureOnboarding().catch(() => null);
+  // Never bounce to /onboarding here: `next` may point at the password-reset
+  // page, and a recovery session must land there.
+  await ensureOnboarding({ bounce: false }).catch(() => null);
 
   return NextResponse.redirect(new URL(next, baseUrl).toString());
 }

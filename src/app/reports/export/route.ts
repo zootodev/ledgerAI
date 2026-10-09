@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { requireAuthContext } from "@/lib/services/auth-context";
+import {
+  consumeConfiguredLimit,
+  RATE_LIMIT_EXCEEDED_MESSAGE,
+} from "@/lib/security/rate-limit";
 import { analyticsQuerySchema, zErrorMessage } from "@/lib/validation/index";
 import {
   REPORT_TYPES,
@@ -42,6 +46,17 @@ export async function GET(request: Request) {
   if (!ctx) {
     const baseUrl = await getAppBaseUrl();
     return NextResponse.redirect(new URL("/login", baseUrl).toString());
+  }
+
+  const limit = await consumeConfiguredLimit("export:csv", ctx.business.id);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: RATE_LIMIT_EXCEEDED_MESSAGE },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limit.retryAfterSeconds) },
+      },
+    );
   }
 
   const data = await getReportData(parsed.data);

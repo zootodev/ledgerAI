@@ -49,6 +49,10 @@ import {
 import { isAskV2Enabled } from "@/lib/ask-v2/config";
 import { requireAuthContext } from "@/lib/services/auth-context";
 import {
+  consumeConfiguredLimit,
+  RATE_LIMIT_EXCEEDED_MESSAGE,
+} from "@/lib/security/rate-limit";
+import {
   persistAssistantExchange,
   findRecentOwnedExchanges,
   ConversationNotFoundError,
@@ -271,6 +275,17 @@ export async function askV2Ask(input: AskV2AskInput): Promise<AskV2Response> {
   };
 
   const auth = await requireAuthContext();
+
+  const rateLimit = await consumeConfiguredLimit("ask:v2:chat", auth.business.id);
+  if (!rateLimit.ok) {
+    emitV2Trace({ resultKind: "unsupported" });
+    return {
+      disposition: "unsupported",
+      reason: "not_financial",
+      text: RATE_LIMIT_EXCEEDED_MESSAGE,
+      conversationId: null,
+    };
+  }
 
   const parsed = askV2AskInputSchema.safeParse(input);
   if (!parsed.success) {

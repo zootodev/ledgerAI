@@ -22,6 +22,15 @@ vi.mock("@/lib/services/auth-context", () => {
   return { requireAuthContext: vi.fn(), AuthorizationError };
 });
 
+const rateLimitMocks = vi.hoisted(() => ({
+  consumeConfiguredLimit: vi.fn(async () => ({ ok: true, remaining: 20, retryAfterSeconds: 0 })),
+}));
+
+vi.mock("@/lib/security/rate-limit", () => ({
+  ...rateLimitMocks,
+  RATE_LIMIT_EXCEEDED_MESSAGE: "Too many requests. Please slow down and try again shortly.",
+}));
+
 vi.mock("@/lib/services/assistant-conversations", () => {
   class ConversationNotFoundError extends Error {
     constructor() {
@@ -127,6 +136,11 @@ const EMPTY_METRICS = {
 beforeEach(() => {
   process.env.ASK_V2_ENABLED = "true";
   vi.clearAllMocks();
+  rateLimitMocks.consumeConfiguredLimit.mockResolvedValue({
+    ok: true,
+    remaining: 20,
+    retryAfterSeconds: 0,
+  });
   mockRequireAuthContext.mockReset();
   mockRequireAuthContext.mockResolvedValue(AUTH as never);
   mockPersist.mockReset();
@@ -738,6 +752,26 @@ describe("askV2Ask — B-2 gate (ASK_V2_ENABLED)", () => {
     expect(response.disposition).toBe("unsupported");
     expect(mockInterpret).not.toHaveBeenCalled();
     expect(mockExecute).not.toHaveBeenCalled();
+  });
+
+  it("throttles an over-limit account without touching the interpreter", async () => {
+    rateLimitMocks.consumeConfiguredLimit.mockResolvedValue({
+      ok: false,
+      remaining: 0,
+      retryAfterSeconds: 30,
+    });
+
+    const response = await askV2Ask({ message: "What did I spend?" });
+
+    expect(response.disposition).toBe("unsupported");
+    if (response.disposition === "unsupported") {
+      expect(response.reason).toBe("not_financial");
+      expect(response.text).toContain("Too many requests");
+    }
+    expect(rateLimitMocks.consumeConfiguredLimit).toHaveBeenCalledWith("ask:v2:chat", "biz-42");
+    expect(mockInterpret).not.toHaveBeenCalled();
+    expect(mockExecute).not.toHaveBeenCalled();
+    expect(mockPersist).not.toHaveBeenCalled();
   });
 });
 

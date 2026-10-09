@@ -242,3 +242,24 @@ model AssistantMessage {
   @@index([conversationId, createdAt])
   @@map("assistant_messages")
 }
+
+// ---------- Rate limiting (SG1-03) ----------
+
+// Shared, durable counters backing the application-layer rate limiter
+// (src/lib/security/rate-limit.ts). One row per (hashed scope+key, fixed
+// window). The `key` is a SHA-256 digest of the scope+subject pair, so raw
+// emails, IPs and business ids are never persisted here. Written only by the
+// elevated service role; no RLS policies and no grants exist for anon/
+// authenticated (new tables default to zero grants), and the table has no PII.
+model RateLimitBucket {
+  key         String // sha256("scope:subject")
+  windowStart BigInt @map("window_start") // ms epoch of the window boundary
+  count       Int    @default(0)
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@id([key, windowStart])
+  @@index([expiresAt])
+  @@map("rate_limit_buckets")
+}

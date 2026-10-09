@@ -14,6 +14,15 @@ vi.mock("@/lib/services/reports", async (importOriginal) => {
   return { ...actual, getReportData: vi.fn() };
 });
 
+const rateLimitMocks = vi.hoisted(() => ({
+  consumeConfiguredLimit: vi.fn(async () => ({ ok: true, remaining: 10, retryAfterSeconds: 0 })),
+}));
+
+vi.mock("@/lib/security/rate-limit", () => ({
+  ...rateLimitMocks,
+  RATE_LIMIT_EXCEEDED_MESSAGE: "Too many requests. Please slow down and try again shortly.",
+}));
+
 import { requireAuthContext } from "@/lib/services/auth-context";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { getReportData } from "@/lib/services/reports";
@@ -53,6 +62,11 @@ function csvResponse(request: Request): Promise<{
 
 beforeEach(() => {
   vi.resetAllMocks();
+  rateLimitMocks.consumeConfiguredLimit.mockResolvedValue({
+    ok: true,
+    remaining: 10,
+    retryAfterSeconds: 0,
+  });
   vi.mocked(getAppBaseUrl).mockResolvedValue("http://localhost:3000");
   vi.mocked(requireAuthContext).mockResolvedValue({
     user: { id: "auth-user-a", email: "a@example.com" },
@@ -133,6 +147,20 @@ describe("reports/export route", () => {
     expect(response.status).toBeGreaterThanOrEqual(300);
     expect(response.status).toBeLessThanOrEqual(308);
     expect(response.headers.get("location")).toBe("http://localhost:3000/login");
+    expect(getReportData).not.toHaveBeenCalled();
+  });
+
+  it("rejects with HTTP 429 and a Retry-After header when throttled", async () => {
+    rateLimitMocks.consumeConfiguredLimit.mockResolvedValue({
+      ok: false,
+      remaining: 0,
+      retryAfterSeconds: 17,
+    });
+
+    const response = await GET(exportRequest("type=summary"));
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("17");
     expect(getReportData).not.toHaveBeenCalled();
   });
 });

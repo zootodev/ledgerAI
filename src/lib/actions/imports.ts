@@ -8,6 +8,11 @@ import {
 } from "@/lib/services/imports";
 import { importCommitInputSchema } from "@/lib/validation/import";
 import { MAX_IMPORT_FILE_BYTES } from "@/lib/import/types";
+import {
+  consumeConfiguredLimit,
+  RATE_LIMIT_EXCEEDED_MESSAGE,
+} from "@/lib/security/rate-limit";
+import { requireAuthContext } from "@/lib/services/auth-context";
 
 export interface ImportActionState {
   ok?: boolean;
@@ -24,6 +29,9 @@ const IMPORT_PATHS = ["/transactions", "/income", "/expenses", "/overview", "/im
  */
 export async function getImportFingerprintsAction(): Promise<string[]> {
   try {
+    const ctx = await requireAuthContext();
+    const decision = await consumeConfiguredLimit("import:preview", ctx.business.id);
+    if (!decision.ok) return [];
     return await getExistingFingerprints();
   } catch {
     return [];
@@ -82,6 +90,12 @@ export async function commitImportAction(
     }
     if (rawFile.size === 0) {
       return { error: "The file is empty." };
+    }
+
+    const ctx = await requireAuthContext();
+    const decision = await consumeConfiguredLimit("import:commit", ctx.business.id);
+    if (!decision.ok) {
+      return { error: RATE_LIMIT_EXCEEDED_MESSAGE };
     }
 
     const parsedMapping = parseJsonObject(rawMapping);

@@ -22,16 +22,20 @@
  * sign-up flow (see src/lib/services/auth.ts).
  *
  * Requires env: DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL,
- *               SUPABASE_SERVICE_ROLE_KEY
+ *               SUPABASE_SERVICE_ROLE_KEY, SEED_ALLOW, SEED_DEMO_PASSWORD
  * ============================================================ */
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 import { getPrismaClient } from "../src/lib/db/client";
 import { ensureSystemCategories } from "../src/lib/services/categories";
 import { transactionFingerprint } from "../src/lib/finance/engine";
+import {
+  DEMO_EMAIL,
+  DEMO_PASSWORD_ENV,
+  demoPasswordFromEnv,
+  demoSeedAllowed,
+} from "../src/lib/security/demo-seed";
 
-const DEMO_EMAIL = "demo@zooto.local";
-const DEMO_PASSWORD = "Demo@Zooto!2026";
 const DEMO_NAME = "Zooto Fashion Store";
 const DEMO_BUSINESS_NAME = "Zooto Fashion Store";
 const DEMO_BUSINESS_TYPE = "retail";
@@ -131,6 +135,11 @@ const DEMO_RULES: { pattern: string; category: string }[] = [
 async function main() {
   const reset = process.argv.includes("--reset");
 
+  const gate = demoSeedAllowed(process.env);
+  if (!gate.allowed) {
+    throw new Error(gate.reason);
+  }
+
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error(
       "Demo seed requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (to create/confirm the demo auth user). See .env.example.",
@@ -155,9 +164,20 @@ async function main() {
   if (demoAuthUser) {
     demoUserId = demoAuthUser.id;
   } else {
+    // The password is never embedded in source: it is read from the
+    // environment at runtime and only ever used to create a fresh demo user in
+    // a development/test environment (gate enforced above).
+    const demoPassword = demoPasswordFromEnv(process.env);
+    if (!demoPassword) {
+      throw new Error(
+        `Creating the demo auth user requires the ${DEMO_PASSWORD_ENV} env var ` +
+          "(development-only value; see .env.example). The demo user already exists " +
+          "for databases where it was seeded previously, so refresh runs do not need it.",
+      );
+    }
     const { data: created, error: createError } = await admin.auth.admin.createUser({
       email: DEMO_EMAIL,
-      password: DEMO_PASSWORD,
+      password: demoPassword,
       email_confirm: true,
       user_metadata: { name: DEMO_NAME },
     });
@@ -296,7 +316,9 @@ async function main() {
   console.log("--------------------------------------------------");
   console.log(`Demo business : ${DEMO_BUSINESS_NAME}`);
   console.log(`Sign-in email  : ${DEMO_EMAIL}`);
-  console.log(`Sign-in pass   : ${DEMO_PASSWORD}`);
+  console.log(
+    `Sign-in pass   : set via ${DEMO_PASSWORD_ENV} (development only; never printed)`,
+  );
   console.log(`Transactions   : ${txCount} (${txCount === 0 ? "none" : "present"})`);
   console.log(`Reset          : run "npm run db:seed -- --reset" to refresh`);
   console.log("--------------------------------------------------");

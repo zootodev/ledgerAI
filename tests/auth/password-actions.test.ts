@@ -12,6 +12,16 @@ vi.mock("@/lib/services/auth", () => ({
   updatePassword: vi.fn(),
 }));
 
+const rateLimitMocks = vi.hoisted(() => ({
+  consumeConfiguredLimit: vi.fn(async () => ({ ok: true, remaining: 5, retryAfterSeconds: 0 })),
+  getRequestClientIp: vi.fn(async () => "203.0.113.7"),
+}));
+
+vi.mock("@/lib/security/rate-limit", () => ({
+  ...rateLimitMocks,
+  RATE_LIMIT_EXCEEDED_MESSAGE: "Too many requests. Please slow down and try again shortly.",
+}));
+
 import {
   requestPasswordReset as requestPasswordResetService,
   updatePassword as updatePasswordService,
@@ -56,20 +66,56 @@ describe("forgotPasswordAction", () => {
     expect(mockRequestPasswordReset).toHaveBeenCalledWith("a@example.com");
   });
 
-  it("maps a Supabase error onto the form", async () => {
-    mockRequestPasswordReset.mockResolvedValue({ ok: false, error: "Rate limit exceeded" });
+  it("stays neutral when the provider reports a failure (no enumeration)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockRequestPasswordReset.mockResolvedValue({ ok: false, error: "Email not found" });
 
     const result = await forgotPasswordAction(prev, formData());
 
-    expect(result).toEqual({ error: "Rate limit exceeded" });
+    expect(result.error).toBeUndefined();
+    expect(result.success).toContain("If an account exists");
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
-  it("turns an unexpected failure into a user-safe message", async () => {
+  it("stays neutral when the request throws unexpectedly", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     mockRequestPasswordReset.mockRejectedValue(new Error("boom"));
 
     const result = await forgotPasswordAction(prev, formData());
 
-    expect(result).toEqual({ error: "boom" });
+    expect(result.error).toBeUndefined();
+    expect(result.success).toContain("If an account exists");
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("shows the identical neutral message for known and unknown accounts", async () => {
+    mockRequestPasswordReset.mockResolvedValueOnce({ ok: true });
+    const known = await forgotPasswordAction(prev, formData({ email: "known@example.com" }));
+
+    mockRequestPasswordReset.mockResolvedValueOnce({
+      ok: false,
+      error: "Email not found",
+    });
+    const unknown = await forgotPasswordAction(prev, formData({ email: "unknown@example.com" }));
+
+    expect(known).not.toHaveProperty("error");
+    expect(unknown).not.toHaveProperty("error");
+    expect(known.success).toBe(unknown.success);
+  });
+
+  it("blocks the request before touching Supabase when throttled", async () => {
+    rateLimitMocks.consumeConfiguredLimit.mockResolvedValue({
+      ok: false,
+      remaining: 0,
+      retryAfterSeconds: 47,
+    });
+
+    const result = await forgotPasswordAction(prev, formData());
+
+    expect(result.error).toContain("Too many requests");
+    expect(mockRequestPasswordReset).not.toHaveBeenCalled();
   });
 });
 

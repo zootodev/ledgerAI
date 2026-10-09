@@ -10,6 +10,16 @@ vi.mock("@/lib/services/auth", () => ({
   signOut: vi.fn(),
 }));
 
+const rateLimitMocks = vi.hoisted(() => ({
+  consumeConfiguredLimit: vi.fn(async () => ({ ok: true, remaining: 5, retryAfterSeconds: 0 })),
+  getRequestClientIp: vi.fn(async () => "203.0.113.7"),
+}));
+
+vi.mock("@/lib/security/rate-limit", () => ({
+  ...rateLimitMocks,
+  RATE_LIMIT_EXCEEDED_MESSAGE: "Too many requests. Please slow down and try again shortly.",
+}));
+
 import { redirect } from "next/navigation";
 import { signUp as signUpService } from "@/lib/services/auth";
 import { signupAction, type AuthFormState } from "@/lib/auth/actions";
@@ -92,5 +102,18 @@ describe("signupAction", () => {
     const result = await signupAction(prev, formData());
 
     expect(result).toEqual({ error: "boom" });
+  });
+
+  it("blocks signup when the shared rate limit is exceeded", async () => {
+    rateLimitMocks.consumeConfiguredLimit.mockResolvedValue({
+      ok: false,
+      remaining: 0,
+      retryAfterSeconds: 37,
+    });
+
+    const result = await signupAction(prev, formData());
+
+    expect(result.error).toContain("Too many requests");
+    expect(mockSignUp).not.toHaveBeenCalled();
   });
 });

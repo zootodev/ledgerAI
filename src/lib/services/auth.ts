@@ -2,6 +2,7 @@ import { getSupabaseServer } from "@/lib/auth/supabase";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { getCurrentUser } from "@/lib/auth/server";
 import { getPrismaClient } from "@/lib/db/client";
+import { redirect } from "next/navigation";
 import { profileUpdateSchema } from "@/lib/validation/index";
 import { zErrorMessage } from "@/lib/validation/index";
 
@@ -161,6 +162,21 @@ export async function updatePassword(
   const supabase = await assertServerClient();
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { ok: false, error: error.message };
+
+  // A password change means the old credential material is compromised —
+  // revoke the refresh token on every *other* device so a stale stolen
+  // session can't be refreshed. `scope: "others"` is verified against the
+  // pinned @supabase/auth-js (2.112.4): it revokes other sessions but never
+  // the current one (the SDK skips removing the local session for "others").
+  // Best-effort: the password update already succeeded, so a revocation
+  // failure is logged, not fatal.
+  const { error: revokeError } = await supabase.auth.signOut({ scope: "others" });
+  if (revokeError) {
+    console.error("[auth] update-password: revoking other sessions failed", {
+      error: revokeError.message,
+    });
+  }
+
   return { ok: true };
 }
 
@@ -247,18 +263,48 @@ export async function createInitialBusiness(input: {
   return business.id;
 }
 
+export interface EnsureOnboardingOptions {
+  /**
+   * Redirect to /onboarding when the business profile has no `type` yet —
+   * the marker for an auto-provisioned, not-yet-set-up business. Defaults to
+   * true so every app page gates on it. Pass false on the auth callback
+   * (a `next=/reset-password` recovery must reach the reset page) and on the
+   * onboarding page itself.
+   */
+  bounce?: boolean;
+}
+
 /**
  * Ensure the current user has a `public.users` profile row and at least one
  * business to scope the dashboard to. Called on first sign-in so tenant
  * isolation (which key on `users.id` and `business.user_id`) always holds.
  * Safe to call repeatedly; returns the session user or null when signed out.
+ * When `bounce` is on (the default) an unfinished profile is redirected to
+ * /onboarding — Next.js `redirect` throws, so callers relying on the return
+ * value after an unfinished profile never continue past this point.
  */
-export async function ensureOnboarding(): Promise<{ id: string; email: string } | null> {
+export async function ensureOnboarding(
+  options: EnsureOnboardingOptions = {},
+): Promise<{ id: string; email: string } | null> {
+  const { bounce = true } = options;
   const user = await getCurrentUser();
   if (!user) return null;
 
   await syncUserProfile(user.id, user.email, user.name);
   const businessName = user.name?.split(/\s+/).filter(Boolean)[0] || "My business";
   await createInitialBusiness({ userId: user.id, name: businessName });
+
+  if (bounce) {
+    const prisma = getPrismaClient();
+    const business = prisma
+      ? await prisma.business.findFirst({
+          where: { userId: user.id },
+          orderBy: { createdAt: "asc" },
+          select: { type: true },
+        })
+      : null;
+    if (business && business.type === null) redirect("/onboarding");
+  }
+
   return { id: user.id, email: user.email };
 }

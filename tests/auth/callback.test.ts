@@ -24,6 +24,13 @@ function callbackRequest(url: string) {
   return new Request(url);
 }
 
+/** Build a callback URL with `next` set to the exact decoded value the validator sees. */
+function callbackWithNext(nextValue: string): string {
+  const url = new URL("http://172.20.10.2:3000/auth/callback?code=abc");
+  url.searchParams.set("next", nextValue);
+  return url.toString();
+}
+
 function redirectLocation(response: Response): string {
   return response.headers.get("location") ?? "";
 }
@@ -57,6 +64,9 @@ describe("auth/callback route", () => {
 
     expect(exchangeMock).toHaveBeenCalledWith("sUpErSecRet");
     expect(ensureOnboarding).toHaveBeenCalledTimes(1);
+    // The callback must never bounce to /onboarding — `next` may point at
+    // /reset-password and the recovery session has to land there.
+    expect(ensureOnboarding).toHaveBeenCalledWith({ bounce: false });
     expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/overview");
   });
 
@@ -76,6 +86,51 @@ describe("auth/callback route", () => {
     );
 
     expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/overview");
+  });
+
+  it.each([
+    ["protocol-relative //", "//evil.example"],
+    ["pre-encoded protocol-relative (// decodes to //)", "%2F%2Fevil.example"],
+    ["backslash-smuggled host /\\", "/\\evil.example"],
+    ["double backslash \\\\", "\\\\evil.example"],
+    ["absolute http", "http://evil.example"],
+    ["absolute https", "https://evil.example"],
+    ["scheme in path", "javascript:alert(1)"],
+    ["control NUL in path", "/overview\u0000evil.example"],
+    ["control char in query", "/settings?tab=\u0000"],
+    ["whitespace in path", "/overview next"],
+    ["not a path", "overview"],
+  ])(
+    "forces the default internal target for a malicious next %s",
+    async (_label, decodedValue) => {
+      const response = await GET(new Request(callbackWithNext(decodedValue)));
+
+      const location = redirectLocation(response);
+      expect(location.startsWith("http://172.20.10.2:3000/")).toBe(true);
+      expect(location.endsWith("/overview")).toBe(true);
+    },
+  );
+
+  it("keeps legitimate internal redirects intact", async () => {
+    const expected: Record<string, string> = {
+      "/dashboard": "http://172.20.10.2:3000/dashboard",
+      "/transactions": "http://172.20.10.2:3000/transactions",
+      "/settings": "http://172.20.10.2:3000/settings",
+      "/ask": "http://172.20.10.2:3000/ask",
+      "/ask-v2": "http://172.20.10.2:3000/ask-v2",
+      "/overview": "http://172.20.10.2:3000/overview",
+      "/reset-password": "http://172.20.10.2:3000/reset-password",
+      "/transactions?page=2&tab=income": "http://172.20.10.2:3000/transactions?page=2&tab=income",
+    };
+
+    for (const [path, expectedLocation] of Object.entries(expected)) {
+      const response = await GET(
+        callbackRequest(
+          `http://172.20.10.2:3000/auth/callback?code=abc&next=${encodeURIComponent(path)}`,
+        ),
+      );
+      expect(redirectLocation(response)).toBe(expectedLocation);
+    }
   });
 
   it("redirects to sign-in and skips onboarding when the exchange fails", async () => {

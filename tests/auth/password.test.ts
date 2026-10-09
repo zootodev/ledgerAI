@@ -22,17 +22,20 @@ import { requestPasswordReset, updatePassword } from "@/lib/services/auth";
 
 const resetPasswordForEmailMock = vi.fn();
 const updateUserMock = vi.fn();
+const signOutMock = vi.fn();
 
 const supabaseMock = {
   auth: {
     resetPasswordForEmail: resetPasswordForEmailMock,
     updateUser: updateUserMock,
+    signOut: signOutMock,
   },
 };
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getSupabaseServer).mockResolvedValue(supabaseMock as never);
+  signOutMock.mockResolvedValue({ error: null });
   vi.mocked(getCurrentUser).mockResolvedValue({
     id: "auth-user-a",
     email: "a@example.com",
@@ -82,6 +85,28 @@ describe("updatePassword", () => {
     expect(updateUserMock).toHaveBeenCalledWith({ password: "brand-new-password" });
   });
 
+  it("revokes other sessions after a password update but keeps the current one", async () => {
+    updateUserMock.mockResolvedValue({ data: { user: {} }, error: null });
+
+    const result = await updatePassword("brand-new-password");
+
+    expect(result).toEqual({ ok: true });
+    expect(signOutMock).toHaveBeenCalledWith({ scope: "others" });
+  });
+
+  it("does not fail the password update when revoking other sessions fails", async () => {
+    updateUserMock.mockResolvedValue({ data: { user: {} }, error: null });
+    signOutMock.mockResolvedValue({ error: { message: "network down" } });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await updatePassword("brand-new-password");
+
+    expect(result).toEqual({ ok: true });
+    expect(signOutMock).toHaveBeenCalledWith({ scope: "others" });
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it("rejects with a reset-again message when there is no recovery session", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue(null);
 
@@ -90,6 +115,7 @@ describe("updatePassword", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain("expired");
     expect(updateUserMock).not.toHaveBeenCalled();
+    expect(signOutMock).not.toHaveBeenCalled();
   });
 
   it("surfaces the Supabase error for an invalid update", async () => {
@@ -104,5 +130,6 @@ describe("updatePassword", () => {
       ok: false,
       error: "Password should be at least 8 characters.",
     });
+    expect(signOutMock).not.toHaveBeenCalled();
   });
 });
