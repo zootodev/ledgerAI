@@ -29,7 +29,13 @@ export async function getSupabaseServer() {
       setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
         try {
           cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options),
+            cookieStore.set(name, value, {
+              ...options,
+              httpOnly: true,
+              sameSite: "lax",
+              path: "/",
+              secure: process.env.NODE_ENV === "production",
+            }),
           );
         } catch {
           // Called from a Server Component; safe to ignore when middleware handles

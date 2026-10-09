@@ -54,6 +54,24 @@ function generateCspNonce(): string {
 }
 
 /**
+ * Force the strongest safe attributes on every Supabase session cookie.
+ * @supabase/ssr defaults to `httpOnly: false` and no `Secure` flag; the auth
+ * token and PKCE code-verifier cookies are only ever read server-side (there
+ * is no browser Supabase client), so httpOnly is safe and keeps the JWT out
+ * of script. `Secure` is on in production — the middleware only ever runs
+ * behind HTTPS there — but off in dev so localhost HTTP still works.
+ */
+function hardenedCookieOptions(options: CookieOptions): CookieOptions {
+  return {
+    ...options,
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+  };
+}
+
+/**
  * Attach the SG1-04 response headers: a fresh CSP (with a nonce Next picks up
  * for its inline bootstrap scripts via the `x-nonce` header) in production,
  * plus sticky clickjacking/mime/referrer protection. Redirect responses get
@@ -92,7 +110,7 @@ export async function proxy(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options),
+          response.cookies.set(name, value, hardenedCookieOptions(options)),
         );
       },
     },

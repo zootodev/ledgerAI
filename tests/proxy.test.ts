@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import type { CookieOptions } from "@supabase/ssr";
 
 const mocks = vi.hoisted(() => ({
   next: vi.fn(),
@@ -6,6 +7,14 @@ const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   createServerClient: vi.fn(),
 }));
+
+type CookiePair = {
+  name: string;
+  value: string;
+  options: CookieOptions;
+};
+let capturedSetAll: ((pairs: CookiePair[]) => void) | undefined;
+let lastResponse: { headers: { set: ReturnType<typeof vi.fn> }; cookies: { set: ReturnType<typeof vi.fn> } } | undefined;
 
 vi.mock("next/server", () => ({
   NextResponse: {
@@ -25,7 +34,11 @@ function mockHeaders() {
 }
 
 function mockResponse() {
-  return { headers: mockHeaders() };
+  lastResponse = {
+    headers: mockHeaders(),
+    cookies: { set: vi.fn() },
+  };
+  return lastResponse;
 }
 
 function nextUrlFor(pathname: string) {
@@ -56,9 +69,16 @@ beforeEach(() => {
     headers: mockHeaders(),
   }));
   mocks.getUser.mockResolvedValue({ data: { user: null } });
-  mocks.createServerClient.mockImplementation(() => ({
-    auth: { getUser: mocks.getUser },
-  }));
+  mocks.createServerClient.mockImplementation(
+    (
+      _url: string,
+      _key: string,
+      options: { cookies?: { setAll?: (pairs: CookiePair[]) => void } },
+    ) => {
+      capturedSetAll = options?.cookies?.setAll;
+      return { auth: { getUser: mocks.getUser } };
+    },
+  );
 });
 
 afterEach(() => {
@@ -150,5 +170,51 @@ describe("proxy() route gating", () => {
 
     expect(mocks.redirect).not.toHaveBeenCalled();
     expect(mocks.next).toHaveBeenCalled();
+  });
+});
+
+describe("proxy() session cookie hardening", () => {
+  const env = process.env as { NODE_ENV?: string };
+
+  it("marks Supabase auth cookies httpOnly/SameSite=Lax/Path=/ and Secure in production", async () => {
+    const savedNodeEnv = env.NODE_ENV;
+    env.NODE_ENV = "production";
+    try {
+      await proxy(requestFor("/overview"));
+
+      expect(capturedSetAll).toBeDefined();
+      capturedSetAll?.([{ name: "sb-token", value: "jwt", options: { path: "/" } }]);
+
+      expect(lastResponse?.cookies.set).toHaveBeenCalledWith(
+        "sb-token",
+        "jwt",
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: "lax",
+          path: "/",
+          secure: true,
+        }),
+      );
+    } finally {
+      env.NODE_ENV = savedNodeEnv;
+    }
+  });
+
+  it("keeps Secure off in development so localhost HTTP still works", async () => {
+    const savedNodeEnv = env.NODE_ENV;
+    env.NODE_ENV = "development";
+    try {
+      await proxy(requestFor("/overview"));
+
+      capturedSetAll?.([{ name: "sb-token", value: "jwt", options: { path: "/" } }]);
+
+      expect(lastResponse?.cookies.set).toHaveBeenCalledWith(
+        "sb-token",
+        "jwt",
+        expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/", secure: false }),
+      );
+    } finally {
+      env.NODE_ENV = savedNodeEnv;
+    }
   });
 });
