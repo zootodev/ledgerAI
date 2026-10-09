@@ -28,6 +28,8 @@ import {
   IMPORT_FIELDS,
   type ColumnMapping,
   type ParsedImportFile,
+  type ImportFileFormat,
+  type RawImportRow,
 } from "@/lib/import/types";
 import {
   parseCsv,
@@ -45,6 +47,7 @@ import type { ImportCategoryOption } from "@/lib/import/types";
 import {
   getImportFingerprintsAction,
   commitImportAction,
+  parsePdfImportAction,
 } from "@/lib/actions/imports";
 import { getCategoryRulesAction } from "@/lib/actions/rules";
 import type { CategoryRuleDto } from "@/types";
@@ -147,8 +150,8 @@ export function ImportWizard({
       setWorking(true);
       try {
         const ext = next.name.split(".").pop()?.toLowerCase() ?? "";
-        if (ext !== "csv" && ext !== "xlsx") {
-          setParseError("Unsupported file type. Upload a .csv or .xlsx statement.");
+        if (ext !== "csv" && ext !== "xlsx" && ext !== "pdf") {
+          setParseError("Unsupported file type. Upload a .csv, .xlsx or .pdf statement.");
           return;
         }
         if (next.size > MAX_IMPORT_FILE_BYTES) {
@@ -160,24 +163,42 @@ export function ImportWizard({
           return;
         }
 
-        const arrayBuffer = await next.arrayBuffer();
-        const raw =
-          ext === "csv"
-            ? parseCsv(new TextDecoder("utf-8").decode(arrayBuffer).replace(/^\uFEFF/, ""))
-            : parseXlsx(arrayBuffer);
-
-        if (raw.headers.length === 0 || raw.rows.length === 0) {
-          setParseError(
-            "No data rows found. The first row must be a header and there must be at least one data row.",
-          );
-          return;
+        let headers: string[];
+        let rows: RawImportRow[];
+        if (ext === "pdf") {
+          // pdf-parse is Node-only: the PDF is read by the server action,
+          // while CSV/XLSX stay on-device. Commit re-parses these same
+          // bytes server-side before anything is written.
+          const fd = new FormData();
+          fd.set("file", next);
+          const res = await parsePdfImportAction(fd);
+          if (!res.ok || !res.headers || !res.rows) {
+            setParseError(res.error ?? "This PDF could not be read.");
+            return;
+          }
+          headers = res.headers;
+          rows = res.rows;
+        } else {
+          const arrayBuffer = await next.arrayBuffer();
+          const raw =
+            ext === "csv"
+              ? parseCsv(new TextDecoder("utf-8").decode(arrayBuffer).replace(/^\uFEFF/, ""))
+              : parseXlsx(arrayBuffer);
+          if (raw.headers.length === 0 || raw.rows.length === 0) {
+            setParseError(
+              "No data rows found. The first row must be a header and there must be at least one data row.",
+            );
+            return;
+          }
+          headers = raw.headers;
+          rows = raw.rows;
         }
 
         const file: ParsedImportFile = {
           fileName: next.name,
-          fileType: ext as "csv" | "xlsx",
-          headers: raw.headers,
-          rows: raw.rows,
+          fileType: ext as ImportFileFormat,
+          headers,
+          rows,
         };
 
         const detected = detectColumns(file.headers);
@@ -315,7 +336,7 @@ export function ImportWizard({
               Import transactions
             </h1>
             <p className="mt-1 text-muted">
-              Bring in a CSV or Excel bank statement · {businessName}
+              Bring in a CSV, Excel or PDF bank statement · {businessName}
             </p>
           </div>
           {step > 1 && (
@@ -338,14 +359,14 @@ export function ImportWizard({
                 Choose a statement file
               </CardTitle>
               <CardDescription>
-                Supported: .csv and .xlsx (Excel / Google Sheets). Files up to 5 MB.
+                Supported: .csv, .xlsx (Excel / Google Sheets) and .pdf. Files up to 5 MB.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div
                 role="button"
                 tabIndex={0}
-                aria-label="Choose a CSV or XLSX file to import"
+                aria-label="Choose a CSV, XLSX or PDF file to import"
                 onClick={() => inputRef.current?.click()}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -376,7 +397,7 @@ export function ImportWizard({
                   ref={inputRef}
                   id="import-file"
                   type="file"
-                  accept=".csv,.xlsx"
+                  accept=".csv,.xlsx,.pdf"
                   className="sr-only"
                   onChange={(e) => {
                     const next = e.currentTarget.files?.[0];
@@ -388,8 +409,9 @@ export function ImportWizard({
 
               <p className="mt-3 flex items-start gap-1.5 text-xs text-muted">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                Nothing is sent to any AI service. Files stay on your device until you confirm
-                the import in the last step.
+                Nothing is sent to any AI service. CSV and Excel files are read on your device;
+                PDF statements are read securely on our server to build this preview, and your
+                choices only apply when you confirm the import in the last step.
               </p>
 
               {parseError && (

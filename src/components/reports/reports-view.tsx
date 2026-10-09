@@ -13,6 +13,8 @@ export interface ReportsViewProps {
   rangeControl: React.ReactNode;
   /** Server-rendered report sections (Suspense-wrapped). */
   sections: React.ReactNode;
+  /** Extra header actions (e.g. the print button). */
+  actions?: React.ReactNode;
   onSignOut?: () => void;
 }
 
@@ -24,6 +26,7 @@ export function ReportsView({
   currency,
   rangeControl,
   sections,
+  actions,
   onSignOut,
 }: ReportsViewProps) {
   return (
@@ -42,10 +45,13 @@ export function ReportsView({
             </h1>
             <p className="mt-1 text-muted">{businessName}</p>
           </div>
-          <Badge tone="brand">{currency}</Badge>
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            {actions}
+            <Badge tone="brand">{currency}</Badge>
+          </div>
         </div>
 
-        {rangeControl}
+        <div className="print:hidden">{rangeControl}</div>
         {sections}
       </div>
     </AppShell>

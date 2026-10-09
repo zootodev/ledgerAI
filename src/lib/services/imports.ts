@@ -12,6 +12,7 @@ import {
   fallbackCategoryName,
 } from "@/lib/import/index";
 import { extractMerchantKey } from "@/lib/ai/merchant-key";
+import { parsePdf } from "@/lib/import/parse-pdf";
 import { categoryMatchesRowType } from "@/lib/ai/rules";
 import { persistLearnedRules } from "@/lib/services/rules";
 import type { CategoryRuleLearnInput } from "@/lib/validation/rules";
@@ -129,7 +130,7 @@ export async function commitImport(
     accountId = account?.id ?? null;
   }
 
-  const parses = parseFile(fileBytes, input.fileType);
+  const parses = await parseFile(fileBytes, input.fileType);
   const mappingIssues = validateMapping(input.mapping, parses.headers);
   if (mappingIssues.length > 0) {
     throw new Error(`Column mapping problem: ${mappingIssues[0].message}`);
@@ -477,10 +478,16 @@ function collectLearningCandidates(
   return candidates;
 }
 
-function parseFile(
+async function parseFile(
   bytes: Uint8Array,
-  fileType: "csv" | "xlsx",
-): { headers: string[]; rows: { sourceRow: number; values: Record<string, string> }[] } {
+  fileType: "csv" | "xlsx" | "pdf",
+): Promise<{ headers: string[]; rows: { sourceRow: number; values: Record<string, string> }[] }> {
+  if (fileType === "pdf") {
+    // Deterministic re-parse of the SAME bytes the preview saw; any parse
+    // failure aborts the commit with the actionable extraction error.
+    return await parsePdf(bytes);
+  }
+
   if (fileType === "csv") {
     const text = new TextDecoder("utf-8").decode(bytes).replace(/^\uFEFF/, "");
     const parsed = parseCsv(text);

@@ -8,6 +8,12 @@ import "./globals.css";
 // To self-host Geist later, drop the woff2 files in src/app/fonts and set
 // the variables from next/font/local.
 
+// SG1-04: the proxy emits a request-scoped nonce CSP. Next only stamps inline
+// scripts with the nonce when it renders the HTML per request, so every page
+// must be server-rendered — a prerendered (static) page ships inline flight
+// scripts without the nonce and they would be blocked by script-src.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: {
     default: "LedgerAI — Financial Intelligence for Small Businesses",

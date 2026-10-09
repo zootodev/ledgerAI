@@ -7,7 +7,7 @@
 // types into parser or domain code.
 // ============================================================
 
-export type ImportFileFormat = "csv" | "xlsx";
+export type ImportFileFormat = "csv" | "xlsx" | "pdf";
 
 /** Maximum accepted upload size (5 MB). */
 export const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;

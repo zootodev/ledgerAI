@@ -11,7 +11,14 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { TransactionModel } from "@/generated/prisma/models/Transaction";
 
 /** Supported CSV report types (one per section shown on the Reports page). */
-export const REPORT_TYPES = ["summary", "monthly", "category"] as const;
+export const REPORT_TYPES = [
+  "summary",
+  "monthly",
+  "category",
+  "income",
+  "expense",
+  "profit",
+] as const;
 export type ReportType = (typeof REPORT_TYPES)[number];
 
 /** Query params for reports (dates in YYYY-MM-DD, same range convention as analytics). */
@@ -36,18 +43,40 @@ export interface CategoryReport {
   rows: CategoryReportRow[];
 }
 
+/** Income statement or expense breakdown: one transaction type, its rows and total. */
+export interface TypeReport {
+  /** Total for this transaction type over the range (revenue or expenses). */
+  total: number;
+  /** Rows of that single type, each with its share of the type total. */
+  rows: CategoryReportRow[];
+}
+
+/** Profit (P&L) statement for the range: revenue, expenses and net result. */
+export interface ProfitReport {
+  revenue: number;
+  expenses: number;
+  netProfit: number;
+  /** null when revenue is zero. */
+  profitMargin: number | null;
+  period: AnalyticsSummary["period"];
+}
+
 export interface ReportData {
   summary: AnalyticsSummary;
   monthly: AnalyticsTrends;
   category: CategoryReport;
+  income: TypeReport;
+  expense: TypeReport;
+  profit: ProfitReport;
 }
 
 /**
- * All three report sections for the current user's business, driven by a
- * single validated date range. Numbers come from the analytics service (which
- * itself folds every bucket through the finance engine), so the reports can
- * never diverge from the Overview KPIs. Aggregation happens in the database;
- * transfers never appear in income/expenses.
+ * All report sections for the current user's business, driven by a single
+ * validated date range. Numbers come from the analytics service (which itself
+ * folds every bucket through the finance engine), so the reports can never
+ * diverge from the Overview KPIs. Aggregation happens in the database;
+ * transfers never appear in income/expenses. The income, expense and profit
+ * sections are derived from the same fetch — no extra queries, no drift.
  */
 export async function getReportData(query: ReportsQuery = {}): Promise<ReportData> {
   const parsed = analyticsQuerySchema.safeParse(query);
@@ -61,7 +90,23 @@ export async function getReportData(query: ReportsQuery = {}): Promise<ReportDat
     getCategoryReport(parsed.data),
   ]);
 
-  return { summary, monthly, category };
+  const income: TypeReport = {
+    total: category.income,
+    rows: category.rows.filter((r) => r.type === "income"),
+  };
+  const expense: TypeReport = {
+    total: category.expenses,
+    rows: category.rows.filter((r) => r.type === "expense"),
+  };
+  const profit: ProfitReport = {
+    revenue: summary.revenue,
+    expenses: summary.expenses,
+    netProfit: summary.netProfit,
+    profitMargin: summary.profitMargin,
+    period: summary.period,
+  };
+
+  return { summary, monthly, category, income, expense, profit };
 }
 
 /** One database groupBy row: a category subtotal per transaction type. */
@@ -218,5 +263,42 @@ export function buildCategoryCsv(report: CategoryReport): string {
   return toCsv(
     ["Type", "Category", "Amount", "% of type"],
     report.rows.map((r) => [r.type, r.name, num(r.amount), margin(r.share)]),
+  );
+}
+
+/** Serialize the income statement to CSV rows (revenue categories + total). */
+export function buildIncomeCsv(report: TypeReport): string {
+  return toCsv(
+    ["Category", "Amount", "% of revenue"],
+    [
+      ...report.rows.map((r) => [r.name, num(r.amount), margin(r.share)] as const),
+      ["Total revenue", num(report.total), ""] as const,
+    ],
+  );
+}
+
+/** Serialize the expense breakdown to CSV rows (expense categories + total). */
+export function buildExpenseCsv(report: TypeReport): string {
+  return toCsv(
+    ["Category", "Amount", "% of expenses"],
+    [
+      ...report.rows.map((r) => [r.name, num(r.amount), margin(r.share)] as const),
+      ["Total expenses", num(report.total), ""] as const,
+    ],
+  );
+}
+
+/** Serialize the profit (P&L) statement to CSV rows (one metric per line). */
+export function buildProfitCsv(report: ProfitReport): string {
+  return toCsv(
+    ["Metric", "Value"],
+    [
+      ["Report period from", report.period.from ?? ""],
+      ["Report period to", report.period.to ?? ""],
+      ["Revenue", num(report.revenue)],
+      ["Expenses", num(report.expenses)],
+      ["Net profit", num(report.netProfit)],
+      ["Profit margin (%)", margin(report.profitMargin)],
+    ],
   );
 }

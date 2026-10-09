@@ -12,8 +12,13 @@ vi.mock("@/generated/prisma/client", () => ({
   PrismaClient: class {},
 }));
 
+vi.mock("@/lib/import/parse-pdf", () => ({
+  parsePdf: vi.fn(),
+}));
+
 import { getCurrentUser } from "@/lib/auth/server";
 import { getPrismaClient } from "@/lib/db/client";
+import { parsePdf } from "@/lib/import/parse-pdf";
 import {
   listImportHistory,
   getExistingFingerprints,
@@ -1059,5 +1064,87 @@ describe("commitImport", () => {
       unknown
     >;
     expect(created).toMatchObject({ categoryId: SYS_OTHER_INCOME, aiCategory: "Other Income" });
+  });
+
+  it("re-parses PDF bytes through parsePdf and commits with fileType pdf", async () => {
+    vi.mocked(parsePdf).mockResolvedValue({
+      headers: ["Date", "Description", "Debit", "Credit"],
+      rows: [
+        {
+          sourceRow: 4,
+          values: { Date: "2026-01-05", Description: "POS SHOP", Debit: "1,250.00", Credit: "" },
+        },
+        {
+          sourceRow: 5,
+          values: { Date: "2026-01-06", Description: "Customer payment", Debit: "", Credit: "25,000.00" },
+        },
+      ],
+    });
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([
+      makeCategoryRow({ id: SYS_OTHER, name: "Other" }),
+      makeCategoryRow({ id: SYS_OTHER_INCOME, name: "Other Income", type: "income" }),
+    ]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 2 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-pdf" });
+
+    const result = await commitImport(
+      new Uint8Array([37, 80, 68, 70]),
+      commitInput({
+        fileName: "statement.pdf",
+        fileType: "pdf",
+        mapping: { date: "Date", description: "Description", debit: "Debit", credit: "Credit" },
+        selections: [
+          { rowIndex: 0, include: true, categoryId: null },
+          { rowIndex: 1, include: true, categoryId: null },
+        ],
+      }),
+    );
+
+    expect(parsePdf).toHaveBeenCalledTimes(1);
+    expect(result.total).toBe(2);
+    expect(result.imported).toBe(2);
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data as Array<
+      Record<string, unknown>
+    >;
+    expect(created).toHaveLength(2);
+    expect(created[0]).toMatchObject({
+      type: "expense",
+      amount: "1250.00",
+      source: "pdf",
+    });
+    expect(created[1]).toMatchObject({
+      type: "income",
+      amount: "25000.00",
+      source: "pdf",
+    });
+    const importData = mockPrisma.import.create.mock.calls[0][0].data as Record<
+      string,
+      unknown
+    >;
+    expect(importData.fileType).toBe("pdf");
+    expect(importData.filename).toBe("statement.pdf");
+  });
+
+  it("aborts the PDF commit with the actionable parser error and writes nothing", async () => {
+    vi.mocked(parsePdf).mockRejectedValue(
+      new Error("We couldn't find any transactions in this PDF."),
+    );
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+
+    await expect(
+      commitImport(
+        new Uint8Array([37, 80]),
+        commitInput({
+          fileName: "statement.pdf",
+          fileType: "pdf",
+          mapping: { date: "Date", description: "Description", debit: "Debit", credit: "Credit" },
+          selections: [],
+        }),
+      ),
+    ).rejects.toThrow(/couldn't find any transactions in this PDF/);
+
+    expect(mockPrisma.transaction.createMany).not.toHaveBeenCalled();
+    expect(mockPrisma.import.create).not.toHaveBeenCalled();
   });
 });

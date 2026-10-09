@@ -38,7 +38,7 @@ export const importCommitSelectionRowSchema = z.object({
 
 export const importCommitInputSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
-  fileType: z.enum(["csv", "xlsx"]),
+  fileType: z.enum(["csv", "xlsx", "pdf"]),
   mapping: importMappingSchema,
   accountId: z.uuid().nullable().optional(),
   selections: z

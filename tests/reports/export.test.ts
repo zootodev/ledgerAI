@@ -39,7 +39,57 @@ const reportData: ReportData = {
     period: { from: "2026-01-01", to: "2026-01-31" },
   },
   monthly: { points: [], period: { from: null, to: null } },
-  category: { income: 0, expenses: 0, rows: [] },
+  category: {
+    income: 12000.5,
+    expenses: 8000,
+    rows: [
+      {
+        categoryId: "cat-sales",
+        name: "Sales",
+        type: "income",
+        amount: 12000.5,
+        share: 100,
+      },
+      {
+        categoryId: "cat-supplies",
+        name: "Supplies",
+        type: "expense",
+        amount: 8000,
+        share: 100,
+      },
+    ],
+  },
+  income: {
+    total: 12000.5,
+    rows: [
+      {
+        categoryId: "cat-sales",
+        name: "Sales",
+        type: "income",
+        amount: 12000.5,
+        share: 100,
+      },
+    ],
+  },
+  expense: {
+    total: 8000,
+    rows: [
+      {
+        categoryId: "cat-supplies",
+        name: "Supplies",
+        type: "expense",
+        amount: 8000,
+        share: 100,
+      },
+    ],
+  },
+  profit: {
+    revenue: 12000.5,
+    expenses: 8000,
+    netProfit: 4000.5,
+    profitMargin: 33.38,
+    period: { from: "2026-01-01", to: "2026-01-31" },
+  },
 };
 
 function exportRequest(query = "type=summary") {
@@ -119,8 +169,50 @@ describe("reports/export route", () => {
     expect(result.body.split("\r\n")[0]).toBe("Type,Category,Amount,% of type");
   });
 
+  it("downloads the income statement report", async () => {
+    const result = await csvResponse(
+      exportRequest("type=income&from=2026-01-01&to=2026-01-31"),
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.disposition).toBe(
+      'attachment; filename="ledgerai-report-income-2026-01-01-2026-01-31.csv"',
+    );
+    expect(result.body.split("\r\n")[0]).toBe("Category,Amount,% of revenue");
+    expect(result.body).toContain("Sales,12000.50,100.00");
+    expect(result.body).toContain("Total revenue,12000.50,");
+  });
+
+  it("downloads the expense breakdown report", async () => {
+    const result = await csvResponse(
+      exportRequest("type=expense&from=2026-01-01&to=2026-01-31"),
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.disposition).toBe(
+      'attachment; filename="ledgerai-report-expense-2026-01-01-2026-01-31.csv"',
+    );
+    expect(result.body.split("\r\n")[0]).toBe("Category,Amount,% of expenses");
+    expect(result.body).toContain("Supplies,8000.00,100.00");
+    expect(result.body).toContain("Total expenses,8000.00,");
+  });
+
+  it("downloads the profit (P&L) report", async () => {
+    const result = await csvResponse(
+      exportRequest("type=profit&from=2026-01-01&to=2026-01-31"),
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.disposition).toBe(
+      'attachment; filename="ledgerai-report-profit-2026-01-01-2026-01-31.csv"',
+    );
+    expect(result.body.split("\r\n")[0]).toBe("Metric,Value");
+    expect(result.body).toContain("Net profit,4000.50");
+    expect(result.body).toContain("Profit margin (%),33.38");
+  });
+
   it("rejects an unknown report type", async () => {
-    const response = await GET(exportRequest("type=income"));
+    const response = await GET(exportRequest("type=bogus"));
 
     expect(response.status).toBe(400);
     expect(getReportData).not.toHaveBeenCalled();

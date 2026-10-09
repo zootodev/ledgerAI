@@ -9,14 +9,17 @@ import { analyticsQuerySchema, zErrorMessage } from "@/lib/validation/index";
 import {
   REPORT_TYPES,
   buildCategoryCsv,
+  buildExpenseCsv,
+  buildIncomeCsv,
   buildMonthlyCsv,
+  buildProfitCsv,
   buildSummaryCsv,
   getReportData,
   type ReportType,
 } from "@/lib/services/reports";
 
 /**
- * GET /reports/export?type=summary|monthly|category[&from=&to=]
+ * GET /reports/export?type=summary|monthly|category|income|expense|profit[&from=&to=]
  *
  * Downloads the requested report section as a CSV attachment for the current
  * user's business. Dates use the same YYYY-MM-DD range convention as the
@@ -31,7 +34,10 @@ export async function GET(request: Request) {
 
   if (!REPORT_TYPES.includes(rawType as ReportType)) {
     return NextResponse.json(
-      { error: "Unknown report type. Use summary, monthly or category." },
+      {
+        error:
+          "Unknown report type. Use summary, monthly, category, income, expense or profit.",
+      },
       { status: 400 },
     );
   }
@@ -65,7 +71,13 @@ export async function GET(request: Request) {
       ? buildSummaryCsv(data.summary)
       : type === "monthly"
         ? buildMonthlyCsv(data.monthly)
-        : buildCategoryCsv(data.category);
+        : type === "category"
+          ? buildCategoryCsv(data.category)
+          : type === "income"
+            ? buildIncomeCsv(data.income)
+            : type === "expense"
+              ? buildExpenseCsv(data.expense)
+              : buildProfitCsv(data.profit);
 
   const filename = [
     "ledgerai-report",

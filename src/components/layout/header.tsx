@@ -25,7 +25,7 @@ export function Header({ title, user, actions, onSignOut, className }: HeaderPro
   return (
     <header
       className={cn(
-        "sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur-sm sm:px-6",
+        "sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur-sm sm:px-6 print:hidden",
         className,
       )}
     >

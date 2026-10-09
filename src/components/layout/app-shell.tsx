@@ -26,7 +26,7 @@ export function AppShell({
   return (
     <div className="flex min-h-screen w-full bg-background">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-border bg-surface lg:block">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-border bg-surface lg:block print:hidden">
         <div className="flex h-14 items-center gap-2 border-b border-border px-4">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-sm font-bold text-on-accent">
             L

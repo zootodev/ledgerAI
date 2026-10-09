@@ -7,6 +7,7 @@ import { signOutAction } from "@/lib/auth/actions";
 import { analyticsQuerySchema, type AnalyticsQuery } from "@/lib/validation/index";
 import { AnalyticsRangeControl } from "@/components/dashboard/analytics-range-control";
 import { ReportsView } from "@/components/reports/reports-view";
+import { PrintButton } from "@/components/reports/print-button";
 import { ReportSections, ReportsFallback } from "@/components/reports/report-sections";
 
 type ReportsSearchParams = Record<string, string | string[] | undefined>;
@@ -44,6 +45,7 @@ export default async function ReportsPage({
           <ReportSections range={range} currency={ctx.business.currency} />
         </Suspense>
       }
+      actions={<PrintButton />}
       onSignOut={signOutAction}
     />
   );

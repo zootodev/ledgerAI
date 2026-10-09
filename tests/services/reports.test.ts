@@ -17,10 +17,17 @@ import { getPrismaClient } from "@/lib/db/client";
 import { AuthorizationError } from "@/lib/services/auth-context";
 import {
   buildCategoryCsv,
+  buildExpenseCsv,
+  buildIncomeCsv,
   buildMonthlyCsv,
+  buildProfitCsv,
   buildSummaryCsv,
   getCategoryReport,
   getReportData,
+} from "@/lib/services/reports";
+import type {
+  ProfitReport,
+  TypeReport,
 } from "@/lib/services/reports";
 import type { AnalyticsSummary, AnalyticsTrends } from "@/lib/services/analytics";
 
@@ -37,7 +44,12 @@ function makeDecimal(value: number) {
 }
 
 function categoryGroup(type: string, categoryId: string | null, amount: number) {
-  return { type, categoryId, _sum: { amount: makeDecimal(amount) } };
+  return {
+    type,
+    categoryId,
+    date: new Date("2026-01-15T00:00:00.000Z"),
+    _sum: { amount: makeDecimal(amount) },
+  };
 }
 
 const mockedGetPrismaClient = vi.mocked(getPrismaClient);
@@ -69,6 +81,37 @@ describe("getReportData (composition)", () => {
     expect(data.category.income).toBe(0);
     expect(data.category.expenses).toBe(0);
     expect(data.category.rows).toEqual([]);
+    expect(data.income).toEqual({ total: 0, rows: [] });
+    expect(data.expense).toEqual({ total: 0, rows: [] });
+    expect(data.profit.netProfit).toBe(0);
+    expect(data.profit.profitMargin).toBeNull();
+  });
+
+  it("derives the income, expense and profit sections from the same fetch", async () => {
+    mockPrisma.transaction.groupBy.mockResolvedValue([
+      categoryGroup("income", "c1", 400),
+      categoryGroup("expense", "c2", 250),
+    ]);
+    mockPrisma.category.findMany.mockResolvedValue([
+      { id: "c1", name: "Sales" },
+      { id: "c2", name: "Rent" },
+    ]);
+
+    const data = await getReportData({});
+
+    expect(data.income.total).toBe(400);
+    expect(data.income.rows.map((r) => r.name)).toEqual(["Sales"]);
+    expect(data.income.rows.every((r) => r.type === "income")).toBe(true);
+    expect(data.expense.total).toBe(250);
+    expect(data.expense.rows.map((r) => r.name)).toEqual(["Rent"]);
+    expect(data.expense.rows.every((r) => r.type === "expense")).toBe(true);
+    expect(data.profit).toEqual({
+      revenue: data.summary.revenue,
+      expenses: data.summary.expenses,
+      netProfit: data.summary.netProfit,
+      profitMargin: data.summary.profitMargin,
+      period: data.summary.period,
+    });
   });
 
   it("scopes every aggregation to the session-derived business id", async () => {
@@ -263,6 +306,61 @@ describe("CSV report serializers", () => {
     };
     expect(buildCategoryCsv(report)).toBe(
       'Type,Category,Amount,% of type\r\nincome,"\'=HYPERLINK(""https://evil.example"")",100.00,33.33\r\nincome,\'@sum(A1),200.00,66.67\r\n',
+    );
+  });
+
+  it("serializes the income statement with a total revenue row", () => {
+    const report: TypeReport = {
+      total: 600,
+      rows: [
+        { categoryId: "c1", name: "Sales", type: "income", amount: 400, share: 66.67 },
+        { categoryId: null, name: "Uncategorized", type: "income", amount: 200, share: 33.33 },
+      ],
+    };
+    expect(buildIncomeCsv(report)).toBe(
+      [
+        "Category,Amount,% of revenue",
+        "Sales,400.00,66.67",
+        "Uncategorized,200.00,33.33",
+        "Total revenue,600.00,",
+      ].join("\r\n") + "\r\n",
+    );
+  });
+
+  it("serializes the expense breakdown with a total expenses row", () => {
+    const report: TypeReport = {
+      total: 300,
+      rows: [
+        { categoryId: "c2", name: "Rent", type: "expense", amount: 300, share: 100 },
+      ],
+    };
+    expect(buildExpenseCsv(report)).toBe(
+      [
+        "Category,Amount,% of expenses",
+        "Rent,300.00,100.00",
+        "Total expenses,300.00,",
+      ].join("\r\n") + "\r\n",
+    );
+  });
+
+  it("serializes the profit (P&L) statement and blanks a null margin", () => {
+    const report: ProfitReport = {
+      revenue: 12000.5,
+      expenses: 8000,
+      netProfit: 4000.5,
+      profitMargin: null,
+      period: { from: "2026-01-01", to: "2026-01-31" },
+    };
+    expect(buildProfitCsv(report)).toBe(
+      [
+        "Metric,Value",
+        "Report period from,2026-01-01",
+        "Report period to,2026-01-31",
+        "Revenue,12000.50",
+        "Expenses,8000.00",
+        "Net profit,4000.50",
+        "Profit margin (%),",
+      ].join("\r\n") + "\r\n",
     );
   });
 
