@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { cn } from "@/lib/utils/cn";
@@ -46,12 +47,17 @@ export function MobileNav({ open, onClose, className }: MobileNavProps) {
             className="absolute inset-y-0 left-0 flex w-72 flex-col bg-surface shadow-modal"
           >
             <div className="flex h-14 items-center justify-between border-b border-border px-4">
-              <span className="flex items-center gap-2 font-semibold text-foreground">
+              <Link
+                href="/overview"
+                onClick={onClose}
+                className="flex items-center gap-2 font-semibold text-foreground"
+                aria-label="LedgerAI, go to overview"
+              >
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-sm font-bold text-on-accent">
                   L
                 </span>
                 LedgerAI
-              </span>
+              </Link>
               <button
                 type="button"
                 onClick={onClose}

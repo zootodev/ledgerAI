@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Bell, ChevronDown, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownItem } from "@/components/ui/dropdown";
 import { cn } from "@/lib/utils/cn";
@@ -22,6 +23,7 @@ export interface HeaderProps
 }
 
 export function Header({ title, user, actions, onSignOut, className }: HeaderProps) {
+  const router = useRouter();
   return (
     <header
       className={cn(
@@ -33,15 +35,8 @@ export function Header({ title, user, actions, onSignOut, className }: HeaderPro
         {title && <h1 className="truncate text-base font-semibold text-foreground">{title}</h1>}
       </div>
 
-      <div className="hidden items-center gap-2 md:flex">
-        <SearchField />
-      </div>
-
       <div className="flex items-center gap-1.5">
         {actions}
-        <Button variant="ghost" size="icon" aria-label="Notifications">
-          <Bell className="h-4.5 w-4.5" />
-        </Button>
 
         {user && (
           <Dropdown
@@ -57,8 +52,8 @@ export function Header({ title, user, actions, onSignOut, className }: HeaderPro
               </Button>
             }
           >
-            <DropdownItem onClick={() => {}}>Profile</DropdownItem>
-            <DropdownItem onClick={() => {}}>Settings</DropdownItem>
+            <DropdownItem onClick={() => router.push("/settings/profile")}>Profile</DropdownItem>
+            <DropdownItem onClick={() => router.push("/settings")}>Settings</DropdownItem>
             <DropdownItem destructive onClick={onSignOut}>
               Sign out
             </DropdownItem>
@@ -69,21 +64,7 @@ export function Header({ title, user, actions, onSignOut, className }: HeaderPro
   );
 }
 
-export function SearchField({ className }: { className?: string }) {
-  return (
-    <div className={cn("relative w-64", className)}>
-      <Search className="pointer-events-none absolute inset-y-0 left-3 my-auto h-4 w-4 text-subtle" aria-hidden="true" />
-      <input
-        type="search"
-        placeholder="Search…"
-        aria-label="Search"
-        className="h-9 w-full rounded-field border border-border-strong bg-surface-subtle pl-9 pr-3 text-sm text-foreground placeholder:text-subtle focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
-      />
-    </div>
-  );
-}
-
-function initials(name: string): string {
+export function initials(name: string): string {
   return name
     .split(/\s+/)
     .filter(Boolean)

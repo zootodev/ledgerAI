@@ -71,7 +71,9 @@ export default function Home() {
       {/* ---------------------------------------------------------- Header */}
       <header className="border-b border-border bg-surface">
         <div className={`${section} flex h-16 items-center justify-between`}>
-          <Logo />
+          <Link href="/" aria-label="LedgerAI home">
+            <Logo />
+          </Link>
           <nav className="flex items-center gap-3">
             <Link
               href="/login"
@@ -478,7 +480,9 @@ export default function Home() {
         <div
           className={`${section} flex flex-col items-center justify-between gap-4 py-8 sm:flex-row`}
         >
-          <Logo />
+          <Link href="/" aria-label="LedgerAI home">
+            <Logo />
+          </Link>
           <nav className="flex items-center gap-5 text-sm text-secondary">
             <Link href="/login" className="transition-colors hover:text-foreground">
               Sign in
