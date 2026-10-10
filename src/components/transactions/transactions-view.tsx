@@ -74,6 +74,18 @@ const typeTone: Record<string, "success" | "danger" | "default"> = {
   transfer: "default",
 };
 
+/** AI categorization confidence, e.g. "AI · 92%". Unknown when null. */
+function aiConfidenceBadge(confidence: number): React.ReactNode {
+  const pct = Math.round(confidence * 100);
+  const tone: "success" | "warning" | "danger" =
+    confidence >= 0.7 ? "success" : confidence >= 0.4 ? "warning" : "danger";
+  return (
+    <Badge tone={tone} title={`AI categorization confidence: ${pct}%`}>
+      AI · {pct}%
+    </Badge>
+  );
+}
+
 export function TransactionsView({
   result,
   params,
@@ -242,9 +254,12 @@ export function TransactionsView({
       cell: (t) => (
         <div>
           <p className="font-medium text-foreground">{t.description}</p>
-          {t.reference && (
-            <p className="text-xs text-muted">Ref: {t.reference}</p>
-          )}
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {t.aiConfidence !== null && aiConfidenceBadge(t.aiConfidence)}
+            {t.reference && (
+              <span className="text-xs text-muted">Ref: {t.reference}</span>
+            )}
+          </div>
         </div>
       ),
     },

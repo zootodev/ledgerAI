@@ -4,7 +4,9 @@ import { ensureOnboarding } from "@/lib/services/auth";
 import { requireAuthContext } from "@/lib/services/auth-context";
 import { listConversationsForContext } from "@/lib/services/assistant-conversations";
 import { signOutAction } from "@/lib/auth/actions";
+import { isAskEnabled } from "@/lib/ask/config";
 import { AskShell } from "@/components/ask/ask-shell";
+import { AskComingSoon } from "@/components/ask-v2/ask-coming-soon";
 
 export const metadata: Metadata = {
   title: "Ask LedgerAI",
@@ -15,14 +17,29 @@ export default async function AskPage({
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
+  // Phase 28C: the v1 /ask surface is on hold. ASK_ENABLED (safe default
+  // OFF) is the ONLY switch — while off, the user sees the presentation-only
+  // "Coming Soon" state and no Ask backend, provider call, finance tool, or
+  // conversation persistence executes. The interactive AskShell stays intact
+  // for future resumption behind this same switch.
+  const showComingSoon = !isAskEnabled();
+
   await ensureOnboarding();
 
-  const [ctx, params] = await Promise.all([
-    requireAuthContext().catch(() => null),
-    searchParams,
-  ]);
+  const ctx = await requireAuthContext().catch(() => null);
   if (!ctx) redirect("/login");
 
+  if (showComingSoon) {
+    return (
+      <AskComingSoon
+        userName={ctx.user.name ?? undefined}
+        userEmail={ctx.user.email}
+        onSignOut={signOutAction}
+      />
+    );
+  }
+
+  const params = await searchParams;
   const rawC = params.c;
   const initialConversationId =
     typeof rawC === "string" && rawC.length > 0 ? rawC : null;

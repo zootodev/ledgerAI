@@ -75,6 +75,7 @@ function runtimeAI(fixture?: string): AskAiRuntime {
       structuredStateWrite: false,
       shadowSampleRate: 1,
       askV2Enabled: false,
+      askEnabled: false,
     },
     providers: {
       interpreter: { name: "fixture", configured: true, model: null, interpret: interpreter.interpret },

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { format, startOfMonth, startOfYear, subDays } from "date-fns";
+import { format, startOfMonth, startOfQuarter, startOfYear, subDays } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
@@ -40,8 +40,10 @@ export function AnalyticsRangeControl({
     const today = new Date();
     const iso = (d: Date) => format(d, "yyyy-MM-dd");
     return [
+      { label: "Last 7 days", from: iso(subDays(today, 6)), to: iso(today) },
       { label: "Last 30 days", from: iso(subDays(today, 29)), to: iso(today) },
       { label: "This month", from: iso(startOfMonth(today)), to: iso(today) },
+      { label: "This quarter", from: iso(startOfQuarter(today)), to: iso(today) },
       { label: "This year", from: iso(startOfYear(today)), to: iso(today) },
       { label: "All time", from: "", to: "" },
     ];

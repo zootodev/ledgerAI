@@ -69,6 +69,13 @@ export interface AskAiConfig {
    * Safe default OFF — existing deployments do not expose v2 on deploy.
    */
   askV2Enabled: boolean;
+  /**
+   * Independent /ask (v1) surface gate (Phase 28C). The v1 assistant is on
+   * hold and shows the "Coming Soon" state until re-enabled here. Safe
+   * default OFF — an absent ASK_ENABLED never exposes the v1 surface, and it
+   * is independent of both ASK_V2_ENABLED and the ASK_LLM_* flags.
+   */
+  askEnabled: boolean;
 }
 
 const TRUE = new Set(["1", "true", "yes", "on"]);
@@ -88,6 +95,7 @@ export function readAskAiConfig(env: NodeJS.ProcessEnv = process.env): AskAiConf
     narrationEnabled: bool(env.ASK_LLM_NARRATION_ENABLED),
     structuredStateWrite: bool(env.ASK_STRUCTURED_STATE_WRITE),
     askV2Enabled: bool(env.ASK_V2_ENABLED),
+    askEnabled: bool(env.ASK_ENABLED),
     shadowSampleRate: Number.isFinite(sampleRaw)
       ? Math.min(Math.max(sampleRaw, 0), 1)
       : 0,

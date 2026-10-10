@@ -67,6 +67,7 @@ function runtime(
       structuredStateWrite: false,
       shadowSampleRate,
       askV2Enabled: false,
+      askEnabled: false,
     },
     providers: {
       interpreter: interpreter as never,

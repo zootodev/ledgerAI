@@ -252,6 +252,12 @@ export function extractTransactionsFromText(text: string): RawImportRow[] {
 export async function parsePdf(
   bytes: Uint8Array,
 ): Promise<{ headers: string[]; rows: RawImportRow[] }> {
+  // pdf-parse wraps pdfjs-dist, which references browser globals (DOMMatrix,
+  // Path2D, ImageData) at module-evaluation time and polyfills them from
+  // @napi-rs/canvas when it is importable. Load the polyfill first so the
+  // evaluation of pdf-parse never throws. Both packages are in
+  // serverExternalPackages, so Node resolves them from node_modules.
+  await import("@napi-rs/canvas");
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: bytes });
   let text: string;

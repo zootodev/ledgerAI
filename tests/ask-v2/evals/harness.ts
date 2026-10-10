@@ -131,6 +131,7 @@ export function createScriptedRuntime() {
       structuredStateWrite: false,
       shadowSampleRate: 1,
       askV2Enabled: false,
+      askEnabled: false,
     },
     providers: {
       interpreter: {

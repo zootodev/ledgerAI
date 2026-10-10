@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
   /* pdf-parse (and its pdfjs-dist engine) uses runtime requires and a
      worker that break when bundled — keep it external so it loads from
      node_modules on the server only (it is never imported client-side). */
-  serverExternalPackages: ["pdf-parse"],
+  serverExternalPackages: ["pdf-parse", "@napi-rs/canvas", "pdfjs-dist"],
   /* Opt out of the expanded static/cache behaviors so authenticated,
      session-derived data is always revalidated (Supabase SSR best practice). */
   cacheComponents: false,
