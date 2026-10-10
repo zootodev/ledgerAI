@@ -194,6 +194,90 @@ describe("extractTransactionsFromText — Moniepoint money-in/out statements", (
   });
 });
 
+describe("extractTransactionsFromText — fragmented Moniepoint layout", () => {
+  // The deployed PDF text layer breaks every cell onto its own line (~18 chars
+  // per line), so no physical line ever holds a date and an amount together.
+  const fragmentedText = [
+    "IFEOLUWANI JOSHUA OLUFUNMILAYO",
+    "Account Number 2034321500",
+    "Opening Balance",
+    "₦22,035.20",
+    "Summary",
+    "Money In",
+    "Money Out",
+    "₦1,788,993.56",
+    "₦1,811,020.79",
+    "Date/Time",
+    "Money In",
+    "Money Out",
+    "Category",
+    "To/From",
+    "Description",
+    "Balance",
+    "08/01/26",
+    "06:24:32",
+    "₦2,000.00",
+    "outward",
+    "transfer",
+    "Squad Checkout/08240",
+    "data",
+    "₦20,035.20",
+    "08/01/26",
+    "10:14:07",
+    "₦10,000.00",
+    "inward",
+    "transfer",
+    "Alexander Tolani Olufunmilayo",
+    "transfer from alexander",
+    "₦30,035.20",
+    "09/01/26",
+    "09:35:25",
+    "₦3,000.00",
+    "outward",
+    "transfer",
+    "Oladele Toyin",
+    "Fcmb",
+    "₦12,835.20",
+  ].join("\n");
+
+  const rows = extractTransactionsFromText(fragmentedText);
+
+  it("rebuilds rows from column positions when every cell is its own line", () => {
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.values.Date)).toEqual([
+      "2026-01-08",
+      "2026-01-08",
+      "2026-01-09",
+    ]);
+    expect(rows[0]).toMatchObject({
+      values: {
+        Debit: "2,000.00",
+        Credit: "",
+        Description: "outward transfer Squad Checkout/08240 data",
+      },
+    });
+    expect(rows[1]).toMatchObject({
+      values: {
+        Debit: "",
+        Credit: "10,000.00",
+        Description: "inward transfer Alexander Tolani Olufunmilayo transfer from alexander",
+      },
+    });
+    expect(rows[2]).toMatchObject({
+      values: { Debit: "3,000.00", Credit: "" },
+    });
+  });
+
+  it("never turns the opening balance or summary into a transaction", () => {
+    const amounts = rows.flatMap((r) => [r.values.Debit, r.values.Credit]);
+    expect(amounts).not.toContain("22,035.20");
+    expect(amounts).not.toContain("1,788,993.56");
+    expect(amounts).not.toContain("1,811,020.79");
+    expect(amounts).not.toContain("20,035.20");
+    expect(amounts).not.toContain("30,035.20");
+  });
+});
+
 describe("extractTransactionsFromText — date formats and skips", () => {
   it("parses every supported date format into ISO", () => {
     const text = [

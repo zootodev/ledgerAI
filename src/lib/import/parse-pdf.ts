@@ -10,6 +10,9 @@
 // (date + amount) shape a statement row always has. Each hit is emitted
 // as a synthetic Date/Description/Debit/Credit row, so PDFs flow through
 // the exact same mapping, normalization and validation pipeline as CSV.
+// When a PDF renders every table cell as its own fragment (no line holds a
+// full row), credit/debit statements fall back to a flat scan that anchors
+// rows on the transaction date and slices text up to the next date.
 //
 // Layout modes:
 //  - debit-credit: a header line carrying a debit/credit (or withdrawal/
@@ -196,6 +199,14 @@ function detectLayout(lines: string[]): LayoutKind {
   return "single";
 }
 
+/** Words marking a money-out (debit) row on Moniepoint-style statements. */
+const MONEY_OUT_WORDS =
+  /(?:\boutward\b|withdraw|\bmoney out\b|paid out|charge|\bfee\b)/i;
+
+/** Words marking a money-in (credit) row on Moniepoint-style statements. */
+const MONEY_IN_WORDS =
+  /(?:\binward\b|deposit|\bmoney in\b|received|\bsalary\b|\bincome\b)/i;
+
 /** Emit the row in a "credit-then-debit" (money-in | money-out) layout, e.g.
  * Moniepoint PDFs. Columns collapse into the text — each row usually has one
  * transaction amount plus the running balance, and the category word
@@ -227,9 +238,9 @@ function extractCreditDebitRow(
     // Both columns filled: money in first, money out second.
     credit = trans[0].value;
     debit = lastTrans.value;
-  } else if (/(?:\boutward\b|withdraw|\bmoney out\b|paid out|charge|\bfee\b)/i.test(sideText)) {
+  } else if (MONEY_OUT_WORDS.test(sideText)) {
     debit = lastTrans.value;
-  } else if (/(?:\binward\b|deposit|\bmoney in\b|received|\bsalary\b|\bincome\b)/i.test(sideText)) {
+  } else if (MONEY_IN_WORDS.test(sideText)) {
     credit = lastTrans.value;
   } else {
     credit = lastTrans.value;
@@ -244,6 +255,98 @@ function extractCreditDebitRow(
       Credit: credit,
     },
   };
+}
+
+/** Strip everything that is an amount token out of a row segment, collapsing
+ * the remaining fragments into a readable description. */
+function cleanRowNarrative(segment: string, amounts: AmountToken[]): string {
+  let description = "";
+  let cursor = 0;
+  for (const a of amounts) {
+    description += segment.slice(cursor, a.start);
+    cursor = a.end;
+  }
+  description += segment.slice(cursor);
+  return description
+    .split(/\s+/)
+    .join(" ")
+    .trim()
+    .replace(/^\d{1,2}:\d{2}:\d{2}\s*/, "")
+    .replace(/^[\s|:;]+/, "")
+    .replace(/[\s|:;]+$/, "")
+    .trim();
+}
+
+/** Reconstruct rows from a Moniepoint-style PDF whose text layer encodes every
+ * cell as its own line fragment (column positions appear in reading order, but
+ * no single physical line holds a full row). Rows are anchored on the
+ * dd/mm/yy date; each row owns the text up to the next date, the last amount
+ * in that span is the running balance, and the outward/inward category word
+ * picks the debit/credit side. */
+function extractCreditDebitTextRows(text: string): RawImportRow[] {
+  const lower = text.toLowerCase();
+  const moneyInIdx = lower.indexOf("money in");
+  const moneyOutIdx = lower.indexOf("money out");
+  if (moneyInIdx === -1 || moneyOutIdx === -1) return [];
+  const headerEnd = Math.max(moneyInIdx, moneyOutIdx) + "money out".length;
+  const headerStart = text.lastIndexOf("\n", Math.min(moneyInIdx, moneyOutIdx)) + 1;
+  const headerSlice = lower.slice(headerStart, headerEnd + 80);
+  if (!headerSlice.includes("date") && !headerSlice.includes("balance")) return [];
+  const rawRegion = text.slice(headerEnd);
+  // Statements close with totals / a closing balance after the last
+  // transaction; cut them off so they can't bleed into the final row.
+  const endMarker = rawRegion.search(
+    /closing balance|total money in|total money out|opening balance/i,
+  );
+  const region = endMarker === -1 ? rawRegion : rawRegion.slice(0, endMarker);
+
+  // dd/mm/yy only — the statement's period line ("Date 08/01/2026 - 08/10/2026")
+  // uses four-digit years and must not be anchored as a row.
+  const pattern = /\b(\d{1,2})\/(\d{1,2})\/(\d{2})\b/g;
+  const hits: RegExpExecArray[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(region)) !== null) hits.push(match);
+
+  const rows: RawImportRow[] = [];
+  for (let i = 0; i < hits.length; i++) {
+    const hit = hits[i];
+    const segmentEnd = i + 1 < hits.length ? hits[i + 1].index : region.length;
+    const segment = region.slice(hit.index + hit[0].length, segmentEnd);
+    const iso = isoFrom(2000 + Number(hit[3]), Number(hit[2]), Number(hit[1]));
+    if (!iso) continue;
+    const amounts = findAmounts(segment, 0);
+    if (amounts.length === 0) continue;
+    // The last amount in the span is the running balance; drop it.
+    const trans = amounts.slice(0, -1);
+    if (trans.length === 0) continue;
+    const lastTrans = trans[trans.length - 1];
+
+    const keywordText = region.slice(hit.index, Math.min(hit.index + 260, segmentEnd));
+    let debit = "";
+    let credit = "";
+    if (trans.length >= 2) {
+      // Both columns filled: money in first, money out second.
+      credit = trans[0].value;
+      debit = lastTrans.value;
+    } else if (MONEY_OUT_WORDS.test(keywordText)) {
+      debit = lastTrans.value;
+    } else if (MONEY_IN_WORDS.test(keywordText)) {
+      credit = lastTrans.value;
+    } else {
+      credit = lastTrans.value;
+    }
+
+    rows.push({
+      sourceRow: i + 1,
+      values: {
+        Date: iso,
+        Description: cleanRowNarrative(segment, amounts),
+        Debit: debit,
+        Credit: credit,
+      },
+    });
+  }
+  return rows;
 }
 
 function extractRow(
@@ -317,6 +420,19 @@ export function extractTransactionsFromText(text: string): RawImportRow[] {
     const row = extractRow(line, index + 1, layout);
     if (row) rows.push(row);
   });
+  if (rows.length === 0) {
+    // Some banks render each cell as its own text fragment (no physical line
+    // holds a full row), so the header keywords never share a line. Detect the
+    // money-in/money-out signature anywhere in the text and rebuild rows from
+    // column positions instead.
+    const lower = text.toLowerCase();
+    if (
+      layout === "credit-debit" ||
+      (lower.includes("money in") && lower.includes("money out"))
+    ) {
+      return extractCreditDebitTextRows(text);
+    }
+  }
   return rows;
 }
 
@@ -360,13 +476,19 @@ export async function parsePdf(
       );
     }
     // Log the first chunk so a failing bank layout can be diagnosed from the
-    // server logs; it never reaches the browser or a database.
+    // server logs; it never reaches the browser or a database. The excerpt
+    // preserves line breaks so fragment-per-cell layouts stay visible.
     console.info(
       "[ledgerai-pdf] zero rows extracted",
       JSON.stringify({
+        diag: "v4-fragmented",
         chars: text.length,
         lines: text.split(/\r?\n|\f/).length,
-        excerpt: compact.slice(0, 1200),
+        layout: detectLayout(text.split(/\r?\n|\f/)),
+        dateLines: text
+          .split(/\r?\n|\f/)
+          .filter((line) => findDate(line) !== null).length,
+        rawExcerpt: text.slice(0, 1500),
       }),
     );
     throw new Error(
