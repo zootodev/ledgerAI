@@ -12,9 +12,12 @@
 // the exact same mapping, normalization and validation pipeline as CSV.
 //
 // Layout modes:
-//  - two-column: a header line containing a debit/credit (or
-//    withdrawal/deposit, paid out/paid in) pair is present, so the first
-//    amount of a row is the debit side and the second the credit side;
+//  - debit-credit: a header line carrying a debit/credit (or withdrawal/
+//    deposit, paid out/paid in) pair, so the first amount of a row is the
+//    debit side and the second the credit side;
+//  - credit-debit: a header carrying a money-in/money-out pair (Moniepoint
+//    PDFs) — money goes in first, the trailing amount is the running balance,
+//    and the outward/inward category word picks the side;
 //  - single-amount: one amount column — sign, accounting parentheses and
 //    Dr/Cr markers choose the side (positive defaults to credit/income,
 //    matching normalize.ts's single-amount convention).
@@ -56,11 +59,19 @@ const MONTHS: Record<string, number> = {
   december: 12,
 };
 
-/** Layout pairs that mark a debit/credit two-column statement. */
-const TWO_COLUMN_PAIRS: [string, string][] = [
+/** Layout modes for a statement's amount columns. */
+type LayoutKind = "debit-credit" | "credit-debit" | "single";
+
+/** Pairs marking a debit-column-then-credit-column statement (bank-standard). */
+const DEBIT_CREDIT_PAIRS: [string, string][] = [
   ["debit", "credit"],
   ["withdrawal", "deposit"],
   ["paid out", "paid in"],
+];
+
+/** Pairs marking a credit-column-then-debit-column statement (e.g. Moniepoint
+ * "Money In | Money Out" PDFs — in before out). */
+const CREDIT_DEBIT_PAIRS: [string, string][] = [
   ["money out", "money in"],
 ];
 
@@ -85,6 +96,8 @@ const DATE_PATTERNS: RegExp[] = [
   /\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b/,
   // 05/01/2026, 05-01-2026, 05.01.2026 (day-first, as in normalize.ts)
   /\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\b/,
+  // 05/01/26 — Moniepoint-style two-digit years, read as 20yy
+  /\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})\b/,
   // 05 Jan 2026, 05-Jan-2026, 05/Jan/2026, 5 January 2026
   /\b(\d{1,2})\s*[-/.]?\s*([A-Za-z]{3,9})\.?,?\s*[-/.]?\s*(\d{4})\b/,
   // Jan 05 2026, Jan-05-2026, Jan 5, 2026, January 5, 2026
@@ -120,6 +133,8 @@ function findDate(line: string): DateMatch | null {
     } else if (p === 1) {
       iso = isoFrom(Number(m[3]), Number(m[2]), Number(m[1]));
     } else if (p === 2) {
+      iso = isoFrom(2000 + Number(m[3]), Number(m[2]), Number(m[1]));
+    } else if (p === 3) {
       const month = MONTHS[m[2].toLowerCase()];
       if (month) iso = isoFrom(Number(m[3]), month, Number(m[1]));
     } else {
@@ -163,24 +178,85 @@ function findAmounts(line: string, from: number): AmountToken[] {
   return tokens;
 }
 
-/** A header line carrying both keywords of any debit/credit pair. */
-function isTwoColumnLayout(lines: string[]): boolean {
+/** Detect the statement's column order from a header line carrying both
+ * keywords of a debit/credit or credit/debit pair. */
+function detectLayout(lines: string[]): LayoutKind {
   for (const line of lines) {
     const lower = line.toLowerCase();
-    if (TWO_COLUMN_PAIRS.some(([a, b]) => lower.includes(a) && lower.includes(b))) {
-      return true;
+    if (CREDIT_DEBIT_PAIRS.some(([a, b]) => lower.includes(a) && lower.includes(b))) {
+      return "credit-debit";
     }
   }
-  return false;
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (DEBIT_CREDIT_PAIRS.some(([a, b]) => lower.includes(a) && lower.includes(b))) {
+      return "debit-credit";
+    }
+  }
+  return "single";
+}
+
+/** Emit the row in a "credit-then-debit" (money-in | money-out) layout, e.g.
+ * Moniepoint PDFs. Columns collapse into the text — each row usually has one
+ * transaction amount plus the running balance, and the category word
+ * ("outward transfer" / "inward transfer") picks the side. The final amount is
+ * always the running balance and is excluded. */
+function extractCreditDebitRow(
+  line: string,
+  sourceRow: number,
+  date: DateMatch,
+): RawImportRow | null {
+  const amounts = findAmounts(line, date.end);
+  if (amounts.length === 0) return null;
+  const balance = amounts[amounts.length - 1];
+  const trans = amounts.slice(0, -1);
+  if (trans.length === 0) return null;
+
+  const lastTrans = trans[trans.length - 1];
+  const narrative = line.slice(lastTrans.end, balance.start);
+  const description = narrative
+    .trim()
+    .replace(/^[\s|:;]+/, "")
+    .replace(/[\s|:;]+$/, "");
+  if (description === "") return null;
+
+  const sideText = line.slice(date.end, balance.start);
+  let debit = "";
+  let credit = "";
+  if (trans.length >= 2) {
+    // Both columns filled: money in first, money out second.
+    credit = trans[0].value;
+    debit = lastTrans.value;
+  } else if (/(?:\boutward\b|withdraw|\bmoney out\b|paid out|charge|\bfee\b)/i.test(sideText)) {
+    debit = lastTrans.value;
+  } else if (/(?:\binward\b|deposit|\bmoney in\b|received|\bsalary\b|\bincome\b)/i.test(sideText)) {
+    credit = lastTrans.value;
+  } else {
+    credit = lastTrans.value;
+  }
+
+  return {
+    sourceRow,
+    values: {
+      Date: date.iso,
+      Description: description,
+      Debit: debit,
+      Credit: credit,
+    },
+  };
 }
 
 function extractRow(
   line: string,
   sourceRow: number,
-  twoColumn: boolean,
+  layout: LayoutKind,
 ): RawImportRow | null {
   const date = findDate(line);
   if (!date) return null;
+
+  if (layout === "credit-debit") {
+    return extractCreditDebitRow(line, sourceRow, date);
+  }
 
   const amounts = findAmounts(line, date.end);
   if (amounts.length === 0) return null;
@@ -196,7 +272,7 @@ function extractRow(
   let debit = "";
   let credit = "";
 
-  if (twoColumn) {
+  if (layout === "debit-credit") {
     if (amounts.length >= 2) {
       // Column position is authoritative: emit absolute values so
       // normalize.ts never flags "debit value must be positive".
@@ -235,10 +311,10 @@ function extractRow(
  */
 export function extractTransactionsFromText(text: string): RawImportRow[] {
   const lines = text.split(/\r?\n|\f/);
-  const twoColumn = isTwoColumnLayout(lines);
+  const layout = detectLayout(lines);
   const rows: RawImportRow[] = [];
   lines.forEach((line, index) => {
-    const row = extractRow(line, index + 1, twoColumn);
+    const row = extractRow(line, index + 1, layout);
     if (row) rows.push(row);
   });
   return rows;

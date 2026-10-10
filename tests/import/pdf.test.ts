@@ -149,6 +149,51 @@ describe("extractTransactionsFromText — single-amount statements", () => {
   });
 });
 
+describe("extractTransactionsFromText — Moniepoint money-in/out statements", () => {
+  const moniepointText = [
+    "IFEOLUWANI JOSHUA OLUFUNMILAYO HOUSE 16, NORTHGATE, IBADAN",
+    "Account Number 2034321500",
+    "Opening Balance ₦22,035.20",
+    "Date/Time Money In Money Out Category To/From Description Balance",
+    "08/01/26 06:24:32 ₦2,000.00 outward transfer Squad Checkout/08240 Gtbank Plc data ₦20,035.20",
+    "08/01/26 10:14:07 ₦10,000.00 inward transfer Alexander Olufunmilayo Opay transfer from alexander ₦30,035.20",
+    "09/01/26 09:35:25 ₦3,000.00 outward transfer Oladele Toyin Fcmb ysushq ₦12,835.20",
+    "09/01/26 21:27:42 ₦500.00 outward transfer Timileyin Opay hais ₦7,335.20",
+  ].join("\n");
+
+  const rows = extractTransactionsFromText(moniepointText);
+
+  it("reads two-digit-year dates and sends outward/inward rows to the right side", () => {
+    expect(rows).toHaveLength(4);
+    expect(rows.map((r) => r.values.Date)).toEqual([
+      "2026-01-08",
+      "2026-01-08",
+      "2026-01-09",
+      "2026-01-09",
+    ]);
+    expect(rows[0].values).toEqual({
+      Date: "2026-01-08",
+      Description: "outward transfer Squad Checkout/08240 Gtbank Plc data",
+      Debit: "2,000.00",
+      Credit: "",
+    });
+    expect(rows[1].values).toEqual({
+      Date: "2026-01-08",
+      Description: "inward transfer Alexander Olufunmilayo Opay transfer from alexander",
+      Debit: "",
+      Credit: "10,000.00",
+    });
+    expect(rows[2].values.Debit).toBe("3,000.00");
+    expect(rows[3].values.Debit).toBe("500.00");
+  });
+
+  it("keeps the running balance and summary lines out of the rows", () => {
+    expect(rows.map((r) => r.values.Credit)).toEqual(["", "10,000.00", "", ""]);
+    expect(rows.map((r) => r.values.Description).join(" ")).not.toContain("Opening");
+    expect(rows.map((r) => r.values.Description).join(" ")).not.toContain("Account Number");
+  });
+});
+
 describe("extractTransactionsFromText — date formats and skips", () => {
   it("parses every supported date format into ISO", () => {
     const text = [
