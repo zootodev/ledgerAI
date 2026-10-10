@@ -13,6 +13,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
@@ -146,6 +147,7 @@ export function ImportWizard({
 
   const handleFile = React.useCallback(
     async (next: File) => {
+      if (working) return;
       setParseError(null);
       setWorking(true);
       try {
@@ -223,7 +225,7 @@ export function ImportWizard({
         setWorking(false);
       }
     },
-    [buildPreviewFor, applyDefaults],
+    [buildPreviewFor, applyDefaults, working],
   );
 
   const changeMapping = React.useCallback(
@@ -367,32 +369,62 @@ export function ImportWizard({
                 role="button"
                 tabIndex={0}
                 aria-label="Choose a CSV, XLSX or PDF file to import"
-                onClick={() => inputRef.current?.click()}
+                aria-disabled={working}
+                onClick={() => {
+                  if (!working) inputRef.current?.click();
+                }}
                 onKeyDown={(e) => {
+                  if (working) return;
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     inputRef.current?.click();
                   }
                 }}
                 onDragOver={(e) => {
+                  if (working) return;
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "copy";
                 }}
                 onDrop={(e) => {
+                  if (working) return;
                   e.preventDefault();
                   const next = e.dataTransfer.files?.[0];
                   if (next) void handleFile(next);
                 }}
-                className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed border-border-strong bg-surface-subtle/30 px-6 py-12 text-center transition-colors hover:border-brand/50 hover:bg-brand-soft/20"
+                className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed border-border-strong bg-surface-subtle/30 px-6 py-12 text-center transition-colors ${
+                  working
+                    ? "opacity-80"
+                    : "hover:border-brand/50 hover:bg-brand-soft/20"
+                }`}
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
-                  <UploadCloud className="h-6 w-6" aria-hidden="true" />
-                </div>
-                <p className="font-medium text-foreground">Drop a file here or click to browse</p>
-                <p className="text-sm text-muted">
-                  Statements from Moniepoint, Kuda, Opay, Access, GTB, and similar exports work
-                  best. Column names are detected automatically and can be corrected next.
-                </p>
+                {working ? (
+                  <>
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+                      <Spinner className="h-6 w-6" aria-hidden="true" />
+                    </div>
+                    <p className="font-medium text-foreground">
+                      Reading your statement…
+                    </p>
+                    <p className="text-sm text-muted">
+                      Parsing the file on our server — this usually takes a few
+                      seconds.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+                      <UploadCloud className="h-6 w-6" aria-hidden="true" />
+                    </div>
+                    <p className="font-medium text-foreground">
+                      Drop a file here or click to browse
+                    </p>
+                    <p className="text-sm text-muted">
+                      Statements from Moniepoint, Kuda, Opay, Access, GTB, and
+                      similar exports work best. Column names are detected
+                      automatically and can be corrected next.
+                    </p>
+                  </>
+                )}
                 <input
                   ref={inputRef}
                   id="import-file"

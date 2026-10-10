@@ -7,12 +7,13 @@ import {
 import { normalizeImportRow } from "@/lib/import/normalize";
 import type { ColumnMapping, RawImportRow } from "@/lib/import/types";
 
-const pdfMock = vi.hoisted(() => ({ text: "" }));
+const pdfMock = vi.hoisted(() => ({ text: "", params: null as unknown }));
 const destroyMock = vi.hoisted(() => ({ destroy: vi.fn() }));
 
 vi.mock("pdf-parse", () => ({
   PDFParse: class {
-    async getText() {
+    async getText(params?: unknown) {
+      pdfMock.params = params ?? null;
       return { text: pdfMock.text };
     }
     async destroy() {
@@ -155,6 +156,8 @@ describe("extractTransactionsFromText — date formats and skips", () => {
       "5 February 2026 Text month 20.00 0.00",
       "March 7, 2026 Month first 30.00 0.00",
       "2026/03/09 ISO slash 40.00 0.00",
+      "05-Jan-2026 Hyphen day-first 50.00 0.00",
+      "Jan-05-2026 Hyphen month-first 60.00 0.00",
     ].join("\n");
     const rows = extractTransactionsFromText(text);
     expect(rows.map((r) => r.values.Date)).toEqual([
@@ -162,6 +165,8 @@ describe("extractTransactionsFromText — date formats and skips", () => {
       "2026-02-05",
       "2026-03-07",
       "2026-03-09",
+      "2026-01-05",
+      "2026-01-05",
     ]);
   });
 
@@ -205,10 +210,30 @@ describe("parsePdf", () => {
     expect(destroyMock.destroy).toHaveBeenCalled();
   });
 
+  it("requests line-enforced extraction so EOL-less statements still split by row", async () => {
+    pdfMock.text = twoColumnText;
+    await parsePdf(new Uint8Array([1, 2, 3]));
+    expect(pdfMock.params).toEqual({ lineEnforce: true, itemJoiner: " " });
+  });
+
   it("throws an actionable error when no transactions can be found", async () => {
-    pdfMock.text = "Just a letterhead with no movements.";
+    pdfMock.text = [
+      "Dear Customer,",
+      "Your monthly statement dated 05 Jan 2026 has been generated for your account",
+      "with reference number 123456789012. The opening balance for this period was",
+      "250,000.00 and you made several purchases, withdrawals and transfers during",
+      "the month. Please contact your branch if you have any questions about any",
+      "transaction listed in the enclosed pages. Thank you for banking with us.",
+    ].join("\n");
     await expect(parsePdf(new Uint8Array([1]))).rejects.toThrow(
       /couldn't find any transactions in this PDF/,
+    );
+  });
+
+  it("tells the user the PDF is a scanned image when there is no text layer", async () => {
+    pdfMock.text = "   ";
+    await expect(parsePdf(new Uint8Array([1, 2]))).rejects.toThrow(
+      /no readable text layer/,
     );
   });
 });

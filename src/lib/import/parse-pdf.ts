@@ -85,10 +85,10 @@ const DATE_PATTERNS: RegExp[] = [
   /\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b/,
   // 05/01/2026, 05-01-2026, 05.01.2026 (day-first, as in normalize.ts)
   /\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\b/,
-  // 05 Jan 2026 / 5 January, 2026
-  /\b(\d{1,2})\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})\b/,
-  // Jan 05 2026 / January 5, 2026
-  /\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b/,
+  // 05 Jan 2026, 05-Jan-2026, 05/Jan/2026, 5 January 2026
+  /\b(\d{1,2})\s*[-/.]?\s*([A-Za-z]{3,9})\.?,?\s*[-/.]?\s*(\d{4})\b/,
+  // Jan 05 2026, Jan-05-2026, Jan 5, 2026, January 5, 2026
+  /\b([A-Za-z]{3,9})\.?,?\s*[-/.]?\s*(\d{1,2}),?\s*[-/.]?\s*(\d{4})\b/,
 ];
 
 /**
@@ -262,7 +262,12 @@ export async function parsePdf(
   const parser = new PDFParse({ data: bytes });
   let text: string;
   try {
-    const result = await parser.getText();
+    // lineEnforce inserts a newline when the y position changes (row breaks
+    // from geometry, not from hasEOL markers many bank PDFs omit), and
+    // itemJoiner keeps cells on the same row separated by a space instead of
+    // concatenating them into a space-less blob. Without this, table rows
+    // rendered as separate text items produce no parseable lines.
+    const result = await parser.getText({ lineEnforce: true, itemJoiner: " " });
     text = result.text;
   } finally {
     await parser.destroy().catch(() => undefined);
@@ -270,8 +275,26 @@ export async function parsePdf(
 
   const rows = extractTransactionsFromText(text);
   if (rows.length === 0) {
+    const compact = text.replace(/\s+/g, " ").trim();
+    // Scanned/image-only statements have almost no text layer — no parsing
+    // tweak will ever find rows, so say so directly.
+    if (compact.length < 200) {
+      throw new Error(
+        "This PDF has no readable text layer — it is likely a scanned image, which can't be read as a statement. Export a CSV or Excel (.xlsx) version of the statement and import that instead.",
+      );
+    }
+    // Log the first chunk so a failing bank layout can be diagnosed from the
+    // server logs; it never reaches the browser or a database.
+    console.info(
+      "[ledgerai-pdf] zero rows extracted",
+      JSON.stringify({
+        chars: text.length,
+        lines: text.split(/\r?\n|\f/).length,
+        excerpt: compact.slice(0, 1200),
+      }),
+    );
     throw new Error(
-      "We couldn't find any transactions in this PDF — it may be scanned or use an unsupported layout. Export a CSV or Excel (.xlsx) version of the statement and import that instead.",
+      "We couldn't find any transactions in this PDF. Each transaction row needs a date and an amount together on the same line, for example \"05 Jan 2026  POS transfer  12,500.00\". If this statement is a scanned image, export a CSV or Excel (.xlsx) version instead.",
     );
   }
   return { headers: [...PDF_IMPORT_HEADERS], rows };
