@@ -21,6 +21,21 @@ const nextConfig: NextConfig = {
      worker that break when bundled — keep it external so it loads from
      node_modules on the server only (it is never imported client-side). */
   serverExternalPackages: ["pdf-parse", "@napi-rs/canvas", "pdfjs-dist"],
+  /* pdf-parse loads pdfjs-dist/legacy/build/pdf.worker.mjs at runtime via a
+     dynamic import() that Vercel's file tracer can't follow, so the worker
+     (and the @napi-rs/canvas natives that polyfill DOMMatrix at pdf-mjs
+     evaluation) must be traced explicitly into the deployed function. */
+  outputFileTracingIncludes: {
+    "/import": [
+      "./node_modules/pdf-parse/**/*",
+      "./node_modules/pdfjs-dist/**/*",
+      "./node_modules/@napi-rs/canvas/**/*",
+      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
+      "./node_modules/@napi-rs/canvas-linux-x64-musl/**/*",
+      "./node_modules/@napi-rs/canvas-linux-arm64-gnu/**/*",
+      "./node_modules/@napi-rs/canvas-linux-arm64-musl/**/*",
+    ],
+  },
   /* Opt out of the expanded static/cache behaviors so authenticated,
      session-derived data is always revalidated (Supabase SSR best practice). */
   cacheComponents: false,
