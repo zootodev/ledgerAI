@@ -295,16 +295,33 @@ export async function ensureOnboarding(
   await createInitialBusiness({ userId: user.id, name: businessName });
 
   if (bounce) {
-    const prisma = getPrismaClient();
-    const business = prisma
-      ? await prisma.business.findFirst({
-          where: { userId: user.id },
-          orderBy: { createdAt: "asc" },
-          select: { type: true },
-        })
-      : null;
-    if (business && business.type === null) redirect("/onboarding");
+    if ((await oldestBusinessType(user.id)) === null) redirect("/onboarding");
   }
 
   return { id: user.id, email: user.email };
+}
+
+/** The `type` of the user's oldest business, or undefined when none exists. */
+async function oldestBusinessType(userId: string): Promise<string | null | undefined> {
+  const prisma = getPrismaClient();
+  if (!prisma) return undefined;
+  const business = await prisma.business.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+    select: { type: true },
+  });
+  return business?.type;
+}
+
+/**
+ * Whether the current user's oldest business still needs onboarding — i.e. a
+ * business row exists but has no `type` yet (the marker for an auto-provisioned
+ * account). Returns false when signed out, when no business row exists yet, or
+ * when the database is unavailable. Used by the auth callback to send brand-new
+ * users straight to /onboarding after they confirm their email.
+ */
+export async function needsOnboarding(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  return (await oldestBusinessType(user.id)) === null;
 }

@@ -10,15 +10,19 @@ vi.mock("@/lib/auth/supabase", () => ({
 
 vi.mock("@/lib/services/auth", () => ({
   ensureOnboarding: vi.fn(),
+  needsOnboarding: vi.fn(),
 }));
 
 import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { getSupabaseServer } from "@/lib/auth/supabase";
-import { ensureOnboarding } from "@/lib/services/auth";
+import { ensureOnboarding, needsOnboarding } from "@/lib/services/auth";
 import { GET } from "@/app/auth/callback/route";
 
 const exchangeMock = vi.fn();
-const supabaseMock = { auth: { exchangeCodeForSession: exchangeMock } };
+const verifyOtpMock = vi.fn();
+const supabaseMock = {
+  auth: { exchangeCodeForSession: exchangeMock, verifyOtp: verifyOtpMock },
+};
 
 function callbackRequest(url: string) {
   return new Request(url);
@@ -44,6 +48,8 @@ beforeEach(() => {
     id: "11111111-1111-4111-8111-111111111111",
     email: "new@example.com",
   });
+  vi.mocked(needsOnboarding).mockResolvedValue(false);
+  verifyOtpMock.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
 });
 
 describe("auth/callback route", () => {
@@ -68,6 +74,45 @@ describe("auth/callback route", () => {
     // /reset-password and the recovery session has to land there.
     expect(ensureOnboarding).toHaveBeenCalledWith({ bounce: false });
     expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/overview");
+  });
+
+  it("verifies a token_hash email link (cross-browser OTP flow)", async () => {
+    const response = await GET(
+      callbackRequest("http://172.20.10.2:3000/auth/callback?token_hash=abc123&type=email"),
+    );
+
+    expect(verifyOtpMock).toHaveBeenCalledWith({ token_hash: "abc123", type: "email" });
+    expect(exchangeMock).not.toHaveBeenCalled();
+    expect(ensureOnboarding).toHaveBeenCalledWith({ bounce: false });
+    expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/overview");
+  });
+
+  it("rejects a token_hash link with an unknown verification type", async () => {
+    const response = await GET(
+      callbackRequest("http://172.20.10.2:3000/auth/callback?token_hash=abc123&type=bogus"),
+    );
+
+    expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/login?error=missing_code");
+    expect(verifyOtpMock).not.toHaveBeenCalled();
+  });
+
+  it("sends a brand-new user to /onboarding when no `next` is given", async () => {
+    vi.mocked(needsOnboarding).mockResolvedValue(true);
+
+    const response = await GET(callbackRequest("http://172.20.10.2:3000/auth/callback?code=abc"));
+
+    expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/onboarding");
+  });
+
+  it("does not divert an explicit `next` (recovery) to onboarding", async () => {
+    vi.mocked(needsOnboarding).mockResolvedValue(true);
+
+    const response = await GET(
+      callbackRequest("http://172.20.10.2:3000/auth/callback?code=abc&next=%2Freset-password"),
+    );
+
+    expect(needsOnboarding).not.toHaveBeenCalled();
+    expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/reset-password");
   });
 
   it("respects an internal `next` target", async () => {
