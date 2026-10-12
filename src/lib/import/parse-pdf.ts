@@ -199,6 +199,59 @@ function detectLayout(lines: string[]): LayoutKind {
   return "single";
 }
 
+/** True when a header-ish line names both a balance and a transaction column,
+ * i.e. the statement carries a running balance. Real-world debit-credit PDFs
+ * omit the empty cell of a row, so a row's amounts are [transaction, balance]
+ * rather than [debit, credit] — that balance must not be read as a column. */
+function detectBalanceColumn(lines: string[]): boolean {
+  return lines.slice(0, 80).some((line) => {
+    const lower = line.toLowerCase();
+    return (
+      /\bbalance\b/.test(lower) &&
+      /(debit|credit|amount|withdraw|deposit|money in|money out|paid in|paid out)/.test(
+        lower,
+      )
+    );
+  });
+}
+
+/** Trim a row's leading-narrative fragment of surrounding separators. */
+function cleanNarrative(text: string): string {
+  return text
+    .trim()
+    .replace(/^[\s|:;]+/, "")
+    .replace(/[\s|:;]+$/, "");
+}
+
+/** Drop a leading value-date that sits before the narrative (day-first
+ * statements print both the transaction and the value date in one row). */
+function stripLeadingDate(text: string): string {
+  const trimmed = text.trim();
+  const date = findDate(trimmed);
+  if (date && date.start === 0) {
+    return trimmed
+      .slice(date.end)
+      .replace(/^[\s|:;.,-]+/, "")
+      .trim();
+  }
+  return trimmed;
+}
+
+/** Numeric value of an amount token, restoring its sign. */
+function tokenToNumber(token: AmountToken): number {
+  const n = Number(token.value.replace(/,/g, ""));
+  return token.negative ? -n : n;
+}
+
+/** The statement's opening balance, used to seed running-balance
+ * reconciliation for rows that show only one transaction amount. */
+function findOpeningBalance(text: string): number | null {
+  const m = /opening balance[^0-9-]{0,20}(-?[\d,]+(?:\.\d{1,2})?)/i.exec(text);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Words marking a money-out (debit) row on Moniepoint-style statements. */
 const MONEY_OUT_WORDS =
   /(?:\boutward\b|withdraw|\bmoney out\b|paid out|charge|\bfee\b)/i;
@@ -349,6 +402,150 @@ function extractCreditDebitTextRows(text: string): RawImportRow[] {
   return rows;
 }
 
+/** Positional debit-then-credit extraction for statements that render both
+ * amount columns explicitly (including `0.00` placeholders) and carry no
+ * running balance to reconcile against. */
+function extractDebitCreditPositional(
+  line: string,
+  sourceRow: number,
+): RawImportRow | null {
+  const date = findDate(line);
+  if (!date) return null;
+  const amounts = findAmounts(line, date.end);
+  if (amounts.length === 0) return null;
+
+  const first = amounts[0];
+  const description = stripLeadingDate(cleanNarrative(line.slice(date.end, first.start)));
+  let debit = "";
+  let credit = "";
+  if (amounts.length >= 2) {
+    // Column position is authoritative: emit absolute values so normalize.ts
+    // never flags "debit value must be positive".
+    debit = amounts[0].value;
+    credit = amounts[1].value;
+  } else if (first.negative) {
+    debit = first.value;
+  } else {
+    credit = first.value;
+  }
+  return {
+    sourceRow,
+    values: { Date: date.iso, Description: description, Debit: debit, Credit: credit },
+  };
+}
+
+interface DebitCreditDraft {
+  sourceRow: number;
+  iso: string;
+  description: string;
+  debit: string;
+  credit: string;
+  /** Both columns were present as amounts, so no reconciliation is needed. */
+  explicit: boolean;
+  txnValue: string;
+  txnNumber: number;
+  balance: number | null;
+  negative: boolean;
+  line: string;
+}
+
+function parseDebitCreditDrafts(
+  lines: string[],
+  hasBalance: boolean,
+): DebitCreditDraft[] {
+  const drafts: DebitCreditDraft[] = [];
+  lines.forEach((line, index) => {
+    const date = findDate(line);
+    if (!date) return;
+    const amounts = findAmounts(line, date.end);
+    if (amounts.length === 0) return;
+
+    // With a running-balance column the trailing amount is the balance, not a
+    // second transaction amount. Without one, every amount is a transaction.
+    const balanceToken =
+      hasBalance && amounts.length >= 2 ? amounts[amounts.length - 1] : null;
+    const txnAmounts = balanceToken ? amounts.slice(0, -1) : amounts;
+    if (txnAmounts.length === 0) return;
+
+    const first = txnAmounts[0];
+    drafts.push({
+      sourceRow: index + 1,
+      iso: date.iso,
+      description: stripLeadingDate(cleanNarrative(line.slice(date.end, first.start))),
+      debit: txnAmounts.length >= 2 ? txnAmounts[0].value : "",
+      credit: txnAmounts.length >= 2 ? txnAmounts[1].value : "",
+      explicit: txnAmounts.length >= 2,
+      txnValue: first.value,
+      txnNumber: tokenToNumber(first),
+      balance: balanceToken ? tokenToNumber(balanceToken) : null,
+      negative: first.negative,
+      line,
+    });
+  });
+  return drafts;
+}
+
+/** Decide a single-amount row's side. Running-balance reconciliation wins: the
+ * change between consecutive balances equals +/- the transaction amount, which
+ * reliably separates debits from credits even when the amount's column is
+ * blank. Falls back to a sign or a debit/credit word when balances can't. */
+function resolveDebitCreditSide(
+  draft: DebitCreditDraft,
+  previousBalance: number | null,
+): void {
+  const { txnValue, txnNumber, balance, negative, line } = draft;
+  if (balance !== null && previousBalance !== null) {
+    const delta = balance - previousBalance;
+    if (Math.abs(delta - txnNumber) < 0.01) {
+      draft.credit = txnValue;
+      return;
+    }
+    if (Math.abs(delta + txnNumber) < 0.01) {
+      draft.debit = txnValue;
+      return;
+    }
+  }
+  const lower = line.toLowerCase();
+  if (negative || /\b(dr|debit|withdrawal|money out|paid out)\b/.test(lower)) {
+    draft.debit = txnValue;
+  } else {
+    draft.credit = txnValue;
+  }
+}
+
+function extractDebitCreditRows(
+  lines: string[],
+  hasBalance: boolean,
+  text: string,
+): RawImportRow[] {
+  if (!hasBalance) {
+    const rows: RawImportRow[] = [];
+    lines.forEach((line, index) => {
+      const row = extractDebitCreditPositional(line, index + 1);
+      if (row) rows.push(row);
+    });
+    return rows;
+  }
+
+  const drafts = parseDebitCreditDrafts(lines, true);
+  let previousBalance = findOpeningBalance(text);
+  const rows: RawImportRow[] = [];
+  for (const draft of drafts) {
+    if (!draft.explicit) resolveDebitCreditSide(draft, previousBalance);
+    if (draft.balance !== null) previousBalance = draft.balance;
+    rows.push({
+      sourceRow: draft.sourceRow,
+      values: {
+        Date: draft.iso,
+        Description: draft.description,
+        Debit: draft.debit,
+        Credit: draft.credit,
+      },
+    });
+  }
+  return rows;
+}
+
 function extractRow(
   line: string,
   sourceRow: number,
@@ -365,32 +562,15 @@ function extractRow(
   if (amounts.length === 0) return null;
 
   const first = amounts[0];
-  const leading = line.slice(date.end, first.start);
-  const trailing = line.slice(first.end);
-  const description = leading
-    .trim()
-    .replace(/^[\s|:;]+/, "")
-    .replace(/[\s|:;]+$/, "");
-
+  const lower = line.toLowerCase();
+  // Single-amount mode: the first amount is the transaction and any later
+  // amount is a running balance (ignored). The side comes from a sign, a Dr/Cr
+  // marker, or a debit/credit word anywhere in the row (statements that carry
+  // the side in a "Transaction Type" column).
+  const description = stripLeadingDate(cleanNarrative(line.slice(date.end, first.start)));
   let debit = "";
   let credit = "";
-
-  if (layout === "debit-credit") {
-    if (amounts.length >= 2) {
-      // Column position is authoritative: emit absolute values so
-      // normalize.ts never flags "debit value must be positive".
-      debit = amounts[0].value;
-      credit = amounts[1].value;
-    } else if (first.negative) {
-      debit = first.value;
-    } else {
-      credit = first.value;
-    }
-  } else if (
-    first.negative ||
-    /\bdr\b/i.test(leading) ||
-    /\b(dr|debit|withdrawal|money out|paid out)\b/i.test(trailing)
-  ) {
+  if (first.negative || /\b(dr|debit|withdrawal|money out|paid out)\b/.test(lower)) {
     debit = first.value;
   } else {
     credit = first.value;
@@ -416,10 +596,14 @@ export function extractTransactionsFromText(text: string): RawImportRow[] {
   const lines = text.split(/\r?\n|\f/);
   const layout = detectLayout(lines);
   const rows: RawImportRow[] = [];
-  lines.forEach((line, index) => {
-    const row = extractRow(line, index + 1, layout);
-    if (row) rows.push(row);
-  });
+  if (layout === "debit-credit") {
+    rows.push(...extractDebitCreditRows(lines, detectBalanceColumn(lines), text));
+  } else {
+    lines.forEach((line, index) => {
+      const row = extractRow(line, index + 1, layout);
+      if (row) rows.push(row);
+    });
+  }
   if (rows.length === 0) {
     // Some banks render each cell as its own text fragment (no physical line
     // holds a full row), so the header keywords never share a line. Detect the
@@ -485,6 +669,7 @@ export async function parsePdf(
         chars: text.length,
         lines: text.split(/\r?\n|\f/).length,
         layout: detectLayout(text.split(/\r?\n|\f/)),
+        hasBalance: detectBalanceColumn(text.split(/\r?\n|\f/)),
         dateLines: text
           .split(/\r?\n|\f/)
           .filter((line) => findDate(line) !== null).length,

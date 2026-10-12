@@ -329,6 +329,133 @@ describe("extractTransactionsFromText — date formats and skips", () => {
   });
 });
 
+describe("extractTransactionsFromText — Nigerian bank layouts", () => {
+  // Real statements emit only the populated amount cell per row, so a row with
+  // one transaction carries [amount, running balance] — the balance is the
+  // last amount and must never be read as the second (credit) column. The
+  // debit/credit side is recovered by reconciling consecutive balances against
+  // the opening balance.
+  const gtbankText = [
+    "GTBank Plc",
+    "STATEMENT OF ACCOUNT",
+    "Account Number 0123456789",
+    "TRANSACTION DATE | VALUE DATE | DESCRIPTION | DEBIT | CREDIT | BALANCE",
+    "Opening Balance 100,000.00",
+    "05-Jan-2026 05-Jan-2026 POS PURCHASE SHOPRITE 12,500.00 87,500.00",
+    "06-Jan-2026 06-Jan-2026 TRF FROM JOHN DOE 50,000.00 137,500.00",
+    "07-Jan-2026 07-Jan-2026 ATM WITHDRAWAL LAGOS 20,000.00 117,500.00",
+    "Closing Balance 117,500.00",
+  ].join("\n");
+
+  const rows = extractTransactionsFromText(gtbankText);
+
+  it("keeps each row's trailing amount as the running balance, not a column", () => {
+    expect(rows).toHaveLength(3);
+    expect(rows[0].values).toEqual({
+      Date: "2026-01-05",
+      Description: "POS PURCHASE SHOPRITE",
+      Debit: "12,500.00",
+      Credit: "",
+    });
+    expect(rows[1].values).toEqual({
+      Date: "2026-01-06",
+      Description: "TRF FROM JOHN DOE",
+      Debit: "",
+      Credit: "50,000.00",
+    });
+    expect(rows[2].values).toEqual({
+      Date: "2026-01-07",
+      Description: "ATM WITHDRAWAL LAGOS",
+      Debit: "20,000.00",
+      Credit: "",
+    });
+  });
+
+  it("never leaks a running balance into a transaction amount", () => {
+    const amounts = rows.flatMap((r) => [r.values.Debit, r.values.Credit]);
+    for (const balance of ["87,500.00", "137,500.00", "117,500.00", "100,000.00"]) {
+      expect(amounts).not.toContain(balance);
+    }
+  });
+
+  it("normalizes reconciled rows into clean expenses/income", () => {
+    const normalized = normalizeAll(rows);
+    expect(normalized.map((r) => r.type)).toEqual(["expense", "income", "expense"]);
+    expect(normalized.map((r) => r.amount)).toEqual([
+      "12500.00",
+      "50000.00",
+      "20000.00",
+    ]);
+    expect(normalized.every((r) => r.errors.length === 0)).toBe(true);
+  });
+
+  it("still handles statements that print explicit 0.00 columns", () => {
+    const zenithText = [
+      "Zenith Bank Plc",
+      "Account Statement",
+      "Date Description Debit Credit Balance",
+      "05/01/2026 POS PURCHASE SHOPRITE 12,500.00 0.00 87,500.00",
+      "06/01/2026 NIP CREDIT FROM JOHN 0.00 50,000.00 137,500.00",
+    ].join("\n");
+    const zenithRows = extractTransactionsFromText(zenithText);
+    expect(zenithRows.map((r) => r.values)).toEqual([
+      {
+        Date: "2026-01-05",
+        Description: "POS PURCHASE SHOPRITE",
+        Debit: "12,500.00",
+        Credit: "0.00",
+      },
+      {
+        Date: "2026-01-06",
+        Description: "NIP CREDIT FROM JOHN",
+        Debit: "0.00",
+        Credit: "50,000.00",
+      },
+    ]);
+  });
+
+  it("recognises the withdrawal/deposit column wording and reconciles sides", () => {
+    const firstBankText = [
+      "First Bank of Nigeria",
+      "Statement of Account",
+      "Date Narration Withdrawal Deposit Balance",
+      "Opening Balance 20,000.00",
+      "05/01/2026 POS PURCHASE LAGOS 8,000.00 12,000.00",
+      "06/01/2026 SALARY PAYMENT 30,000.00 42,000.00",
+    ].join("\n");
+    const firstBankRows = extractTransactionsFromText(firstBankText);
+    expect(firstBankRows.map((r) => r.values.Debit)).toEqual(["8,000.00", ""]);
+    expect(firstBankRows.map((r) => r.values.Credit)).toEqual(["", "30,000.00"]);
+  });
+
+  it("reads the side from a per-row Transaction Type column", () => {
+    // A single Amount column with the side carried in the row's Type cell
+    // (Opay/PalmPay/Kuda style) — the "Debit"/"Credit" word picks the side.
+    const ubaText = [
+      "United Bank for Africa",
+      "Account Statement",
+      "Date Transaction Type Description Amount Balance",
+      "05/01/2026 Debit Transfer to JOHN 5,000.00 95,000.00",
+      "06/01/2026 Credit Wallet funding 50,000.00 145,000.00",
+    ].join("\n");
+    const ubaRows = extractTransactionsFromText(ubaText);
+    expect(ubaRows.map((r) => r.values)).toEqual([
+      {
+        Date: "2026-01-05",
+        Description: "Debit Transfer to JOHN",
+        Debit: "5,000.00",
+        Credit: "",
+      },
+      {
+        Date: "2026-01-06",
+        Description: "Credit Wallet funding",
+        Debit: "",
+        Credit: "50,000.00",
+      },
+    ]);
+  });
+});
+
 describe("parsePdf", () => {
   it("returns synthetic headers and extracted rows", async () => {
     pdfMock.text = twoColumnText;
