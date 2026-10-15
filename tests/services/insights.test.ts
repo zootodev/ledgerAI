@@ -92,6 +92,26 @@ describe("getInsights (aggregation -> engine -> narration pipeline)", () => {
     expect(key?.description).toContain("50%"); // 300k of 600k expenses
   });
 
+  it("renders insight figures in the business's configured (non-NGN) currency", async () => {
+    seedAggregations();
+    mockedRequireAuthContext.mockResolvedValue({
+      user: userA,
+      business: { ...businessA, currency: "GBP" },
+      prisma: mockPrisma as never,
+    });
+
+    const insights = await getInsights({ dateFrom: "2026-06-01", dateTo: "2026-06-30" });
+    const key = insights.find((i) => i.kind === "key");
+    const expected = new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "GBP",
+      maximumFractionDigits: 0,
+    }).format(300_000);
+
+    expect(key?.description).toContain(expected);
+    expect(key?.description).not.toContain("₦");
+  });
+
   it("derives a spending insight with the category delta", async () => {
     seedAggregations();
 

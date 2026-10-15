@@ -52,6 +52,12 @@ export interface InsightsInput {
   topIncome: CategorySpend[];
   /** Largest single current-period expense (for the anomaly signal). */
   largestExpense: { categoryName: string | null; amount: number } | null;
+  /**
+   * ISO 4217 code the derived narration is rendered in. Comes from the
+   * session business (never the client), so a non-NGN tenant sees its own
+   * currency on every card.
+   */
+  currency: string;
 }
 
 /** A single derived insight — the UI renders these cards. */
@@ -63,7 +69,7 @@ export interface DerivedInsight {
   metadata: Record<string, unknown>;
 }
 
-/** Minimum prior-period spend for a category delta to be reported (₦). */
+/** Minimum prior-period spend for a category delta to be reported (major units). */
 const MIN_DELTA_AMOUNT = 5000;
 /** Minimum percent change for a category delta to be noteworthy. */
 const MIN_DELTA_PERCENT = 15;
@@ -95,11 +101,11 @@ export function deriveInsights(input: InsightsInput): DerivedInsight[] {
   if (spending) insights.push(spending);
 
   /* ---- revenue: how income moved vs the prior period ---- */
-  const revenue = deriveRevenueInsight(current.revenue, prior.revenue);
+  const revenue = deriveRevenueInsight(current.revenue, prior.revenue, input.currency);
   if (revenue) insights.push(revenue);
 
   /* ---- profitability: margin callout ---- */
-  const profitability = deriveProfitabilityInsight(current, prior);
+  const profitability = deriveProfitabilityInsight(current, prior, input.currency);
   if (profitability) insights.push(profitability);
 
   /* ---- anomaly: a single expense dominating the period ---- */
@@ -119,12 +125,13 @@ export function deriveInsights(input: InsightsInput): DerivedInsight[] {
 
 function deriveKeyInsight(input: InsightsInput): DerivedInsight | null {
   const { summary, priorSummary } = input;
+  const money = (v: number) => formatMajor(v, input.currency);
   const margin = summary.profitMargin;
   if (margin !== null && margin < 0) {
     return {
       kind: "key",
       title: "This period ran at a loss",
-      description: `Expenses (${formatMajor(summary.expenses)}) exceeded revenue (${formatMajor(summary.revenue)}), leaving a net loss of ${formatMajor(summary.netProfit)}.`,
+      description: `Expenses (${money(summary.expenses)}) exceeded revenue (${money(summary.revenue)}), leaving a net loss of ${money(summary.netProfit)}.`,
       metadata: {
         revenue: summary.revenue,
         expenses: summary.expenses,
@@ -140,7 +147,7 @@ function deriveKeyInsight(input: InsightsInput): DerivedInsight | null {
     return {
       kind: "key",
       title: `${cap(top.categoryName)} was your top expense`,
-      description: `Spending on ${lower(top.categoryName)} (${formatMajor(top.amount)}) made up ${formatPercent(share)} of all expenses this period.`,
+      description: `Spending on ${lower(top.categoryName)} (${money(top.amount)}) made up ${formatPercent(share)} of all expenses this period.`,
       metadata: {
         categoryName: top.categoryName,
         amount: top.amount,
@@ -157,7 +164,7 @@ function deriveKeyInsight(input: InsightsInput): DerivedInsight | null {
   return {
     kind: "key",
     title: "Period snapshot",
-    description: `Revenue ${formatMajor(summary.revenue)} against expenses ${formatMajor(summary.expenses)} — ${marginNote}${revDelta !== null ? ` (${formatSignedPercent(revDelta)} vs prior period)` : ""}.`,
+    description: `Revenue ${money(summary.revenue)} against expenses ${money(summary.expenses)} — ${marginNote}${revDelta !== null ? ` (${formatSignedPercent(revDelta)} vs prior period)` : ""}.`,
     metadata: {
       revenue: summary.revenue,
       expenses: summary.expenses,
@@ -185,12 +192,13 @@ function deriveSpendingInsight(input: InsightsInput): DerivedInsight | null {
   }
 
   if (!best) return null;
+  const money = (v: number) => formatMajor(v, input.currency);
   const delta = percentChange(best.amount, best.priorAmount)!;
   const up = delta > 0;
   return {
     kind: "spending",
     title: `${cap(best.categoryName)} ${up ? "increased" : "decreased"} ${formatPercent(Math.abs(delta))}`,
-    description: `Spending on ${lower(best.categoryName)} moved from ${formatMajor(best.priorAmount)} to ${formatMajor(best.amount)} (${formatPercent(delta)}) between the two periods${best.transactions > 0 ? ` across ${best.transactions} transaction${best.transactions === 1 ? "" : "s"}` : ""}.`,
+    description: `Spending on ${lower(best.categoryName)} moved from ${money(best.priorAmount)} to ${money(best.amount)} (${formatPercent(delta)}) between the two periods${best.transactions > 0 ? ` across ${best.transactions} transaction${best.transactions === 1 ? "" : "s"}` : ""}.`,
     metadata: {
       categoryName: best.categoryName,
       priorAmount: best.priorAmount,
@@ -205,14 +213,19 @@ function deriveSpendingInsight(input: InsightsInput): DerivedInsight | null {
  * revenue
  * ------------------------------------------------------------ */
 
-function deriveRevenueInsight(currentRevenue: number, priorRevenue: number): DerivedInsight | null {
+function deriveRevenueInsight(
+  currentRevenue: number,
+  priorRevenue: number,
+  currency: string,
+): DerivedInsight | null {
+  const money = (v: number) => formatMajor(v, currency);
   const delta = percentChange(currentRevenue, priorRevenue);
   if (delta === null) return null;
   const up = delta > 0;
   return {
     kind: "revenue",
     title: `Revenue ${up ? "grew" : "fell"} ${formatPercent(Math.abs(delta))}`,
-    description: `Income moved from ${formatMajor(priorRevenue)} to ${formatMajor(currentRevenue)} (${formatSignedPercent(delta)}) compared with the prior period.`,
+    description: `Income moved from ${money(priorRevenue)} to ${money(currentRevenue)} (${formatSignedPercent(delta)}) compared with the prior period.`,
     metadata: {
       priorRevenue,
       revenue: currentRevenue,
@@ -228,7 +241,9 @@ function deriveRevenueInsight(currentRevenue: number, priorRevenue: number): Der
 function deriveProfitabilityInsight(
   current: PeriodSummary,
   prior: PeriodSummary,
+  currency: string,
 ): DerivedInsight | null {
+  const money = (v: number) => formatMajor(v, currency);
   if (current.profitMargin === null) return null;
   const priorDelta =
     prior.profitMargin === null
@@ -245,7 +260,7 @@ function deriveProfitabilityInsight(
     return {
       kind: "profitability",
       title: `Healthy ${formatPercent(current.profitMargin)} net margin`,
-      description: `You kept ${formatPercent(current.profitMargin)} of every naira of revenue as profit (${formatMajor(current.netProfit)} net).${priorDelta !== null ? ` Margin ${priorDelta >= 0 ? "improved" : "eroded"} ${formatPercent(Math.abs(priorDelta))} vs the prior period.` : ""}`,
+      description: `You kept ${formatPercent(current.profitMargin)} of every unit of revenue as profit (${money(current.netProfit)} net).${priorDelta !== null ? ` Margin ${priorDelta >= 0 ? "improved" : "eroded"} ${formatPercent(Math.abs(priorDelta))} vs the prior period.` : ""}`,
       metadata: meta,
     };
   }
@@ -253,7 +268,7 @@ function deriveProfitabilityInsight(
     return {
       kind: "profitability",
       title: `Thin ${formatPercent(current.profitMargin)} net margin`,
-      description: `Only ${formatPercent(current.profitMargin)} of revenue became profit (${formatMajor(current.netProfit)} net) after expenses of ${formatMajor(current.expenses)}.${priorDelta !== null ? ` That is ${priorDelta >= 0 ? "an improvement" : "a decline"} of ${formatPercent(Math.abs(priorDelta))} vs the prior period.` : ""}`,
+      description: `Only ${formatPercent(current.profitMargin)} of revenue became profit (${money(current.netProfit)} net) after expenses of ${money(current.expenses)}.${priorDelta !== null ? ` That is ${priorDelta >= 0 ? "an improvement" : "a decline"} of ${formatPercent(Math.abs(priorDelta))} vs the prior period.` : ""}`,
       metadata: meta,
     };
   }
@@ -267,6 +282,7 @@ function deriveProfitabilityInsight(
 function deriveAnomalyInsight(input: InsightsInput): DerivedInsight | null {
   const { summary, largestExpense, topCategories } = input;
   if (!largestExpense || largestExpense.amount <= 0 || summary.expenses <= 0) return null;
+  const money = (v: number) => formatMajor(v, input.currency);
   const share = (largestExpense.amount / summary.expenses) * 100;
   if (share < ANOMALY_SHARE * 100) return null;
 
@@ -277,7 +293,7 @@ function deriveAnomalyInsight(input: InsightsInput): DerivedInsight | null {
   return {
     kind: "anomaly",
     title: `A single expense stood out`,
-    description: `${formatMajor(largestExpense.amount)} (${formatPercent(share)} of all expenses)${largestExpense.categoryName ? ` in ${lower(largestExpense.categoryName)}` : ""} dominated the period.${catShare >= 50 ? ` It accounts for ${formatPercent(catShare)} of that category's total spending.` : ""}`,
+    description: `${money(largestExpense.amount)} (${formatPercent(share)} of all expenses)${largestExpense.categoryName ? ` in ${lower(largestExpense.categoryName)}` : ""} dominated the period.${catShare >= 50 ? ` It accounts for ${formatPercent(catShare)} of that category's total spending.` : ""}`,
     metadata: {
       categoryName: largestExpense.categoryName,
       amount: largestExpense.amount,
@@ -293,6 +309,7 @@ function deriveAnomalyInsight(input: InsightsInput): DerivedInsight | null {
 
 function deriveRecommendation(input: InsightsInput): DerivedInsight | null {
   const { summary, topCategories } = input;
+  const money = (v: number) => formatMajor(v, input.currency);
   if (summary.expenses > 0 && topCategories.length > 0) {
     const top = topCategories[0];
     const share = (top.amount / summary.expenses) * 100;
@@ -300,7 +317,7 @@ function deriveRecommendation(input: InsightsInput): DerivedInsight | null {
       return {
         kind: "recommendation",
         title: `Review ${lower(top.categoryName)} spend`,
-        description: `${cap(top.categoryName)} (${formatMajor(top.amount)}) is your largest category at ${formatPercent(share)} of expenses. Review recent ${lower(top.categoryName)} transactions to confirm the spend is still necessary.`,
+        description: `${cap(top.categoryName)} (${money(top.amount)}) is your largest category at ${formatPercent(share)} of expenses. Review recent ${lower(top.categoryName)} transactions to confirm the spend is still necessary.`,
         metadata: {
           categoryName: top.categoryName,
           amount: top.amount,
@@ -337,10 +354,10 @@ function lower(value: string | null): string {
   return value ? value.toLowerCase() : "uncategorized";
 }
 
-function formatMajor(value: number): string {
+function formatMajor(value: number, currency: string): string {
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
-    currency: "NGN",
+    currency,
     maximumFractionDigits: 0,
   }).format(round(value, 0));
 }

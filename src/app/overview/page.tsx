@@ -8,6 +8,7 @@ import { analyticsQuerySchema, type AnalyticsQuery } from "@/lib/validation/inde
 import { OverviewShell } from "@/components/dashboard/overview-shell";
 import { AnalyticsKpiGrid, KpiGridFallback } from "@/components/dashboard/kpi-grid";
 import { OverviewCharts, ChartsFallback } from "@/components/dashboard/overview-charts";
+import { OverviewActionItems } from "@/components/dashboard/overview-actions";
 import { AnalyticsRangeControl } from "@/components/dashboard/analytics-range-control";
 
 type OverviewSearchParams = Record<string, string | string[] | undefined>;
@@ -30,7 +31,8 @@ export default async function OverviewPage({
 
   const raw = await searchParams;
   // Single source of truth: one validated range drives BOTH the KPIs and the
-  // charts below. Invalid or missing ranges degrade to all time.
+  // charts below. Invalid ranges degrade to the useful default (this month);
+  // ?range=all explicitly selects all time.
   const range = parseOverviewRange(raw);
 
   return (
@@ -39,6 +41,11 @@ export default async function OverviewPage({
       userEmail={ctx.user.email}
       businessName={ctx.business.name}
       currency={ctx.business.currency}
+      actions={
+        <Suspense fallback={null}>
+          <OverviewActionItems />
+        </Suspense>
+      }
       rangeControl={
         <AnalyticsRangeControl from={range?.dateFrom} to={range?.dateTo} params={raw} />
       }
@@ -63,16 +70,30 @@ function singleParam(value: string | string[] | undefined): string | undefined {
 }
 
 /**
- * Validate/normalize the page range once. Invalid or missing ranges fall
- * back to all time so the Overview always renders meaningful data.
+ * Resolve the Overview range. An explicit ?range=all keeps all time; a valid
+ * ?from/?to wins; otherwise default to the current month so the page opens on
+ * a useful, comparable period instead of a lifetime aggregate.
  */
 function parseOverviewRange(search: OverviewSearchParams): AnalyticsQuery | undefined {
+  if (singleParam(search.range) === "all") return undefined;
+
   const parsed = analyticsQuerySchema.safeParse({
     dateFrom: singleParam(search.from),
     dateTo: singleParam(search.to),
   });
-  if (!parsed.success) return undefined;
-  const { dateFrom, dateTo } = parsed.data;
-  if (!dateFrom && !dateTo) return undefined;
-  return { dateFrom, dateTo };
+  if (parsed.success) {
+    const { dateFrom, dateTo } = parsed.data;
+    if (dateFrom || dateTo) return { dateFrom, dateTo };
+  }
+  return currentMonthRange();
+}
+
+/** Inclusive [first-of-month, today] window in UTC (server timezone). */
+function currentMonthRange(): AnalyticsQuery {
+  const now = new Date();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return {
+    dateFrom: `${now.getUTCFullYear()}-${month}-01`,
+    dateTo: now.toISOString().slice(0, 10),
+  };
 }

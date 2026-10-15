@@ -90,18 +90,37 @@ describe("getAnalyticsSummary (tenant-scoped KPIs)", () => {
     }
   });
 
+  it("narrows every aggregation to one account while keeping the business bound", async () => {
+    mockPrisma.transaction.groupBy
+      .mockResolvedValueOnce([]) // period
+      .mockResolvedValueOnce([]) // balance
+      .mockResolvedValueOnce([]) // prior period
+      .mockResolvedValueOnce([]); // prior balance
+
+    await getAnalyticsSummary({
+      dateFrom: "2026-02-01",
+      dateTo: "2026-02-28",
+      accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+
+    const calls = mockPrisma.transaction.groupBy.mock.calls;
+    expect(calls).toHaveLength(4);
+    for (const [args] of calls) {
+      // The business id is still the isolation boundary; the account id only
+      // narrows the owner's own rows.
+      expect(args.where.businessId).toBe(businessA.id);
+      expect(args.where.accountId).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    }
+  });
+
   it("reflects the date range: period is capped by dateTo but balance ignores dateFrom", async () => {
-    // First call: inspect the period where (dateFrom + dateTo bounds).
+    // Four groupBy calls for a bounded range: period, balance, prior period,
+    // prior balance.
     mockPrisma.transaction.groupBy
-      .mockResolvedValueOnce([makeGroup("income", 500)])
-      .mockResolvedValueOnce([makeGroup("income", 500)]);
-
-    await getAnalyticsSummary({ dateFrom: "2026-02-01", dateTo: "2026-02-28" });
-
-    // Second call: inspect the balance where (only dateTo caps the snapshot).
-    mockPrisma.transaction.groupBy
-      .mockResolvedValueOnce([makeGroup("income", 5000), makeGroup("expense", 2000)])
-      .mockResolvedValueOnce([makeGroup("income", 5000), makeGroup("expense", 2000)]);
+      .mockResolvedValueOnce([makeGroup("income", 500)]) // period
+      .mockResolvedValueOnce([makeGroup("income", 500)]) // balance
+      .mockResolvedValueOnce([makeGroup("income", 300)]) // prior period
+      .mockResolvedValueOnce([makeGroup("income", 300)]); // prior balance
 
     await getAnalyticsSummary({ dateFrom: "2026-02-01", dateTo: "2026-02-28" });
 
@@ -114,6 +133,41 @@ describe("getAnalyticsSummary (tenant-scoped KPIs)", () => {
     // Balance snapshot ignores dateFrom but still caps at dateTo.
     expect(balanceArgs[0].where.date.lte).toEqual(new Date("2026-02-28T23:59:59.999Z"));
     expect(balanceArgs[0].where.date.gte).toBeUndefined();
+  });
+
+  it("computes the prior period as the same-length span before the window", async () => {
+    mockPrisma.transaction.groupBy
+      .mockResolvedValueOnce([makeGroup("income", 500), makeGroup("expense", 200)]) // period
+      .mockResolvedValueOnce([makeGroup("income", 500), makeGroup("expense", 200)]) // balance
+      .mockResolvedValueOnce([makeGroup("income", 400), makeGroup("expense", 100)]) // prior period
+      .mockResolvedValueOnce([
+        makeGroup("income", 900),
+        makeGroup("expense", 300),
+      ]); // prior balance
+
+    const summary = await getAnalyticsSummary({ dateFrom: "2026-02-01", dateTo: "2026-02-28" });
+
+    expect(summary.prior).not.toBeNull();
+    expect(summary.prior?.revenue).toBe(400);
+    expect(summary.prior?.expenses).toBe(100);
+    expect(summary.prior?.netProfit).toBe(300);
+    expect(summary.prior?.cashBalance).toBe(600);
+    expect(summary.prior?.period).toEqual({ from: "2026-01-04", to: "2026-01-31" });
+
+    // Prior queries are scoped to the session business and bounded.
+    const calls = mockPrisma.transaction.groupBy.mock.calls;
+    expect(calls[2][0].where.businessId).toBe(businessA.id);
+    expect(calls[2][0].where.date.gte).toEqual(new Date("2026-01-04T00:00:00.000Z"));
+    expect(calls[2][0].where.date.lte).toEqual(new Date("2026-01-31T23:59:59.999Z"));
+  });
+
+  it("has no prior period for an all-time window", async () => {
+    mockPrisma.transaction.groupBy.mockResolvedValue([]);
+
+    const summary = await getAnalyticsSummary({});
+
+    expect(summary.prior).toBeNull();
+    expect(mockPrisma.transaction.groupBy).toHaveBeenCalledTimes(2);
   });
 
   it("computes bank balance as the as-of cumulative net position", async () => {

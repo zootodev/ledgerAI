@@ -6,10 +6,12 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
+  AlertTriangle,
   Check,
   FileUp,
   Info,
   RefreshCcw,
+  SlidersHorizontal,
   UploadCloud,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
@@ -24,6 +26,7 @@ import { WizardStepper } from "@/components/import/import-stepper";
 import { ImportSummaryCards } from "@/components/import/import-summary-cards";
 import { ImportRowsTable } from "@/components/import/import-rows-table";
 import { ImportHistory } from "@/components/import/import-history";
+import { ImportExceptions } from "@/components/import/import-exceptions";
 import {
   MAX_IMPORT_FILE_BYTES,
   IMPORT_FIELDS,
@@ -31,6 +34,7 @@ import {
   type ParsedImportFile,
   type ImportFileFormat,
   type RawImportRow,
+  type StatementPeriod,
 } from "@/lib/import/types";
 import {
   parseCsv,
@@ -42,13 +46,41 @@ import {
   categorizeImportRows,
   buildImportPreview,
   shouldIncludeByDefault,
+  filterPreviewRows,
+  countByView,
+  summarizeStatementPeriod,
+  periodsOverlap,
+  IMPORT_REVIEW_VIEWS,
+  IMPORT_REVIEW_VIEW_LABELS,
   type BuiltPreview,
+  type ImportReviewView,
 } from "@/lib/import/index";
 import type { ImportCategoryOption } from "@/lib/import/types";
+import {
+  IMPORT_DRAFT_VERSION,
+  parseDraft,
+  serializeDraft,
+  parseMappingMemo,
+  serializeMappingMemo,
+  parseAccountMemo,
+  serializeAccountMemo,
+  claimImportOwner,
+  draftKey,
+  accountKey,
+  mappingKey,
+  draftMatchesFile,
+  readStorage,
+  writeStorage,
+  removeStorage,
+  sessionStore,
+  localStore,
+  type ImportDraft,
+} from "@/lib/import/draft";
 import {
   getImportFingerprintsAction,
   commitImportAction,
   parsePdfImportAction,
+  getExistingDateRangeAction,
 } from "@/lib/actions/imports";
 import { getCategoryRulesAction } from "@/lib/actions/rules";
 import type { CategoryRuleDto } from "@/types";
@@ -61,6 +93,7 @@ export interface ImportWizardProps {
   categories: CategoryServiceData[];
   histories: ImportHistoryItem[];
   currency: string;
+  businessId: string;
   userName?: string;
   userEmail: string;
   businessName: string;
@@ -85,11 +118,39 @@ const MAPPING_FIELDS: { field: (typeof IMPORT_FIELDS)[number]; label: string; re
   { field: "category", label: "Category column" },
 ];
 
+const DAY_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** Format an ISO day for display, or an em dash when absent. */
+function formatDay(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(`${iso}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? iso : DAY_FORMAT.format(date);
+}
+
+/** Draft/selection maps round-trip through JSON with string keys. */
+function toNumericBoolMap(source: Record<string, boolean>): Record<number, boolean> {
+  const out: Record<number, boolean> = {};
+  for (const [key, value] of Object.entries(source)) out[Number(key)] = value;
+  return out;
+}
+
+function toNumericStringMap(source: Record<string, string>): Record<number, string> {
+  const out: Record<number, string> = {};
+  for (const [key, value] of Object.entries(source)) out[Number(key)] = value;
+  return out;
+}
+
 export function ImportWizard({
   accounts,
   categories,
   histories,
   currency,
+  businessId,
   userName,
   userEmail,
   businessName,
@@ -113,6 +174,11 @@ export function ImportWizard({
   const [selections, setSelections] = React.useState<Record<number, boolean>>({});
   const [overrides, setOverrides] = React.useState<Record<number, string>>({});
   const [accountId, setAccountId] = React.useState("");
+  const [view, setView] = React.useState<ImportReviewView>("all");
+  const [bulkCategory, setBulkCategory] = React.useState("");
+  const [existingRange, setExistingRange] = React.useState<StatementPeriod | null>(null);
+  const [lastResult, setLastResult] = React.useState<ImportCommitServiceResult | null>(null);
+  const [resumable, setResumable] = React.useState<ImportDraft | null>(null);
 
   const buildPreviewFor = React.useCallback(
     async (
@@ -144,6 +210,76 @@ export function ImportWizard({
     }
     return next;
   }, []);
+
+  // Restore pointers to any unfinished review and the last-used account. The
+  // draft is deliberately NOT auto-applied: the user re-selects the file and
+  // we match it, so the wrong statement can never be silently resumed. The
+  // read runs in a microtask callback (not synchronously) to avoid a cascading
+  // render on mount, and is skipped after unmount.
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      // Phase 5: claim the caches for this business first — a different
+      // business's leftovers on a shared browser are purged before we read,
+      // and expired drafts/hints are dropped outright rather than resumed.
+      claimImportOwner(localStore(), sessionStore(), businessId);
+      const draftRaw = readStorage(sessionStore(), draftKey(businessId));
+      const draft = parseDraft(draftRaw);
+      if (!draft && draftRaw) removeStorage(sessionStore(), draftKey(businessId));
+      const accountRaw = readStorage(localStore(), accountKey(businessId));
+      const rememberedAccount = parseAccountMemo(accountRaw);
+      if (!rememberedAccount && accountRaw) {
+        removeStorage(localStore(), accountKey(businessId));
+      }
+      if (cancelled) return;
+      if (draft) setResumable(draft);
+      if (rememberedAccount && accounts.some((a) => a.id === rememberedAccount)) {
+        setAccountId(rememberedAccount);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId, accounts]);
+
+  // Autosave the review decisions so a refresh/accidental navigation does not
+  // discard mapping + per-row choices. Only non-sensitive decisions are kept.
+  React.useEffect(() => {
+    if (!parsed || step < 2) return;
+    const draft: ImportDraft = {
+      v: IMPORT_DRAFT_VERSION,
+      fileName: parsed.fileName,
+      fileSize: file?.size ?? 0,
+      fileLastModified: file?.lastModified ?? 0,
+      fileType: parsed.fileType,
+      mapping,
+      accountId,
+      step,
+      selections: Object.fromEntries(Object.entries(selections)),
+      overrides: Object.fromEntries(Object.entries(overrides)),
+      savedAt: new Date().toISOString(),
+    };
+    writeStorage(sessionStore(), draftKey(businessId), serializeDraft(draft));
+  }, [parsed, file, step, mapping, accountId, selections, overrides, businessId]);
+
+  // Resolve the already-recorded date span when the user reaches confirmation,
+  // for the overlapping-statement-period warning.
+  React.useEffect(() => {
+    if (step !== 4) return;
+    let cancelled = false;
+    void (async () => {
+      const range = await getExistingDateRangeAction(accountId || null);
+      if (!cancelled) setExistingRange(range);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, accountId]);
+
+  const clearDraft = React.useCallback(() => {
+    removeStorage(sessionStore(), draftKey(businessId));
+    setResumable(null);
+  }, [businessId]);
 
   const handleFile = React.useCallback(
     async (next: File) => {
@@ -207,25 +343,67 @@ export function ImportWizard({
         const fps = await getImportFingerprintsAction();
         const businessRules = await getCategoryRulesAction();
 
+        // Prefer a remembered mapping for this exact header set, but only when
+        // it still validates against the file (server re-validates at commit).
+        const remembered = parseMappingMemo(
+          readStorage(localStore(), mappingKey(businessId, file.headers)),
+        );
+        const rememberedValid =
+          remembered && validateMapping(remembered, file.headers).length === 0;
+
+        // Resume the same file's earlier review, if one was saved.
+        const resume =
+          resumable && draftMatchesFile(resumable, next) ? resumable : null;
+
+        let nextMapping: ColumnMapping = rememberedValid ? remembered : detected;
+        if (resume && Object.keys(resume.mapping).length > 0) {
+          nextMapping = resume.mapping;
+        }
+
         setFile(next);
         setParsed(file);
-        setMapping(detected);
+        setMapping(nextMapping);
         setExisting(fps);
         setRules(businessRules);
 
-        const built = await buildPreviewFor(file, detected, fps, businessRules);
+        const built = await buildPreviewFor(file, nextMapping, fps, businessRules);
         setPreview(built);
-        setSelections(applyDefaults(built));
-        setOverrides({});
-        setAccountId("");
-        setStep(2);
+
+        if (resume) {
+          setSelections(toNumericBoolMap(resume.selections));
+          setOverrides(toNumericStringMap(resume.overrides));
+          if (resume.accountId && accounts.some((a) => a.id === resume.accountId)) {
+            setAccountId(resume.accountId);
+          }
+          setStep(Math.min(Math.max(resume.step, 2), 4));
+          clearDraft();
+          toast.info({
+            title: "Review restored",
+            description: `Picked up where you left off with ${resume.fileName}.`,
+          });
+        } else {
+          setSelections(applyDefaults(built));
+          setOverrides({});
+          setStep(2);
+        }
+        setView("all");
+        setBulkCategory("");
       } catch (e) {
         setParseError(e instanceof Error ? e.message : "This file could not be parsed.");
       } finally {
         setWorking(false);
       }
     },
-    [buildPreviewFor, applyDefaults, working],
+    [
+      buildPreviewFor,
+      applyDefaults,
+      working,
+      businessId,
+      resumable,
+      accounts,
+      clearDraft,
+      toast,
+    ],
   );
 
   const changeMapping = React.useCallback(
@@ -265,7 +443,12 @@ export function ImportWizard({
     setSelections({});
     setOverrides({});
     setAccountId("");
-  }, []);
+    setView("all");
+    setBulkCategory("");
+    setExistingRange(null);
+    setLastResult(null);
+    clearDraft();
+  }, [clearDraft]);
 
   const handleCommit = async () => {
     if (!parsed || !preview) return;
@@ -296,6 +479,21 @@ export function ImportWizard({
 
       const res = await commitImportAction({}, fd);
       if (res.ok && res.result) {
+        // Remember this format + account for next time (wrapped with a
+        // bounded saved-at timestamp), and drop the draft now that it has
+        // been committed.
+        writeStorage(
+          localStore(),
+          mappingKey(businessId, parsed.headers),
+          serializeMappingMemo(mapping),
+        );
+        writeStorage(
+          localStore(),
+          accountKey(businessId),
+          serializeAccountMemo(accountId),
+        );
+        clearDraft();
+
         const skipped =
           res.result.existingDuplicates + res.result.inFileDuplicates;
         const title =
@@ -307,7 +505,8 @@ export function ImportWizard({
           description: <ImportSuccessDescription result={res.result} />,
         });
         router.refresh();
-        reset();
+        setLastResult(res.result);
+        setStep(1);
       } else {
         toast.error({ title: "Import failed", description: res.error });
       }
@@ -322,6 +521,31 @@ export function ImportWizard({
   const includeCount = preview
     ? Object.values(selections).filter(Boolean).length
     : 0;
+
+  const period = preview ? summarizeStatementPeriod(preview.rows) : null;
+  const viewCounts = preview ? countByView(preview.rows) : null;
+  const visibleRows = React.useMemo(
+    () => (preview ? filterPreviewRows(preview.rows, view) : []),
+    [preview, view],
+  );
+  const overlap =
+    step === 4 && period && existingRange ? periodsOverlap(period, existingRange) : false;
+  const overrideCount = Object.keys(overrides).length;
+
+  const applyBulkCategory = () => {
+    if (!preview || !bulkCategory) return;
+    const category = categories.find((c) => c.id === bulkCategory);
+    if (!category) return;
+    setOverrides((prev) => {
+      const next = { ...prev };
+      for (const row of preview.rows) {
+        if (!selections[row.rowIndex]) continue;
+        if (row.type !== category.type) continue;
+        next[row.rowIndex] = category.id;
+      }
+      return next;
+    });
+  };
 
   return (
     <AppShell
@@ -341,14 +565,24 @@ export function ImportWizard({
               Bring in a CSV, Excel or PDF bank statement · {businessName}
             </p>
           </div>
-          {step > 1 && (
+          {!lastResult && step > 1 && (
             <Button variant="outline" size="sm" onClick={reset} leftIcon={<RefreshCcw className="h-3.5 w-3.5" />}>
               Start over
             </Button>
           )}
         </div>
 
-        <WizardStepper steps={STEPS} current={step} />
+        {lastResult ? (
+          <ImportCompletePanel
+            result={lastResult}
+            onStartOver={() => {
+              setLastResult(null);
+              reset();
+            }}
+          />
+        ) : (
+          <>
+            <WizardStepper steps={STEPS} current={step} />
 
         {/* ------------------------------------------------------------------ */}
         {/* Step 1 · Upload                                                    */}
@@ -365,6 +599,20 @@ export function ImportWizard({
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {resumable && (
+                <div className="mb-4">
+                  <Alert
+                    tone="info"
+                    title="Unfinished review found"
+                    onDismiss={clearDraft}
+                  >
+                    <p>
+                      You were reviewing <span className="font-medium">{resumable.fileName}</span>.
+                      Choose the same file again to pick up where you left off.
+                    </p>
+                  </Alert>
+                </div>
+              )}
               <div
                 role="button"
                 tabIndex={0}
@@ -553,6 +801,69 @@ export function ImportWizard({
                 </Alert>
               )}
 
+              {period && (period.from || period.to) && (
+                <p className="text-sm text-muted">
+                  Statement period:{" "}
+                  <span className="font-medium text-foreground">
+                    {formatDay(period.from)} – {formatDay(period.to)}
+                  </span>
+                </p>
+              )}
+
+              {viewCounts && (
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label="Filter rows by status"
+                >
+                  {IMPORT_REVIEW_VIEWS.map((option) => (
+                    <Button
+                      key={option}
+                      variant={view === option ? "secondary" : "outline"}
+                      size="sm"
+                      aria-pressed={view === option}
+                      disabled={option !== "all" && viewCounts[option] === 0}
+                      onClick={() => setView(option)}
+                    >
+                      {IMPORT_REVIEW_VIEW_LABELS[option]} ({viewCounts[option]})
+                    </Button>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={bulkCategory}
+                  onChange={(e) => setBulkCategory(e.target.value)}
+                  className="w-56"
+                  aria-label="Choose a category to apply to selected rows"
+                >
+                  <option value="">Set category for selected…</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!bulkCategory || includeCount === 0}
+                  onClick={applyBulkCategory}
+                  leftIcon={<SlidersHorizontal className="h-3.5 w-3.5" />}
+                >
+                  Apply to selected rows
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={overrideCount === 0}
+                  onClick={() => setOverrides({})}
+                >
+                  Reset categories{overrideCount > 0 ? ` (${overrideCount})` : ""}
+                </Button>
+              </div>
+
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-muted tabular-nums">
                   {includeCount} of {preview.rows.length} rows selected
@@ -597,9 +908,13 @@ export function ImportWizard({
                     />
                   ))}
                 </div>
+              ) : visibleRows.length === 0 ? (
+                <p className="rounded-field border border-border bg-surface-subtle/40 px-3 py-6 text-center text-sm text-muted">
+                  No rows match this filter.
+                </p>
               ) : (
                 <ImportRowsTable
-                  rows={preview.rows}
+                  rows={visibleRows}
                   currency={currency}
                   categories={categories}
                   selections={selections}
@@ -649,6 +964,29 @@ export function ImportWizard({
             <CardContent className="space-y-4">
               <ImportSummaryCards summary={preview.summary} />
 
+              {period && (period.from || period.to) && (
+                <p className="text-sm text-muted">
+                  Statement period:{" "}
+                  <span className="font-medium text-foreground">
+                    {formatDay(period.from)} – {formatDay(period.to)}
+                  </span>
+                  {existingRange && (existingRange.from || existingRange.to) && (
+                    <>
+                      {" "}
+                      · you already have records from {formatDay(existingRange.from)} to{" "}
+                      {formatDay(existingRange.to)}
+                    </>
+                  )}
+                </p>
+              )}
+
+              {overlap && (
+                <Alert tone="warning" title="This period overlaps transactions you already have">
+                  Exact duplicates are skipped automatically; anything genuinely new is still
+                  imported.
+                </Alert>
+              )}
+
               <label className="flex w-full max-w-sm flex-col gap-1.5">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted">
                   Account (optional)
@@ -690,6 +1028,8 @@ export function ImportWizard({
               </div>
             </CardContent>
           </Card>
+        )}
+          </>
         )}
 
         <ImportHistory items={histories} />
@@ -753,5 +1093,59 @@ export function ImportSuccessDescription({ result }: ImportSuccessDescriptionPro
         </p>
       )}
     </>
+  );
+}
+
+export interface ImportCompletePanelProps {
+  result: ImportCommitServiceResult;
+  onStartOver: () => void;
+}
+
+/**
+ * Durable post-import summary shown in place of the wizard. It keeps the
+ * exception queue (rows that were not written, with reasons) visible after the
+ * transient toast disappears.
+ */
+export function ImportCompletePanel({ result, onStartOver }: ImportCompletePanelProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Check className="h-4 w-4 text-success" aria-hidden="true" />
+          Import complete
+        </CardTitle>
+        <CardDescription>
+          <ImportSuccessDescription result={result} />
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {result.exceptions.length > 0 ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
+              <h3 className="text-sm font-medium text-foreground">
+                {result.exceptions.length} row
+                {result.exceptions.length === 1 ? "" : "s"} not imported
+              </h3>
+            </div>
+            <p className="text-xs text-muted">
+              These rows were skipped. Fix the file or add them manually if any are wrong.
+            </p>
+            <ImportExceptions exceptions={result.exceptions} />
+          </div>
+        ) : (
+          <p className="text-sm text-muted">Every row in this statement was handled.</p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+          <Button variant="outline" onClick={onStartOver}>
+            Import another statement
+          </Button>
+          <Link href="/transactions" className="text-sm text-brand underline">
+            View transactions
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

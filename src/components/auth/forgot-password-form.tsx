@@ -22,6 +22,7 @@ export function ForgotPasswordForm() {
       <h1 className="text-xl font-semibold text-foreground">Reset your password</h1>
       <p className="mt-1 text-sm text-muted">
         Enter the email you signed up with and we&apos;ll send you a reset link.
+        The link expires after 24 hours — check spam if it doesn&apos;t arrive.
       </p>
 
       <form action={formAction} suppressHydrationWarning className="mt-6 flex flex-col gap-4">

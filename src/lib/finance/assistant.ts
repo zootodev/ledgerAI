@@ -487,11 +487,13 @@ export function comparisonPeriodLabel(query: AssistantQuery, now: Date): string 
  * Answer narration (verified figures only)
  * ------------------------------------------------------------ */
 
-/** Answer a parsed query from verified metrics (never guesses). */
+/** Answer a parsed query from verified metrics (never guesses).
+ *  `currency` is the authenticated business's currency — callers must always
+ *  pass it through; there is no hard-coded NGN fallback. */
 export function answerFromMetrics(
   query: AssistantQuery,
   metrics: AssistantMetrics,
-  currency = "NGN",
+  currency: string,
   now: Date = new Date(),
 ): AssistantAnswer {
   const money = (v: number) =>
@@ -1010,8 +1012,9 @@ function targetLabel(target: ComparisonTarget): string {
 }
 
 /**
- * "went from ₦X to ₦Y (+Z%)" for a single metric; null when neither period has
- * a figure (baseline 0 with no change is reported without a percentage).
+ * "went from ₦X to ₦Y (+Z%)" — shown here with the NGN symbol, but always
+ * rendered in the business currency; null when neither period has a figure
+ * (baseline 0 with no change is reported without a percentage).
  */
 function deltaWording(
   current: number,
@@ -1028,8 +1031,8 @@ function deltaWording(
 
 /**
  * Label-prefixed version of deltaWording for the all-target comparison
- * ("revenue went from ₦X to ₦Y …"); null when the metric was idle in both
- * periods.
+ * ("revenue went from ₦X to ₦Y …" — always in the business currency); null
+ * when the metric was idle in both periods.
  */
 function changePhrase(
   label: string,

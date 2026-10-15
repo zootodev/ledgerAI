@@ -94,8 +94,16 @@ export function round(value: number, decimals = 2): number {
   return Math.round((value + Number.EPSILON) * factor) / factor;
 }
 
-/** Human-safe formatting of major-units amounts for display. */
-export function formatAmount(value: number, currency = "NGN"): string {
+/**
+ * Human-safe formatting of major-units amounts for display.
+ *
+ * `currency` is REQUIRED and must be the authenticated business's ISO 4217
+ * code, read from `requireAuthContext()` on the server and threaded down as a
+ * prop — never a client value. There is deliberately no default/fallback so a
+ * missing currency fails typecheck/compile instead of silently mislabeling a
+ * non-NGN tenant's money as NGN.
+ */
+export function formatAmount(value: number, currency: string): string {
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency,

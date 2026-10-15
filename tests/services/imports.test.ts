@@ -22,6 +22,7 @@ import { parsePdf } from "@/lib/import/parse-pdf";
 import {
   listImportHistory,
   getExistingFingerprints,
+  getExistingDateRange,
   commitImport,
 } from "@/lib/services/imports";
 import { categorizeImportRow } from "@/lib/import/index";
@@ -63,6 +64,7 @@ const mockPrisma = {
   transaction: {
     findMany: vi.fn(),
     createMany: vi.fn(),
+    aggregate: vi.fn(),
   },
   category: { findMany: vi.fn(), findFirst: vi.fn() },
   categoryRule: { findMany: vi.fn(), upsert: vi.fn() },
@@ -1146,5 +1148,158 @@ describe("commitImport", () => {
 
     expect(mockPrisma.transaction.createMany).not.toHaveBeenCalled();
     expect(mockPrisma.import.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("getExistingDateRange", () => {
+  beforeEach(() => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    mockPrisma.business.findFirst.mockResolvedValue(businessA);
+  });
+
+  it("returns the inclusive ISO span for the session business", async () => {
+    mockPrisma.transaction.aggregate.mockResolvedValue({
+      _min: { date: new Date("2026-01-05T00:00:00.000Z") },
+      _max: { date: new Date("2026-03-31T00:00:00.000Z") },
+    });
+
+    const range = await getExistingDateRange(null);
+    expect(range).toEqual({ from: "2026-01-05", to: "2026-03-31" });
+    expect(mockPrisma.transaction.aggregate.mock.calls[0][0].where).toEqual({
+      businessId: businessA.id,
+    });
+  });
+
+  it("scopes to an owned account when an account id is given", async () => {
+    mockPrisma.account.findFirst.mockResolvedValue({ id: "acc-a" });
+    mockPrisma.transaction.aggregate.mockResolvedValue({
+      _min: { date: new Date("2026-02-01T00:00:00.000Z") },
+      _max: { date: new Date("2026-02-28T00:00:00.000Z") },
+    });
+
+    const range = await getExistingDateRange("acc-a");
+    expect(range).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(mockPrisma.account.findFirst.mock.calls[0][0].where).toEqual({
+      id: "acc-a",
+      businessId: businessA.id,
+    });
+    expect(mockPrisma.transaction.aggregate.mock.calls[0][0].where).toEqual({
+      businessId: businessA.id,
+      accountId: "acc-a",
+    });
+  });
+
+  it("ignores an unknown/foreign account id and falls back to the business range", async () => {
+    mockPrisma.account.findFirst.mockResolvedValue(undefined);
+    mockPrisma.transaction.aggregate.mockResolvedValue({
+      _min: { date: null },
+      _max: { date: null },
+    });
+
+    const range = await getExistingDateRange("acc-other-biz");
+    expect(range).toEqual({ from: null, to: null });
+    // Never scoped by the foreign id — only the session business is queried.
+    expect(mockPrisma.transaction.aggregate.mock.calls[0][0].where).toEqual({
+      businessId: businessA.id,
+    });
+  });
+});
+
+describe("commitImport exception queue", () => {
+  beforeEach(() => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    mockPrisma.business.findFirst.mockResolvedValue(businessA);
+    mockPrisma.categoryRule.findMany.mockResolvedValue([]);
+    mockPrisma.category.findFirst.mockResolvedValue(null);
+  });
+
+  it("returns one bounded exception per non-committed row with reasons and display rows", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      {
+        date: new Date("2026-02-14"),
+        type: "income",
+        description: "Stripe payout",
+        amount: makeDecimal(4000),
+        reference: null,
+      },
+    ]);
+    mockPrisma.category.findMany.mockResolvedValue([
+      makeCategoryRow({ id: SYS_OTHER_INCOME, name: "Other Income", type: "income" }),
+      makeCategoryRow({ id: SYS_TRANSPORTATION, name: "Transportation" }),
+      makeCategoryRow({ id: SYS_RENT, name: "Rent" }),
+      makeCategoryRow({ id: SYS_OTHER, name: "Other" }),
+    ]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 2 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-exc-1" });
+
+    const result = await commitImport(csvBytes(STATEMENT), commitInput());
+
+    expect(result.exceptions).toHaveLength(3);
+    const byReason = Object.fromEntries(
+      result.exceptions.map((e) => [e.reason, e]),
+    ) as Record<string, (typeof result.exceptions)[number]>;
+
+    expect(byReason.duplicate_in_file).toMatchObject({
+      displayRow: 2,
+      sourceRow: 3,
+      reason: "duplicate_in_file",
+    });
+    expect(byReason.invalid).toMatchObject({
+      displayRow: 4,
+      sourceRow: 5,
+      reason: "invalid",
+    });
+    expect(byReason.invalid.messages.length).toBeGreaterThan(0);
+    expect(byReason.duplicate_existing).toMatchObject({
+      displayRow: 5,
+      sourceRow: 6,
+      reason: "duplicate_existing",
+    });
+
+    const importData = mockPrisma.import.create.mock.calls[0][0].data as {
+      errors: { exceptions: unknown[] };
+    };
+    expect(importData.errors.exceptions).toHaveLength(3);
+  });
+
+  it("records user-skipped rows as excluded exceptions", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([makeCategoryRow()]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-exc-2" });
+
+    const result = await commitImport(
+      csvBytes(STATEMENT),
+      commitInput({ selections: [{ rowIndex: 0, include: true, categoryId: null }] }),
+    );
+
+    expect(result.excluded).toBe(3);
+    const excluded = result.exceptions.filter((e) => e.reason === "excluded");
+    expect(excluded).toHaveLength(3);
+    expect(result.exceptions.some((e) => e.reason === "invalid")).toBe(true);
+  });
+
+  it("has an empty exception queue for a clean import", async () => {
+    const statement = ["Date,Description,Amount", "2026-03-01,Mystery charge,-300.00"].join("\n");
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([makeCategoryRow()]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-exc-3" });
+
+    const result = await commitImport(
+      csvBytes(statement),
+      commitInput({
+        fileName: "clean.csv",
+        selections: [{ rowIndex: 0, include: true, categoryId: null }],
+      }),
+    );
+
+    expect(result.imported).toBe(1);
+    expect(result.exceptions).toEqual([]);
+
+    const importData = mockPrisma.import.create.mock.calls[0][0].data as {
+      errors?: unknown;
+    };
+    expect(importData.errors).toBeUndefined();
   });
 });

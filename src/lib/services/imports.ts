@@ -12,6 +12,7 @@ import {
   fallbackCategoryName,
 } from "@/lib/import/index";
 import { extractMerchantKey } from "@/lib/ai/merchant-key";
+import { MAX_IMPORT_EXCEPTIONS } from "@/lib/import/types";
 import { parsePdf } from "@/lib/import/parse-pdf";
 import { categoryMatchesRowType } from "@/lib/ai/rules";
 import { persistLearnedRules } from "@/lib/services/rules";
@@ -19,6 +20,7 @@ import type { CategoryRuleLearnInput } from "@/lib/validation/rules";
 import { canonicalAmount } from "@/lib/import/dedupe";
 import type {
   ImportCategoryOption,
+  ImportException,
   ImportSuggestion,
   NormalizedImportRow,
 } from "@/lib/import/types";
@@ -49,6 +51,8 @@ export interface ImportHistoryItem {
     existingDuplicates: number;
     inFileDuplicates: number;
     excluded: number;
+    /** Bounded post-import exception queue (rows not written). */
+    exceptions: ImportException[];
   } | null;
   createdAt: string;
   completedAt: string | null;
@@ -64,6 +68,8 @@ export interface ImportCommitServiceResult {
   importId: string;
   /** How many category rules were remembered from review corrections. */
   learnedRuleCount: number;
+  /** Bounded exception queue: rows that were not written, with reasons. */
+  exceptions: ImportException[];
 }
 
 export type { ImportCommitInput };
@@ -79,6 +85,45 @@ export async function listImportHistory(limit = 20): Promise<ImportHistoryItem[]
     take: Math.max(1, Math.min(limit, 100)),
   });
   return imports.map(toHistoryDto);
+}
+
+/** Inclusive date span of the current business's recorded transactions. */
+export interface ExistingDateRange {
+  from: string | null;
+  to: string | null;
+}
+
+/**
+ * The earliest/latest transaction date already recorded for the session
+ * business, optionally scoped to one owned account. Used only to warn about
+ * a statement period that overlaps data the user already has. A client
+ * account id is honoured only when it belongs to the business; an unknown or
+ * foreign id falls back to the business-wide range (never another tenant).
+ */
+export async function getExistingDateRange(
+  accountId?: string | null,
+): Promise<ExistingDateRange> {
+  const { prisma, business } = await requireAuthContext();
+  let scopedAccountId: string | null = null;
+  if (accountId) {
+    const account = await prisma.account.findFirst({
+      where: { id: accountId, businessId: business.id },
+      select: { id: true },
+    });
+    scopedAccountId = account?.id ?? null;
+  }
+  const agg = await prisma.transaction.aggregate({
+    where: {
+      businessId: business.id,
+      ...(scopedAccountId ? { accountId: scopedAccountId } : {}),
+    },
+    _min: { date: true },
+    _max: { date: true },
+  });
+  return {
+    from: agg._min.date ? agg._min.date.toISOString().slice(0, 10) : null,
+    to: agg._max.date ? agg._max.date.toISOString().slice(0, 10) : null,
+  };
 }
 
 /**
@@ -158,20 +203,45 @@ export async function commitImport(
   const errors: { sourceRow: number; message: string }[] = [];
   const reasons = { invalid: 0, existing: 0, inFile: 0, excluded: 0 };
 
+  // Bounded post-import exception queue: every row that is NOT written is
+  // recorded with a machine-readable reason so the review step and the
+  // import history can surface it. Capped so the JSON stays small.
+  const exceptions: ImportException[] = [];
+  const pushException = (
+    row: NormalizedImportRow,
+    displayIndex: number,
+    reason: ImportException["reason"],
+    messages: string[],
+  ): void => {
+    if (exceptions.length >= MAX_IMPORT_EXCEPTIONS) return;
+    exceptions.push({
+      sourceRow: row.sourceRow,
+      displayRow: displayIndex + 1,
+      reason,
+      description: row.description,
+      date: row.date || row.rawDate,
+      amount: row.amount,
+      messages,
+    });
+  };
+
   // Learned-rule candidates from review corrections: keyed by merchant key.
   // A value of null marks a conflict (same key corrected to different
   // categories) and the whole key is skipped.
   const learnCandidates = new Map<string, string | null>();
 
-  for (const row of normalized) {
+  for (let index = 0; index < normalized.length; index += 1) {
+    const row = normalized[index];
     const tag = tags.get(row.rowIndex);
     const selection = selected.get(row.rowIndex);
 
     if (row.errors.length > 0) {
       reasons.invalid += 1;
-      for (const message of row.errors.slice(0, 4)) {
+      const messages = row.errors.slice(0, 4);
+      for (const message of messages) {
         errors.push({ sourceRow: row.sourceRow, message });
       }
+      pushException(row, index, "invalid", messages);
       continue;
     }
 
@@ -184,12 +254,14 @@ export async function commitImport(
       !(selection?.include && selection.importAnyway === true)
     ) {
       reasons.existing += 1;
+      pushException(row, index, "duplicate_existing", []);
       continue;
     }
 
     // The user chose not to import this row.
     if (!selection || !selection.include) {
       reasons.excluded += 1;
+      pushException(row, index, "excluded", []);
       continue;
     }
 
@@ -200,6 +272,7 @@ export async function commitImport(
     const fp = fingerprintOf(row);
     if (committedFingerprints.has(fp)) {
       reasons.inFile += 1;
+      pushException(row, index, "duplicate_in_file", []);
       continue;
     }
 
@@ -251,6 +324,11 @@ export async function commitImport(
     if (toCreate.length > 0) {
       await tx.transaction.createMany({ data: toCreate });
     }
+    const hasReasons =
+      reasons.invalid > 0 ||
+      reasons.existing > 0 ||
+      reasons.inFile > 0 ||
+      reasons.excluded > 0;
     const record = await tx.import.create({
       data: {
         businessId: business.id,
@@ -261,14 +339,15 @@ export async function commitImport(
         transactionsFound: normalized.length,
         transactionsImported: toCreate.length,
         errors:
-          reasons.invalid > 0 || errors.length > 0
-            ? {
+          hasReasons || errors.length > 0
+            ? ({
                 invalidRows: reasons.invalid,
                 errors: errors.slice(0, 50),
                 existingDuplicates: reasons.existing,
                 inFileDuplicates: reasons.inFile,
                 excluded: reasons.excluded,
-              }
+                exceptions,
+              } as unknown as Prisma.InputJsonObject)
             : undefined,
         completedAt: new Date(),
       },
@@ -297,6 +376,7 @@ export async function commitImport(
     excluded: reasons.excluded,
     importId,
     learnedRuleCount,
+    exceptions,
   };
 }
 
@@ -514,6 +594,7 @@ function toHistoryDto(m: ImportModel): ImportHistoryItem {
       existingDuplicates?: number;
       inFileDuplicates?: number;
       excluded?: number;
+      exceptions?: unknown[];
     };
     const list = Array.isArray(raw.errors) ? raw.errors : [];
     errors = {
@@ -524,6 +605,7 @@ function toHistoryDto(m: ImportModel): ImportHistoryItem {
       inFileDuplicates:
         typeof raw.inFileDuplicates === "number" ? raw.inFileDuplicates : 0,
       excluded: typeof raw.excluded === "number" ? raw.excluded : 0,
+      exceptions: parseExceptions(raw.exceptions),
     };
   }
   return {
@@ -537,4 +619,40 @@ function toHistoryDto(m: ImportModel): ImportHistoryItem {
     createdAt: m.createdAt.toISOString(),
     completedAt: m.completedAt ? m.completedAt.toISOString() : null,
   };
+}
+
+const EXCEPTION_REASONS: readonly ImportException["reason"][] = [
+  "invalid",
+  "duplicate_existing",
+  "duplicate_in_file",
+  "excluded",
+];
+
+/**
+ * Defensively narrow the persisted exception JSON back into typed entries,
+ * dropping anything malformed. Old imports (no exceptions array) yield [].
+ */
+function parseExceptions(value: unknown): ImportException[] {
+  if (!Array.isArray(value)) return [];
+  const out: ImportException[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const reason = e.reason;
+    if (typeof reason !== "string" || !EXCEPTION_REASONS.includes(reason as ImportException["reason"])) {
+      continue;
+    }
+    out.push({
+      sourceRow: typeof e.sourceRow === "number" ? e.sourceRow : 0,
+      displayRow: typeof e.displayRow === "number" ? e.displayRow : 0,
+      reason: reason as ImportException["reason"],
+      description: typeof e.description === "string" ? e.description : "",
+      date: typeof e.date === "string" ? e.date : "",
+      amount: typeof e.amount === "string" ? e.amount : "",
+      messages: Array.isArray(e.messages)
+        ? e.messages.filter((m): m is string => typeof m === "string")
+        : [],
+    });
+  }
+  return out;
 }

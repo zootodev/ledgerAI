@@ -114,6 +114,7 @@ model Transaction {
   id          String   @id @default(uuid()) @db.Uuid
   businessId  String   @map("business_id") @db.Uuid
   accountId   String?  @map("account_id") @db.Uuid
+  importId    String?  @map("import_id") @db.Uuid
   date        DateTime @db.Date
   description String
   amount      Decimal  @db.Decimal(18, 2)
@@ -133,11 +134,13 @@ model Transaction {
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   account  Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  import   Import?   @relation(fields: [importId], references: [id], onDelete: SetNull)
 
   @@index([businessId, date])
   @@index([businessId, type, date])
   @@index([businessId, categoryId, date])
   @@index([fingerprint])
+  @@index([importId])
   @@map("transactions")
 }
 
@@ -156,8 +159,9 @@ model Import {
   createdAt            DateTime @default(now()) @map("created_at")
   completedAt          DateTime? @map("completed_at")
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  account  Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account      Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
 
   @@index([businessId])
   @@map("imports")

@@ -438,6 +438,32 @@ describe("browser QA: savings both-readings are explicit and honest", () => {
     expect(outcome.text).toContain("nothing to report as money you spent less");
     expect(outcome.text).not.toContain("the amount you saved under this reading");
   });
+
+  it("renders composed answers in the business currency (GBP tenants never see ₦)", async () => {
+    // Same deterministic metrics, different session business: every composed
+    // figure must follow the authenticated business currency end to end.
+    mockedRequireAuthContext.mockResolvedValue({
+      user: userA,
+      business: { ...businessA, currency: "GBP" },
+      prisma: mockPrisma as never,
+    });
+    seedSavingsClarification();
+    stubExpenseMetrics(
+      [{ type: "income", amount: 900_000 }, { type: "expense", amount: 720_000 }],
+      [{ type: "income", amount: 850_000 }, { type: "expense", amount: 800_000 }],
+      [],
+      [],
+      [],
+    );
+
+    const outcome = await askAssistantQuestion("Both", "c1", NOW);
+
+    expect(outcome.kind).toBe("answer");
+    expect(outcome.text).toContain("spent £80,000 less than in July 2026");
+    expect(outcome.text).not.toContain("₦");
+    expect(outcome.text).not.toContain("NGN");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Savings — both readings");
+  });
 });
 
 describe("browser QA issue 3: clarification selection (The two / Both)", () => {

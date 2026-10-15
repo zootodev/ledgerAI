@@ -89,6 +89,10 @@ export const transactionListQuerySchema = z.object({
   categoryId: z.uuid().optional(),
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** "1" restricts to non-transfer transactions with no category. */
+  uncategorized: z.literal("1").optional(),
+  /** "1" restricts to low-confidence AI categorizations needing review. */
+  lowConfidence: z.literal("1").optional(),
   sortBy: z.enum(TRANSACTION_SORT_KEYS).default("date"),
   sortDir: z.enum(["asc", "desc"]).default("desc"),
 });

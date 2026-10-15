@@ -6,7 +6,6 @@ import {
   TrendingDown,
   FileBarChart,
   Sparkles,
-  MessageSquareText,
   Upload,
   Settings,
 } from "lucide-react";
@@ -27,7 +26,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Expenses", href: "/expenses", icon: TrendingDown, section: "main" },
   { label: "Reports", href: "/reports", icon: FileBarChart, section: "analysis" },
   { label: "AI Insights", href: "/insights", icon: Sparkles, section: "analysis" },
-  { label: "Ask LedgerAI", href: "/ask-v2", icon: MessageSquareText, section: "analysis", badge: "Soon" },
+  // Phase 5: the Ask feature is intentionally absent from navigation while it
+  // is incomplete. The /ask and /ask-v2 routes exist but redirect; do not
+  // re-add a nav item until Ask ships as a finished product surface.
   { label: "Import", href: "/import", icon: Upload, section: "manage" },
   { label: "Settings", href: "/settings", icon: Settings, section: "manage" },
 ];

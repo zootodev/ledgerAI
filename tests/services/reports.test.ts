@@ -111,6 +111,7 @@ describe("getReportData (composition)", () => {
       netProfit: data.summary.netProfit,
       profitMargin: data.summary.profitMargin,
       period: data.summary.period,
+      prior: data.summary.prior,
     });
   });
 
@@ -196,6 +197,22 @@ describe("getCategoryReport (breakdown)", () => {
     expect(args.where.date.gte).toEqual(new Date("2026-02-01T00:00:00.000Z"));
     expect(args.where.date.lte).toEqual(new Date("2026-02-28T23:59:59.999Z"));
   });
+
+  it("narrows to one owned account while keeping the session business bound", async () => {
+    mockPrisma.transaction.groupBy.mockResolvedValue([]);
+
+    await getCategoryReport({
+      dateFrom: "2026-02-01",
+      dateTo: "2026-02-28",
+      accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+
+    const [args] = mockPrisma.transaction.groupBy.mock.calls[0];
+    expect(args.where.businessId).toBe(businessA.id);
+    expect(args.where.type).toEqual({ in: ["income", "expense"] });
+    expect(args.where.accountId).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(args.where.date.gte).toEqual(new Date("2026-02-01T00:00:00.000Z"));
+  });
 });
 
 describe("CSV report serializers", () => {
@@ -208,6 +225,8 @@ describe("CSV report serializers", () => {
       profitMargin: 33.38,
       cashBalance: 5000.5,
       period: { from: "2026-01-01", to: "2026-01-31" },
+      prior: null,
+      hasAnyTransactions: true,
     };
     expect(buildSummaryCsv(summary)).toBe(
       [
@@ -350,6 +369,7 @@ describe("CSV report serializers", () => {
       netProfit: 4000.5,
       profitMargin: null,
       period: { from: "2026-01-01", to: "2026-01-31" },
+      prior: null,
     };
     expect(buildProfitCsv(report)).toBe(
       [

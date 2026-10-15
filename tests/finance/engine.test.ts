@@ -216,7 +216,18 @@ describe("toMinorUnits / fromMinorUnits", () => {
 
 describe("formatAmount", () => {
   it("formats major units as a Naira currency string", () => {
-    const out = formatAmount(2450000);
+    const out = formatAmount(2450000, "NGN");
     expect(out).toContain("2,450,000");
+  });
+
+  it("renders the requested business currency with no silent NGN fallback", () => {
+    // Asserted loosely because host ICU output differs slightly per runtime
+    // (USD/CAD render as "US$"/"CA$"); the currency itself must never be NGN
+    // when a non-NGN code is supplied.
+    expect(formatAmount(1250, "NGN")).toMatch(/₦|NGN/);
+    expect(formatAmount(1250, "GBP")).toContain("£");
+    expect(formatAmount(1250, "USD")).toContain("$");
+    expect(formatAmount(1250, "GHS")).toMatch(/GHS/);
+    expect(formatAmount(1250, "USD")).not.toContain("₦");
   });
 });

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import {
   commitImport,
   getExistingFingerprints,
+  getExistingDateRange,
+  type ExistingDateRange,
   type ImportCommitServiceResult,
 } from "@/lib/services/imports";
 import { importCommitInputSchema } from "@/lib/validation/import";
@@ -44,6 +46,25 @@ export async function getImportFingerprintsAction(): Promise<string[]> {
     return await getExistingFingerprints();
   } catch {
     return [];
+  }
+}
+
+/**
+ * The earliest/latest transaction date already recorded for the session
+ * business (optionally scoped to one owned account), so the review step can
+ * warn about an overlapping statement period. Returns empty bounds on error
+ * — a missing warning must never block an import.
+ */
+export async function getExistingDateRangeAction(
+  accountId: string | null,
+): Promise<ExistingDateRange> {
+  try {
+    const ctx = await requireAuthContext();
+    const decision = await consumeConfiguredLimit("import:preview", ctx.business.id);
+    if (!decision.ok) return { from: null, to: null };
+    return await getExistingDateRange(accountId);
+  } catch {
+    return { from: null, to: null };
   }
 }
 

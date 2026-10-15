@@ -1,12 +1,15 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/layout/app-shell";
 import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { InsightCard } from "@/components/insights/insight-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { Sparkles, FileQuestion } from "lucide-react";
+import { BusinessWideNote } from "@/components/dashboard/business-wide-note";
+import { Sparkles, FileQuestion, FileUp, Plus } from "lucide-react";
 import type { InspectInsight } from "@/lib/types/insights";
 
 export interface InsightsShellProps {
@@ -59,6 +62,7 @@ export function InsightsShell({
         </div>
 
         {rangeControl}
+        <BusinessWideNote />
 
         <Alert tone="info" title="Guidance, not accounting advice">
           Insights are computed from your recorded transactions and are meant
@@ -81,15 +85,33 @@ export function InsightsShell({
               <>
                 Insights appear once you have transactions. Import a statement
                 or add transactions manually and they’ll show up here. Your
-                currency is {currency}.
+                figures are shown in {currency}.
               </>
+            }
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Link href="/import">
+                  <Button variant="primary" size="sm" leftIcon={<FileUp className="h-4 w-4" />}>
+                    Import a statement
+                  </Button>
+                </Link>
+                <Link href="/transactions">
+                  <Button variant="outline" size="sm" leftIcon={<Plus className="h-4 w-4" />}>
+                    Add a transaction
+                  </Button>
+                </Link>
+              </div>
             }
           />
         ) : (
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {insights.map((insight) => (
-                <InsightCard key={`${insight.kind}-${insight.title}`} insight={insight} />
+                <InsightCard
+                  key={`${insight.kind}-${insight.title}`}
+                  insight={insight}
+                  currency={currency}
+                />
               ))}
             </div>
             <p className="flex items-center gap-1.5 text-xs text-muted">

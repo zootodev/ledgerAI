@@ -28,6 +28,7 @@ export default async function ImportPage() {
       categories={categories}
       histories={histories}
       currency={ctx.business.currency}
+      businessId={ctx.business.id}
       userName={ctx.user.name ?? undefined}
       userEmail={ctx.user.email}
       businessName={ctx.business.name}

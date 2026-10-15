@@ -24,6 +24,7 @@ import {
   BUSINESS_SIZES,
   BUSINESS_TYPES,
   COUNTRIES,
+  COUNTRY_LABELS,
   CURRENCIES,
 } from "@/lib/validation/business";
 
@@ -145,7 +146,7 @@ export function OnboardingForm({ defaults }: OnboardingFormProps) {
                 >
                   {COUNTRIES.map((code) => (
                     <option key={code} value={code}>
-                      {code}
+                      {COUNTRY_LABELS[code]}
                     </option>
                   ))}
                 </Select>
@@ -220,13 +221,19 @@ export function OnboardingForm({ defaults }: OnboardingFormProps) {
                 Continue
               </Button>
             ) : (
-              <Button
-                type="submit"
-                loading={pending}
-                leftIcon={<Check className="h-4 w-4" />}
-              >
-                Open my dashboard
-              </Button>
+              <div className="flex flex-col items-end gap-2">
+                <p className="text-right text-sm text-muted">
+                  Next up: importing your first statement — your dashboard will
+                  point you straight to it.
+                </p>
+                <Button
+                  type="submit"
+                  loading={pending}
+                  leftIcon={<Check className="h-4 w-4" />}
+                >
+                  Finish &amp; open dashboard
+                </Button>
+              </div>
             )}
           </div>
         </form>

@@ -15,6 +15,7 @@ import {
   buildProfitCsv,
   buildSummaryCsv,
   getReportData,
+  slugAccountName,
   type ReportType,
 } from "@/lib/services/reports";
 
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
   const rawType = url.searchParams.get("type");
   const dateFrom = param(url, "from");
   const dateTo = param(url, "to");
+  const accountId = param(url, "accountId");
 
   if (!REPORT_TYPES.includes(rawType as ReportType)) {
     return NextResponse.json(
@@ -43,7 +45,7 @@ export async function GET(request: Request) {
   }
   const type = rawType as ReportType;
 
-  const parsed = analyticsQuerySchema.safeParse({ dateFrom, dateTo });
+  const parsed = analyticsQuerySchema.safeParse({ dateFrom, dateTo, accountId });
   if (!parsed.success) {
     return NextResponse.json({ error: zErrorMessage(parsed.error) }, { status: 400 });
   }
@@ -65,6 +67,23 @@ export async function GET(request: Request) {
     );
   }
 
+  // Account scoping is validated against the session business so a foreign id
+  // can never leak another tenant's rows or appear in the filename.
+  let accountName: string | null = null;
+  if (parsed.data.accountId) {
+    const account = await ctx.prisma.account.findFirst({
+      where: {
+        id: parsed.data.accountId,
+        businessId: ctx.business.id,
+      },
+      select: { name: true },
+    });
+    if (!account) {
+      return NextResponse.json({ error: "Unknown account." }, { status: 400 });
+    }
+    accountName = account.name;
+  }
+
   const data = await getReportData(parsed.data);
   const csv =
     type === "summary"
@@ -84,13 +103,14 @@ export async function GET(request: Request) {
     type,
     parsed.data.dateFrom ?? "all",
     parsed.data.dateTo ?? "all",
-  ].join("-");
+    accountName ? slugAccountName(accountName) : null,
+  ].filter(Boolean);
 
   return new Response(csv, {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}.csv"`,
+      "Content-Disposition": `attachment; filename="${filename.join("-")}.csv"`,
     },
   });
 }

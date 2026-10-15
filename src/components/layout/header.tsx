@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownItem } from "@/components/ui/dropdown";
+import { purgeImportCaches, localStore, sessionStore } from "@/lib/import/draft";
 import { cn } from "@/lib/utils/cn";
 
 export interface UserMenu {
@@ -24,6 +25,13 @@ export interface HeaderProps
 
 export function Header({ title, user, actions, onSignOut, className }: HeaderProps) {
   const router = useRouter();
+  // Phase 5: signing out drops every import cache this browser holds, so a
+  // later visitor (or another account) never resumes the previous tenant's
+  // unfinished review.
+  const handleSignOut = React.useCallback(() => {
+    purgeImportCaches([localStore(), sessionStore()]);
+    onSignOut?.();
+  }, [onSignOut]);
   return (
     <header
       className={cn(
@@ -54,7 +62,7 @@ export function Header({ title, user, actions, onSignOut, className }: HeaderPro
           >
             <DropdownItem onClick={() => router.push("/settings/profile")}>Profile</DropdownItem>
             <DropdownItem onClick={() => router.push("/settings")}>Settings</DropdownItem>
-            <DropdownItem destructive onClick={onSignOut}>
+            <DropdownItem destructive onClick={handleSignOut}>
               Sign out
             </DropdownItem>
           </Dropdown>

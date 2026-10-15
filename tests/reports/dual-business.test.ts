@@ -36,6 +36,9 @@ const CATEGORY_A_PARTNER = "abbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const CATEGORY_B_CLIENT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const CATEGORY_B_TRAVEL = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
+const ACCOUNT_A = "11111111-1111-4111-8111-111111111111";
+const ACCOUNT_B = "22222222-2222-4222-8222-222222222222";
+
 function makeDecimal(value: number) {
   return { toString: () => value.toFixed(2) };
 }
@@ -46,6 +49,8 @@ const mockPrisma = {
   business: { findFirst: vi.fn() },
   transaction: { groupBy: vi.fn() },
   category: { findMany: vi.fn() },
+  account: { findFirst: vi.fn() },
+  rateLimitBucket: { deleteMany: vi.fn(async () => undefined) },
 };
 
 beforeEach(() => {
@@ -116,6 +121,20 @@ beforeEach(() => {
       return owner
         .filter(([id]) => where.id.in.includes(id))
         .map(([id, name]) => ({ id, name }));
+    },
+  );
+
+  // Account ownership lookup: an id belongs to the session business only when
+  // it is that tenant's own account.
+  mockPrisma.account.findFirst.mockImplementation(
+    async ({ where }: { where: { id: string; businessId: string } }) => {
+      if (where.businessId === businessA.id && where.id === ACCOUNT_A) {
+        return { name: "Main Account" };
+      }
+      if (where.businessId === businessB.id && where.id === ACCOUNT_B) {
+        return { name: "B Account" };
+      }
+      return null;
     },
   );
 });
@@ -193,5 +212,34 @@ describe("dual-business Reports/export tenant isolation (real service pipeline)"
     const spoofed = await csvBody(exportRequest("type=summary&businessId=biz-b"));
     expect(spoofed).toContain("Revenue,300.00");
     expect(spoofed).not.toContain("700.00");
+  });
+
+  it("exports an owned account's report and names the file after the account", async () => {
+    const response = await GET(
+      exportRequest(`type=summary&accountId=${ACCOUNT_A}`),
+    );
+    expect(response.status).toBe(200);
+
+    expect(response.headers.get("content-disposition")).toContain(
+      "ledgerai-report-summary-all-all-main-account.csv",
+    );
+
+    // Every aggregation stays tied to the session business AND the account.
+    const calls = mockPrisma.transaction.groupBy.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [args] of calls) {
+      expect(args.where.businessId).toBe(businessA.id);
+      expect(args.where.accountId).toBe(ACCOUNT_A);
+    }
+  });
+
+  it("rejects an account id the session business does not own", async () => {
+    const foreign = await GET(exportRequest(`type=summary&accountId=${ACCOUNT_B}`));
+    expect(foreign.status).toBe(400);
+
+    // And the reverse: while signed in as B, A's account is equally foreign.
+    activeBiz = businessB;
+    const foreignToB = await GET(exportRequest(`type=summary&accountId=${ACCOUNT_A}`));
+    expect(foreignToB.status).toBe(400);
   });
 });

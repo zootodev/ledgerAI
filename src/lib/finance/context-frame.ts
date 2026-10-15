@@ -115,32 +115,46 @@ function toNumber(cited: string): number {
   return Number(cited.replace(/,/g, ""));
 }
 
+/**
+ * Money prefix inside our own narration templates. Intl renders one of ₦,
+ * £, US$, CA$, or an ISO code with a space ("GHS 2,500,000") for the
+ * supported currencies, so every reader accepts an optional short
+ * code/symbol — never keying on "₦" alone. A bare figure (no prefix at all)
+ * must keep parsing too.
+ */
+const SYM = "[A-Za-z]{0,3}[₦$£€¥₹¢₩₱₺₵]?\\s?";
+
+/** Build a narration-reader regex; "¤" marks the optional currency prefix. */
+function RE(source: string): RegExp {
+  return new RegExp(source.split("¤").join(SYM), "i");
+}
+
 /** "rent" -> "Rent" (title-cased like the finance narration layer). */
 function cap(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
 function readBalance(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(/cash balance across all accounts is ₦([\d,]+)/i);
+  const m = text.match(RE("cash balance across all accounts is ¤([\\d,]+)"));
   return m ? { metric: "balance", total: toNumber(m[1]) } : null;
 }
 
 function readIncome(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(/income in ([^()]+?) was ₦([\d,]+)/i);
+  const m = text.match(RE("income in ([^()]+?) was ¤([\\d,]+)"));
   return m
     ? { metric: "income", total: toNumber(m[2]), periodLabel: m[1].trim() }
     : null;
 }
 
 function readExpenses(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(/spending in ([^()]+?) was ₦([\d,]+)/i);
+  const m = text.match(RE("spending in ([^()]+?) was ¤([\\d,]+)"));
   return m
     ? { metric: "expenses", total: toNumber(m[2]), periodLabel: m[1].trim() }
     : null;
 }
 
 function readProfit(text: string): Partial<ReportedFigures> | null {
-  const gained = text.match(/net profit in ([^()]+?) was ₦([\d,]+)/i);
+  const gained = text.match(RE("net profit in ([^()]+?) was ¤([\\d,]+)"));
   if (gained) {
     return {
       metric: "profit",
@@ -148,7 +162,7 @@ function readProfit(text: string): Partial<ReportedFigures> | null {
       periodLabel: gained[1].trim(),
     };
   }
-  const loss = text.match(/ran at a loss of ₦([\d,]+) in ([^()]+?)\s*\(/i);
+  const loss = text.match(RE("ran at a loss of ¤([\\d,]+) in ([^()]+?)\\s*\\("));
   if (loss) {
     return {
       metric: "profit",
@@ -160,14 +174,14 @@ function readProfit(text: string): Partial<ReportedFigures> | null {
 }
 
 function readProfitMargin(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(/profit margin in ([^()]+?) was .+? — ₦([\d,]+) profit on/i);
+  const m = text.match(RE("profit margin in ([^()]+?) was .+? — ¤([\\d,]+) profit on"));
   return m
     ? { metric: "profit", total: toNumber(m[2]), periodLabel: m[1].trim() }
     : null;
 }
 
 function readTopCategory(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(/top expense category in ([^()]+?) was ([^—–]+?) at ₦([\d,]+)/i);
+  const m = text.match(RE("top expense category in ([^()]+?) was ([^—–]+?) at ¤([\\d,]+)"));
   if (!m) return null;
   return {
     metric: "category",
@@ -186,7 +200,7 @@ function splitNames(listing: string): string[] {
 }
 
 function readLowestCategory(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(/spent the least on ([^,]+), at ₦([\d,]+)(?: each)?,?\s*([^()]*?)\.?$/i);
+  const m = text.match(RE("spent the least on ([^,]+), at ¤([\\d,]+)(?: each)?,?\\s*([^()]*?)\\.?$"));
   if (!m) return null;
   const names = splitNames(m[1]);
   return {
@@ -199,7 +213,7 @@ function readLowestCategory(text: string): Partial<ReportedFigures> | null {
 }
 
 function readCategorySpend(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(/spending on ([a-z][a-z0-9 ]*?) in ([^()]+?) was ₦([\d,]+)/i);
+  const m = text.match(RE("spending on ([a-z][a-z0-9 ]*?) in ([^()]+?) was ¤([\\d,]+)"));
   if (!m) return null;
   return {
     metric: "category",
@@ -210,7 +224,7 @@ function readCategorySpend(text: string): Partial<ReportedFigures> | null {
 }
 
 function readBreakdown(text: string): Partial<ReportedFigures> | null {
-  const byTitle = text.match(/of the ₦([\d,]+) you asked about in ([^,.]+)/i);
+  const byTitle = text.match(RE("of the ¤([\\d,]+) you asked about in ([^,.]+)"));
   if (byTitle) {
     return {
       metric: "expenses",
@@ -218,7 +232,7 @@ function readBreakdown(text: string): Partial<ReportedFigures> | null {
       periodLabel: byTitle[2].trim(),
     };
   }
-  const yours = text.match(/of your ₦([\d,]+) spending in ([^,.]+)/i);
+  const yours = text.match(RE("of your ¤([\\d,]+) spending in ([^,.]+)"));
   if (yours) {
     return {
       metric: "expenses",
@@ -235,7 +249,7 @@ function readSpendingDistribution(text: string): Partial<ReportedFigures> | null
   const names = [...text.matchAll(/([a-z][a-z0-9 ]*?)\s*\(\d[\d,.]*%\)/gi)].map((m) =>
     m[1].trim(),
   );
-  const total = text.match(/rest of the ₦([\d,]+) total/i)?.[1];
+  const total = text.match(RE("rest of the ¤([\\d,]+) total"))?.[1];
   return {
     metric: "expenses",
     total: total ? toNumber(total) : null,
@@ -245,7 +259,7 @@ function readSpendingDistribution(text: string): Partial<ReportedFigures> | null
 }
 
 function readIncomeVsExpenses(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(/in ([^()]+?) you brought in ₦([\d,]+) and spent ₦([\d,]+), leaving ₦([\d,]+) profit/i);
+  const m = text.match(RE("in ([^()]+?) you brought in ¤([\\d,]+) and spent ¤([\\d,]+), leaving ¤([\\d,]+) profit"));
   if (!m) return null;
   return {
     metric: "profit",

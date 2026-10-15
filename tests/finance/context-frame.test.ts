@@ -40,6 +40,10 @@ function narrate(query: AssistantQuery, m: AssistantMetrics = metrics()): string
   return answerFromMetrics(query, m, "NGN", NOW).text;
 }
 
+function narrateIn(query: AssistantQuery, currency: string, m: AssistantMetrics = metrics()): string {
+  return answerFromMetrics(query, m, currency, NOW).text;
+}
+
 function frame(question: string, answer: string | null): FinancialContextFrame {
   return buildContextFrame({
     conversationId: "c1",
@@ -543,5 +547,53 @@ describe("helpers", () => {
       );
       near(breakdown.total, expenses);
     }
+  });
+});
+
+describe("readNarration — non-NGN business currencies", () => {
+  it("recovers figures from GBP narrations (symbol £)", () => {
+    const m = metrics({
+      summary: summarizePeriod(820_000, 410_500, 0),
+      balance: 2_500_000,
+    });
+
+    const income = readNarration(
+      narrateIn({ intent: "income", category: null, period: JULY }, "GBP", m),
+      "income",
+    );
+    near(income.total, 820_000);
+    expect(income.periodLabel).toBe("July 2026");
+
+    const balance = readNarration(
+      narrateIn({ intent: "balance", category: null, period: JULY }, "GBP", m),
+      "balance",
+    );
+    near(balance.total, 2_500_000);
+  });
+
+  it("recovers figures from USD narrations rendered with a US$ prefix", () => {
+    const m = metrics({ summary: summarizePeriod(187_600, 97_200, 0) });
+    const expenses = readNarration(
+      narrateIn({ intent: "expenses", category: null, period: AUGUST }, "USD", m),
+      "expenses",
+    );
+    near(expenses.total, 97_200);
+    expect(expenses.periodLabel).toBe("August 2026");
+  });
+
+  it("recovers figures from GHS narrations rendered as an ISO code with a space", () => {
+    const m = metrics({ summary: summarizePeriod(187_600, 97_200, 0) });
+    const expenses = readNarration(
+      narrateIn({ intent: "expenses", category: null, period: AUGUST }, "GHS", m),
+      "expenses",
+    );
+    near(expenses.total, 97_200);
+    expect(expenses.periodLabel).toBe("August 2026");
+  });
+
+  it("still parses a bare figure with no currency prefix at all", () => {
+    const read = readNarration("Spending in August 2026 was 187,600.", "expenses");
+    near(read.total, 187_600);
+    expect(read.periodLabel).toBe("August 2026");
   });
 });

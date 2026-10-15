@@ -26,6 +26,7 @@ import {
   createTransaction,
   updateTransaction,
 } from "@/lib/services/transactions";
+import { REVIEW_THRESHOLD } from "@/lib/ai/rules";
 import {
   listAccounts,
   createAccount,
@@ -214,6 +215,38 @@ describe("transactions service (tenant-isolated data access)", () => {
     const where = mockPrisma.transaction.findMany.mock.calls[0][0].where;
     expect(where.businessId).toBe(businessA.id);
     expect(where.description.contains).toBe("stripe");
+  });
+
+  it("filters to uncategorized (non-transfer) rows within the tenant", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(0);
+
+    await listTransactions({ uncategorized: "1" });
+    const where = mockPrisma.transaction.findMany.mock.calls[0][0].where;
+    expect(where.businessId).toBe(businessA.id);
+    expect(where.categoryId).toBeNull();
+    expect(where.type).toEqual({ not: "transfer" });
+  });
+
+  it("filters to low-confidence AI categorizations within the tenant", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(0);
+
+    await listTransactions({ lowConfidence: "1" });
+    const where = mockPrisma.transaction.findMany.mock.calls[0][0].where;
+    expect(where.businessId).toBe(businessA.id);
+    expect(where.categoryId).toEqual({ not: null });
+    expect(where.aiConfidence).toEqual({ lt: REVIEW_THRESHOLD });
+  });
+
+  it("ignores the review filters when they are not exactly '1'", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(0);
+
+    await listTransactions({ uncategorized: "true" as never });
+    const where = mockPrisma.transaction.findMany.mock.calls[0][0].where;
+    expect(where.categoryId).toBeUndefined();
+    expect(where.aiConfidence).toBeUndefined();
   });
 
   it("returns null for a transaction that is not owned by the session business", async () => {

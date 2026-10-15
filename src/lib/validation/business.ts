@@ -10,6 +10,17 @@ export const COUNTRIES = [
   "CA",
 ] as const;
 
+/** Human-readable labels for COUNTRIES codes (kept in sync; codes stay canonical). */
+export const COUNTRY_LABELS: Record<(typeof COUNTRIES)[number], string> = {
+  NG: "Nigeria",
+  GH: "Ghana",
+  KE: "Kenya",
+  ZA: "South Africa",
+  US: "United States",
+  GB: "United Kingdom",
+  CA: "Canada",
+};
+
 export const CURRENCIES = [
   "NGN",
   "GHS",

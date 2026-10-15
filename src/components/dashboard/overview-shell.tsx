@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Badge } from "@/components/ui/badge";
+import { BusinessWideNote } from "@/components/dashboard/business-wide-note";
 
 export interface OverviewShellProps {
   userName?: string;
@@ -11,6 +12,8 @@ export interface OverviewShellProps {
   currency: string;
   /** Client date-range control shown above the KPIs and charts. */
   rangeControl?: React.ReactNode;
+  /** Server-rendered actionable-state panel (Suspense-wrapped). */
+  actions?: React.ReactNode;
   /** Server-rendered KPI grid (Suspense-wrapped) shown under the header. */
   kpis: React.ReactNode;
   /** Server-rendered analytics charts (Suspense-wrapped). */
@@ -25,6 +28,7 @@ export function OverviewShell({
   businessName,
   currency,
   rangeControl,
+  actions,
   kpis,
   charts,
   onSignOut,
@@ -48,7 +52,9 @@ export function OverviewShell({
           <Badge tone="brand">{currency}</Badge>
         </div>
 
+        {actions}
         {rangeControl}
+        <BusinessWideNote />
         {kpis}
         {charts}
       </div>

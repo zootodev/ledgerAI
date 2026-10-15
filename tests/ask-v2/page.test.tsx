@@ -1,21 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { renderToStaticMarkup } from "react-dom/server";
 import AskV2Page from "@/app/ask-v2/page";
 
 const mocks = vi.hoisted(() => ({
-  ensureOnboarding: vi.fn().mockResolvedValue(undefined),
+  ensureOnboarding: vi.fn().mockResolvedValue({ id: "user-1", email: "ada@example.com" }),
   requireAuthContext: vi.fn(),
-  signOutAction: vi.fn().mockResolvedValue(undefined),
   redirect: vi.fn(() => {
     throw new Error("NEXT_REDIRECT");
-  }),
-  AskV2Chat: vi.fn((props: Record<string, unknown>) => {
-    void props;
-    return null;
-  }),
-  AskComingSoon: vi.fn((props: Record<string, unknown>) => {
-    void props;
-    return null;
   }),
 }));
 
@@ -23,14 +13,7 @@ vi.mock("@/lib/services/auth", () => ({ ensureOnboarding: mocks.ensureOnboarding
 vi.mock("@/lib/services/auth-context", () => ({
   requireAuthContext: mocks.requireAuthContext,
 }));
-vi.mock("@/lib/auth/actions", () => ({ signOutAction: mocks.signOutAction }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
-vi.mock("@/components/ask-v2/ask-v2-chat", () => ({
-  AskV2Chat: mocks.AskV2Chat,
-}));
-vi.mock("@/components/ask-v2/ask-coming-soon", () => ({
-  AskComingSoon: mocks.AskComingSoon,
-}));
 
 const ORIGINAL_ASK_V2_ENABLED = process.env.ASK_V2_ENABLED;
 
@@ -41,16 +24,8 @@ const SESSION = {
 };
 
 beforeEach(() => {
-  process.env.ASK_V2_ENABLED = "true";
   vi.clearAllMocks();
-  mocks.AskV2Chat.mockImplementation((props: Record<string, unknown>) => {
-    void props;
-    return null;
-  });
-  mocks.AskComingSoon.mockImplementation((props: Record<string, unknown>) => {
-    void props;
-    return null;
-  });
+  mocks.ensureOnboarding.mockResolvedValue({ id: "user-1", email: "ada@example.com" });
 });
 
 afterEach(() => {
@@ -61,96 +36,43 @@ afterEach(() => {
   }
 });
 
-describe("AskV2Page", () => {
-  it("passes only display data and the sign-out action to the chat shell", async () => {
+describe("AskV2Page (hidden product surface)", () => {
+  it("redirects an authenticated visit to the overview, not an Ask surface", async () => {
     mocks.requireAuthContext.mockResolvedValue(SESSION);
-    const element = await AskV2Page();
-    renderToStaticMarkup(element);
+
+    await expect(AskV2Page()).rejects.toThrow("NEXT_REDIRECT");
 
     expect(mocks.ensureOnboarding).toHaveBeenCalledOnce();
-    expect(mocks.AskV2Chat).toHaveBeenCalledTimes(1);
-    const props = mocks.AskV2Chat.mock.calls[0][0];
-
-    expect(props.userName).toBe("Ada Lovelace");
-    expect(props.userEmail).toBe("ada@example.com");
-    expect(props.businessName).toBe("Acme Studio");
-    expect(props.currency).toBe("USD");
-    expect(props.onSignOut).toBe(mocks.signOutAction);
-
-    // The server must never hand its tenant-scoped ids to the browser.
-    expect(props.userId).toBeUndefined();
-    expect(props.businessId).toBeUndefined();
-    expect(props.tenantId).toBeUndefined();
+    expect(mocks.requireAuthContext).toHaveBeenCalledOnce();
+    expect(mocks.redirect).toHaveBeenCalledTimes(1);
+    expect(mocks.redirect).toHaveBeenCalledWith("/overview");
   });
 
-  it("renders the presentation-only Coming Soon while ASK_V2_ENABLED is false", async () => {
-    process.env.ASK_V2_ENABLED = "false";
+  it("stays hidden even when the ASK_V2_ENABLED server gate is on", async () => {
+    // The gate governs the Ask implementation, not product visibility: the
+    // route must redirect either way.
+    process.env.ASK_V2_ENABLED = "true";
     mocks.requireAuthContext.mockResolvedValue(SESSION);
 
-    const element = await AskV2Page();
-    renderToStaticMarkup(element);
-
-    expect(mocks.AskComingSoon).toHaveBeenCalledTimes(1);
-    expect(mocks.AskV2Chat).not.toHaveBeenCalled();
-    expect(mocks.redirect).not.toHaveBeenCalled();
+    await expect(AskV2Page()).rejects.toThrow("NEXT_REDIRECT");
+    expect(mocks.redirect).toHaveBeenCalledWith("/overview");
   });
 
-  it("renders the presentation-only Coming Soon while ASK_V2_ENABLED is absent (safe default OFF)", async () => {
-    delete process.env.ASK_V2_ENABLED;
-    mocks.requireAuthContext.mockResolvedValue(SESSION);
-
-    const element = await AskV2Page();
-    renderToStaticMarkup(element);
-
-    expect(mocks.AskComingSoon).toHaveBeenCalledTimes(1);
-    expect(mocks.AskV2Chat).not.toHaveBeenCalled();
-    expect(mocks.redirect).not.toHaveBeenCalled();
-  });
-
-  it("keeps the Coming Soon state behind authentication, like the assistant", async () => {
-    process.env.ASK_V2_ENABLED = "false";
+  it("keeps normal auth protection: signed-out visitors go to /login", async () => {
     mocks.requireAuthContext.mockRejectedValue(new Error("You must be signed in."));
 
     await expect(AskV2Page()).rejects.toThrow("NEXT_REDIRECT");
+    expect(mocks.redirect).toHaveBeenCalledTimes(1);
     expect(mocks.redirect).toHaveBeenCalledWith("/login");
-    expect(mocks.AskComingSoon).not.toHaveBeenCalled();
-    expect(mocks.AskV2Chat).not.toHaveBeenCalled();
   });
 
-  it("hands the Coming Soon only display data and never business/tenant ids", async () => {
-    process.env.ASK_V2_ENABLED = "false";
-    mocks.requireAuthContext.mockResolvedValue(SESSION);
-
-    const element = await AskV2Page();
-    renderToStaticMarkup(element);
-
-    const props = mocks.AskComingSoon.mock.calls[0][0];
-    expect(props.userName).toBe("Ada Lovelace");
-    expect(props.userEmail).toBe("ada@example.com");
-    expect(props.onSignOut).toBe(mocks.signOutAction);
-
-    expect(props.businessName).toBeUndefined();
-    expect(props.currency).toBeUndefined();
-    expect(props.userId).toBeUndefined();
-    expect(props.businessId).toBeUndefined();
-    expect(props.tenantId).toBeUndefined();
-  });
-
-  it("redirects to /login when the session cannot be established", async () => {
-    mocks.requireAuthContext.mockRejectedValue(new Error("You must be signed in."));
+  it("lets the onboarding bounce stand for unfinished profiles", async () => {
+    mocks.ensureOnboarding.mockImplementation(() => {
+      throw new Error("NEXT_REDIRECT");
+    });
 
     await expect(AskV2Page()).rejects.toThrow("NEXT_REDIRECT");
-    expect(mocks.redirect).toHaveBeenCalledWith("/login");
-    expect(mocks.AskV2Chat).not.toHaveBeenCalled();
-  });
-
-  it("redirects to /login when the account has no business", async () => {
-    mocks.requireAuthContext.mockRejectedValue(
-      new Error("No business is set up for this account."),
-    );
-
-    await expect(AskV2Page()).rejects.toThrow("NEXT_REDIRECT");
-    expect(mocks.redirect).toHaveBeenCalledWith("/login");
-    expect(mocks.AskV2Chat).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.requireAuthContext).not.toHaveBeenCalled();
   });
 });

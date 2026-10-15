@@ -5,6 +5,7 @@ import { requireAuthContext } from "@/lib/services/auth-context";
 import { signOutAction } from "@/lib/auth/actions";
 import { listTransactions, listAccounts, listCategories } from "@/lib/services";
 import { transactionListQuerySchema } from "@/lib/validation/transaction";
+import { resolveAccountScope, urlWithoutAccountId } from "@/lib/validation/account-scope";
 import { TransactionsView } from "@/components/transactions/transactions-view";
 import { summarizeTransactionLoads } from "@/components/transactions/transactions-load-state";
 import type { TransactionListQuery } from "@/lib/validation/transaction";
@@ -46,16 +47,33 @@ export default async function TransactionsPage({
   ]);
 
   const result = txs.status === "fulfilled" ? txs.value : { items: [], total: 0, page: 1, pageSize: 20, pages: 1 };
+  const accountList = accounts.status === "fulfilled" ? accounts.value : [];
   const { loadError, accountsError, categoriesError } = summarizeTransactionLoads(txs, accounts, categories);
   if (txs.status === "rejected") console.error("[transactions] list failed", txs.reason);
   if (accounts.status === "rejected") console.error("[transactions] accounts failed", accounts.reason);
   if (categories.status === "rejected") console.error("[transactions] categories failed", categories.reason);
 
+  // Account filter: only an account the session business owns is honored. A
+  // repeated, malformed, or foreign id is rejected SAFELY by removing it from
+  // the URL (preserving every other filter, e.g. the date range), so the
+  // address bar and the rendered list always agree — matching Reports. When the
+  // account list itself failed to load we cannot verify ownership and leave the
+  // (businessId-bounded) query untouched; the view surfaces a retry instead.
+  if (accounts.status === "fulfilled" && sp.accountId !== undefined) {
+    const scope = resolveAccountScope(
+      sp.accountId,
+      accountList.map((a) => a.id),
+    );
+    if (scope.rejected) {
+      redirect(urlWithoutAccountId("/transactions", sp));
+    }
+  }
+
   return (
     <TransactionsView
       result={result}
       params={params}
-      accounts={accounts.status === "fulfilled" ? accounts.value : []}
+      accounts={accountList}
       categories={categories.status === "fulfilled" ? categories.value : []}
       loadError={loadError}
       accountsError={accountsError}

@@ -182,6 +182,22 @@ describe("resolvePeriod", () => {
 });
 
 describe("answerFromMetrics", () => {
+  it("renders figures in the caller's business currency, never a hard-coded NGN", () => {
+    const balanceQuery: AssistantQuery = {
+      intent: "balance",
+      category: null,
+      period: { kind: "month", month: 7, year: 2026 },
+    };
+
+    const gbp = answerFromMetrics(balanceQuery, metrics(), "GBP", NOW);
+    expect(gbp.text).toContain("£2,500,000");
+    expect(gbp.text).not.toContain("₦");
+
+    const usd = answerFromMetrics(balanceQuery, metrics(), "USD", NOW);
+    expect(usd.text).toContain("US$2,500,000");
+    expect(usd.text).not.toContain("₦");
+  });
+
   it("labels a partial prior range truthfully instead of calling it a whole month", () => {
     const answer = answerFromMetrics(
       {

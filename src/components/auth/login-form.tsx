@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { PasswordField } from "@/components/auth/password-field";
+import { AuthValueStrip } from "@/components/auth/auth-value-strip";
 import { loginAction, type AuthFormState } from "@/lib/auth/actions";
 
 const initialState: AuthFormState = {};
@@ -18,8 +20,9 @@ export function LoginForm() {
     <div>
       <h1 className="text-xl font-semibold text-foreground">Sign in</h1>
       <p className="mt-1 text-sm text-muted">
-        Welcome back to LedgerAI.
+        Review your imports and keep your profit picture clear.
       </p>
+      <AuthValueStrip intent="login" className="mt-4" />
 
       <form action={formAction} suppressHydrationWarning className="mt-6 flex flex-col gap-4">
         {state.error && (
@@ -32,16 +35,12 @@ export function LoginForm() {
           <Input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required />
         </Field>
 
-        <Field label="Password" required htmlFor="password">
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="••••••••"
-            required
-          />
-        </Field>
+        <PasswordField
+          id="password"
+          name="password"
+          label="Password"
+          autoComplete="current-password"
+        />
 
         <div className="-mt-1 text-right">
           <Link

@@ -172,3 +172,37 @@ export interface ImportCategoryOption {
   name: string;
   type: "income" | "expense";
 }
+
+/** Why a row was not written to the ledger (post-import exception queue). */
+export type ImportExceptionReason =
+  | "invalid"
+  | "duplicate_existing"
+  | "duplicate_in_file"
+  | "excluded";
+
+/**
+ * One non-committed row, surfaced after a commit so it can be reviewed later.
+ * Deliberately carries only non-sensitive source values (no ids/credentials).
+ */
+export interface ImportException {
+  /** 1-based source line/row number in the original file. */
+  sourceRow: number;
+  /** 1-based data-row ordinal, matching the review table's "Row" column. */
+  displayRow: number;
+  reason: ImportExceptionReason;
+  description: string;
+  /** Normalized date when valid, else the raw source text. */
+  date: string;
+  amount: string;
+  /** Human-readable reasons (populated for invalid rows). */
+  messages: string[];
+}
+
+/** Post-import exception queue entry kept on the Import record. */
+export const MAX_IMPORT_EXCEPTIONS = 200;
+
+/** Inclusive statement date range derived from a file's valid rows. */
+export interface StatementPeriod {
+  from: string | null;
+  to: string | null;
+}

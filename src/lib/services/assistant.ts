@@ -173,6 +173,7 @@ export async function askAssistantQuestion(
       const outcome = await answerSavingsBothReadings(
         context.prisma,
         context.business.id,
+        context.business.currency,
         parsed.data,
         conversationId,
         resolution.period,
@@ -528,6 +529,7 @@ function debugFollowUp(
 async function answerSavingsBothReadings(
   prisma: PrismaClient,
   businessId: string,
+  currency: string,
   question: string,
   conversationId: string,
   period: AssistantQuery["period"],
@@ -540,8 +542,8 @@ async function answerSavingsBothReadings(
 
   const metrics = await collectMetrics(prisma, businessId, queries[0], now);
 
-  const partA = answerFromMetrics(queries[0], metrics, "NGN", now);
-  const partB = answerFromMetrics(queries[1], metrics, "NGN", now);
+  const partA = answerFromMetrics(queries[0], metrics, currency, now);
+  const partB = answerFromMetrics(queries[1], metrics, currency, now);
 
   let draft: string;
   const aData = partA.data as
@@ -561,15 +563,17 @@ async function answerSavingsBothReadings(
     typeof aData?.period === "string"
   ) {
     const plain = (value: number) =>
-      new Intl.NumberFormat("en-NG", { maximumFractionDigits: 0 }).format(
-        Math.round(value),
-      );
+      new Intl.NumberFormat("en-NG", {
+        style: "currency",
+        currency,
+        maximumFractionDigits: 0,
+      }).format(Math.round(value));
     const delta = aData.current - aData.prior;
     const comparison =
       delta < 0
-        ? `you spent ₦${plain(-delta)} less than in ${aData.priorLabel}`
+        ? `you spent ${plain(-delta)} less than in ${aData.priorLabel}`
         : delta > 0
-          ? `you spent ₦${plain(delta)} more than in ${aData.priorLabel}`
+          ? `you spent ${plain(delta)} more than in ${aData.priorLabel}`
           : `you spent the same in ${aData.priorLabel} and ${aData.period}`;
     const savingClaim =
       delta < 0
@@ -580,8 +584,8 @@ async function answerSavingsBothReadings(
     draft =
       `You were asking about savings, which has two readings.\n\n` +
       `1) How much lower your expenses were than the previous period: compared to ` +
-      `${aData.priorLabel}, ${comparison} (₦${plain(aData.prior)} in ${aData.priorLabel} ` +
-      `vs ₦${plain(aData.current)} in ${aData.period}).${savingClaim}\n\n` +
+      `${aData.priorLabel}, ${comparison} (${plain(aData.prior)} in ${aData.priorLabel} ` +
+      `vs ${plain(aData.current)} in ${aData.period}).${savingClaim}\n\n` +
       `2) How much money you had left after expenses: ${partB.text}`;
   } else {
     draft =

@@ -32,6 +32,8 @@ function makeSummary(overrides: Partial<Record<string, unknown>> = {}) {
     cashBalance: 600,
     currency: "NGN",
     period: { from: null, to: null },
+    prior: null,
+    hasAnyTransactions: true,
     ...overrides,
   };
 }
@@ -90,6 +92,74 @@ describe("AnalyticsKpiGrid (Overview data integration)", () => {
 
     expect(html).toContain("No transactions yet");
     expect(html).toContain("Add transaction");
+    expect(html).toContain("Import a statement");
+  });
+
+  it("distinguishes an empty period from a business with no data at all", async () => {
+    mockedGetAnalyticsSummary.mockResolvedValue(
+      makeSummary({
+        revenue: 0,
+        expenses: 0,
+        transfers: 0,
+        netProfit: 0,
+        cashBalance: 0,
+        hasAnyTransactions: true,
+      }),
+    );
+
+    const element = await AnalyticsKpiGrid({
+      currency: "NGN",
+      range: { dateFrom: "2026-02-01", dateTo: "2026-02-28" },
+    });
+    const html = renderToStaticMarkup(element as never);
+
+    expect(html).toContain("No activity in this period");
+    expect(html).toContain("View all time");
+    expect(html).not.toContain("No transactions yet");
+  });
+
+  it("shows prior-period deltas when a comparable period exists", async () => {
+    mockedGetAnalyticsSummary.mockResolvedValue(
+      makeSummary({
+        revenue: 1000,
+        expenses: 400,
+        netProfit: 600,
+        cashBalance: 600,
+        period: { from: "2026-02-01", to: "2026-02-28" },
+        prior: {
+          revenue: 500,
+          expenses: 500,
+          netProfit: 500,
+          cashBalance: 500,
+          period: { from: "2026-01-04", to: "2026-01-31" },
+        },
+      }),
+    );
+
+    const element = await AnalyticsKpiGrid({
+      currency: "NGN",
+      range: { dateFrom: "2026-02-01", dateTo: "2026-02-28" },
+    });
+    const html = renderToStaticMarkup(element as never);
+
+    expect(html).toContain("+100%"); // revenue 1000 vs 500
+    expect(html).toContain("-20%"); // expenses 400 vs 500
+  });
+
+  it("links each KPI to the matching records or report", async () => {
+    mockedGetAnalyticsSummary.mockResolvedValue(
+      makeSummary({ period: { from: "2026-02-01", to: "2026-02-28" } }),
+    );
+
+    const element = await AnalyticsKpiGrid({
+      currency: "NGN",
+      range: { dateFrom: "2026-02-01", dateTo: "2026-02-28" },
+    });
+    const html = renderToStaticMarkup(element as never);
+
+    expect(html).toContain("/transactions?type=income");
+    expect(html).toContain("/transactions?type=expense");
+    expect(html).toContain("/reports?from=2026-02-01&amp;to=2026-02-28");
   });
 
   it("does not show the empty state when the summary is non-empty", async () => {

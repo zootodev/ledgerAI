@@ -13,6 +13,7 @@ function baseInput(overrides: Partial<InsightsInput> = {}): InsightsInput {
     topCategories: [],
     topIncome: [],
     largestExpense: null,
+    currency: "NGN",
     ...overrides,
   };
 }
@@ -179,5 +180,25 @@ describe("deriveInsights (deterministic insight engine)", () => {
     const a = deriveInsights(input);
     const b = deriveInsights(input);
     expect(a).toEqual(b);
+  });
+
+  it("renders every money figure in the configured (non-NGN) currency", () => {
+    const insights = deriveInsights(
+      baseInput({
+        currency: "GBP",
+        summary: summarizePeriod(80_000, 100_000, 0),
+      }),
+    );
+    const key = findKind(insights, "key");
+    const expected = new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "GBP",
+      maximumFractionDigits: 0,
+    }).format(100_000);
+
+    expect(key?.title).toContain("loss");
+    expect(key?.description).toContain(expected);
+    expect(key?.description).not.toContain("₦");
+    expect(key?.description).not.toContain("NGN");
   });
 });

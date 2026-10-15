@@ -7,6 +7,7 @@ import {
 } from "@/lib/validation/index";
 import { transactionFingerprint } from "@/lib/finance/engine";
 import { extractMerchantKey } from "@/lib/ai/merchant-key";
+import { REVIEW_THRESHOLD } from "@/lib/ai/rules";
 import { learnMerchantRule } from "@/lib/services/rules";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { TransactionModel } from "@/generated/prisma/models/Transaction";
@@ -51,6 +52,10 @@ export interface ListTransactionsParams {
   categoryId?: string;
   dateFrom?: string;
   dateTo?: string;
+  /** "1" restricts to non-transfer transactions with no category. */
+  uncategorized?: "1";
+  /** "1" restricts to low-confidence AI categorizations needing review. */
+  lowConfidence?: "1";
   sortBy?: "date" | "amount" | "description" | "createdAt";
   sortDir?: "asc" | "desc";
 }
@@ -103,6 +108,17 @@ export async function listTransactions(
     ...(query.type ? { type: query.type } : {}),
     ...(query.accountId ? { accountId: query.accountId } : {}),
     ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+    // Review filters surfaced from the Overview. Transfers never carry a
+    // category, so "uncategorized" is scoped to income/expense only.
+    ...(query.uncategorized
+      ? { categoryId: null, type: { not: "transfer" as const } }
+      : {}),
+    ...(query.lowConfidence
+      ? {
+          categoryId: { not: null },
+          aiConfidence: { lt: REVIEW_THRESHOLD },
+        }
+      : {}),
     ...(query.dateFrom || query.dateTo
       ? {
           date: {

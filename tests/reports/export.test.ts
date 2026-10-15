@@ -37,6 +37,8 @@ const reportData: ReportData = {
     profitMargin: 33.38,
     cashBalance: 5000.5,
     period: { from: "2026-01-01", to: "2026-01-31" },
+    prior: null,
+    hasAnyTransactions: true,
   },
   monthly: { points: [], period: { from: null, to: null } },
   category: {
@@ -89,6 +91,7 @@ const reportData: ReportData = {
     netProfit: 4000.5,
     profitMargin: 33.38,
     period: { from: "2026-01-01", to: "2026-01-31" },
+    prior: null,
   },
 };
 
@@ -228,6 +231,15 @@ describe("reports/export route", () => {
       exportRequest("type=summary&from=15/01/2026"),
     );
     expect(malformed.status).toBe(400);
+    expect(getReportData).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed account id before any data is read", async () => {
+    const response = await GET(
+      exportRequest("type=summary&accountId=not-a-uuid"),
+    );
+
+    expect(response.status).toBe(400);
     expect(getReportData).not.toHaveBeenCalled();
   });
 

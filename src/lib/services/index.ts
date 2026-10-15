@@ -57,6 +57,8 @@ export type {
   AnalyticsTrendsQuery,
   AnalyticsTrendPoint,
 } from "./analytics";
+export { getOverviewActionItems, LOW_CONFIDENCE_THRESHOLD } from "./overview";
+export type { OverviewActionItems, LatestImportOutcome } from "./overview";
 export {
   listImportHistory,
   getExistingFingerprints,

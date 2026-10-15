@@ -103,6 +103,7 @@ export async function getInsights(query: InsightsQuery = {}): Promise<InspectIns
     topCategories,
     topIncome: [],
     largestExpense,
+    currency: business.currency,
   });
 
   // Deterministic narration (no LLM): derived cards pass through the

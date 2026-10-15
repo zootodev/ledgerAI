@@ -7,19 +7,29 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { PasswordField } from "@/components/auth/password-field";
+import { AuthValueStrip } from "@/components/auth/auth-value-strip";
 import { signupAction, type AuthFormState } from "@/lib/auth/actions";
 
 const initialState: AuthFormState = {};
 
+/** Field-level error when the server-rejected message belongs to a field. */
+function passwordFieldError(message: string | undefined): string | undefined {
+  if (message && /password/i.test(message)) return message;
+  return undefined;
+}
+
 export function SignupForm() {
   const [state, formAction, pending] = useActionState(signupAction, initialState);
+  const passwordError = passwordFieldError(state.error);
 
   return (
     <div>
       <h1 className="text-xl font-semibold text-foreground">Create your account</h1>
       <p className="mt-1 text-sm text-muted">
-        Start turning your business records into clarity.
+        Import your first statement, review it once, and see your profit clearly.
       </p>
+      <AuthValueStrip intent="signup" className="mt-4" />
 
       <form action={formAction} suppressHydrationWarning className="mt-6 flex flex-col gap-4">
         {state.error && (
@@ -46,17 +56,14 @@ export function SignupForm() {
           <Input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required />
         </Field>
 
-        <Field label="Password" required hint="At least 8 characters." htmlFor="password">
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="••••••••"
-            required
-            minLength={8}
-          />
-        </Field>
+        <PasswordField
+          id="password"
+          name="password"
+          label="Password"
+          hint="At least 8 characters."
+          error={passwordError}
+          autoComplete="new-password"
+        />
 
         <Button type="submit" loading={pending} fullWidth className="mt-2">
           Create account

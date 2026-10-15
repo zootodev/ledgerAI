@@ -33,6 +33,12 @@ export const analyticsQuerySchema = z
   .object({
     dateFrom: dateField.optional(),
     dateTo: dateField.optional(),
+    /**
+     * Optional single-account scope (Reports account filter). Ownership is
+     * always re-derived from the session business in the service layer, so a
+     * client-supplied id can only ever narrow the caller's own data.
+     */
+    accountId: z.uuid().optional(),
   })
   .superRefine(assertDatesOrdered);
 
@@ -41,6 +47,7 @@ export const analyticsTrendsQuerySchema = z
   .object({
     dateFrom: dateField.optional(),
     dateTo: dateField.optional(),
+    accountId: z.uuid().optional(),
     groupBy: z.enum(ANALYTICS_GROUP_BY).default("month"),
   })
   .superRefine(assertDatesOrdered);

@@ -16,6 +16,7 @@ import {
   BUSINESS_SIZES,
   BUSINESS_TYPES,
   COUNTRIES,
+  COUNTRY_LABELS,
   CURRENCIES,
 } from "@/lib/validation/business";
 import type { BusinessServiceData } from "@/lib/services/business";
@@ -27,7 +28,8 @@ export interface BusinessSettingsProps {
 }
 
 function CountryOption({ code }: { code: string }) {
-  return <option value={code}>{code}</option>;
+  const label = COUNTRY_LABELS[code as keyof typeof COUNTRY_LABELS] ?? code;
+  return <option value={code}>{label}</option>;
 }
 
 export function BusinessSettings({ business }: BusinessSettingsProps) {

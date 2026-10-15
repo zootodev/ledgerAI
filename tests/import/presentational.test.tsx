@@ -5,7 +5,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ImportSummaryCards } from "@/components/import/import-summary-cards";
 import { WizardStepper } from "@/components/import/import-stepper";
 import { ImportHistory } from "@/components/import/import-history";
-import { ImportSuccessDescription } from "@/components/import/import-wizard";
+import { ImportExceptions } from "@/components/import/import-exceptions";
+import {
+  ImportSuccessDescription,
+  ImportCompletePanel,
+} from "@/components/import/import-wizard";
 import type { ImportHistoryItem } from "@/lib/services/imports";
 
 vi.mock("next/link", () => ({
@@ -58,7 +62,7 @@ describe("ImportHistory", () => {
       status: "committed",
       transactionsFound: 4,
       transactionsImported: 3,
-      errors: { invalidRows: 1, errors: [], existingDuplicates: 2, inFileDuplicates: 1, excluded: 1 },
+      errors: { invalidRows: 1, errors: [], existingDuplicates: 2, inFileDuplicates: 1, excluded: 1, exceptions: [] },
       createdAt: "2026-09-01T10:00:00.000Z",
       completedAt: "2026-09-01T10:00:00.000Z",
     },
@@ -103,6 +107,7 @@ describe("ImportSuccessDescription", () => {
     excluded: 1,
     learnedRuleCount: 0,
     importId: "imp-1",
+    exceptions: [],
   };
 
   it("summarises the import result counts", () => {
@@ -126,5 +131,107 @@ describe("ImportSuccessDescription", () => {
     const html = renderToStaticMarkup(<ImportSuccessDescription result={baseResult} />);
     expect(html).not.toContain("Remembered");
     expect(html).not.toContain('/settings/rules"');
+  });
+});
+
+describe("ImportExceptions", () => {
+  const exceptions = [
+    {
+      sourceRow: 5,
+      displayRow: 4,
+      reason: "invalid" as const,
+      description: "BROKEN",
+      date: "13/02/2026",
+      amount: "",
+      messages: ["invalid amount"],
+    },
+    {
+      sourceRow: 6,
+      displayRow: 5,
+      reason: "duplicate_existing" as const,
+      description: "Stripe payout",
+      date: "2026-02-14",
+      amount: "4000.00",
+      messages: [],
+    },
+    {
+      sourceRow: 3,
+      displayRow: 2,
+      reason: "duplicate_in_file" as const,
+      description: "UBER ride",
+      date: "2026-01-05",
+      amount: "2500.00",
+      messages: [],
+    },
+    {
+      sourceRow: 4,
+      displayRow: 3,
+      reason: "excluded" as const,
+      description: "Rent payment",
+      date: "2026-02-12",
+      amount: "150000.00",
+      messages: [],
+    },
+  ];
+
+  it("renders nothing when there are no exceptions", () => {
+    const html = renderToStaticMarkup(<ImportExceptions exceptions={[]} />);
+    expect(html).toBe("");
+  });
+
+  it("labels each exception with its reason and row", () => {
+    const html = renderToStaticMarkup(<ImportExceptions exceptions={exceptions} />);
+    expect(html).toContain("Invalid");
+    expect(html).toContain("Already in ledger");
+    expect(html).toContain("Duplicate in file");
+    expect(html).toContain("Skipped");
+    expect(html).toContain("Row 4");
+    expect(html).toContain("invalid amount");
+  });
+});
+
+describe("ImportCompletePanel", () => {
+  const result = {
+    total: 4,
+    imported: 3,
+    invalid: 1,
+    existingDuplicates: 2,
+    inFileDuplicates: 1,
+    excluded: 1,
+    learnedRuleCount: 0,
+    importId: "imp-1",
+    exceptions: [],
+  };
+
+  it("shows the exception queue and an import-another action", () => {
+    const withExceptions = {
+      ...result,
+      exceptions: [
+        {
+          sourceRow: 5,
+          displayRow: 4,
+          reason: "invalid" as const,
+          description: "BROKEN",
+          date: "13/02/2026",
+          amount: "",
+          messages: ["invalid amount"],
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <ImportCompletePanel result={withExceptions} onStartOver={() => {}} />,
+    );
+    expect(html).toContain("Import complete");
+    expect(html).toContain("1 row");
+    expect(html).toContain("not imported");
+    expect(html).toContain("Import another statement");
+    expect(html).toContain('href="/transactions"');
+  });
+
+  it("confirms when every row was handled", () => {
+    const html = renderToStaticMarkup(
+      <ImportCompletePanel result={result} onStartOver={() => {}} />,
+    );
+    expect(html).toContain("Every row in this statement was handled.");
   });
 });

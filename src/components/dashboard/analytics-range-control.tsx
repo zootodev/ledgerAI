@@ -20,12 +20,15 @@ interface Preset {
   label: string;
   from: string;
   to: string;
+  /** The explicit "all time" sentinel (writes ?range=all). */
+  allTime?: boolean;
 }
 
 /**
- * Client date-range control for the Overview. Writes ?from=&to= onto the URL
- * so the server page re-validates the range once and re-renders both the KPIs
- * and charts from the same source. No financial logic lives here.
+ * Client date-range control for the Overview/Insights/Reports. Writes
+ * ?from=&to= (or ?range=all) onto the URL so the server page re-validates the
+ * range once and re-renders its data from the same source. No financial logic
+ * lives here.
  */
 export function AnalyticsRangeControl({
   from,
@@ -45,13 +48,17 @@ export function AnalyticsRangeControl({
       { label: "This month", from: iso(startOfMonth(today)), to: iso(today) },
       { label: "This quarter", from: iso(startOfQuarter(today)), to: iso(today) },
       { label: "This year", from: iso(startOfYear(today)), to: iso(today) },
-      { label: "All time", from: "", to: "" },
+      { label: "All time", from: "", to: "", allTime: true },
     ];
   }, []);
 
+  const rangeParam = params?.range;
+  const isAllTime =
+    rangeParam === "all" || (Array.isArray(rangeParam) && rangeParam.includes("all"));
+
   /** Push a new range onto the URL, preserving all unrelated parameters. */
   const apply = React.useCallback(
-    (nextFrom: string, nextTo: string) => {
+    (nextFrom: string, nextTo: string, allTime = false) => {
       const next = new URLSearchParams();
       for (const [key, value] of Object.entries(params ?? {})) {
         if (value === undefined) continue;
@@ -61,6 +68,8 @@ export function AnalyticsRangeControl({
           next.set(key, value);
         }
       }
+      if (allTime) next.set("range", "all");
+      else next.delete("range");
       if (nextFrom) next.set("from", nextFrom);
       else next.delete("from");
       if (nextTo) next.set("to", nextTo);
@@ -71,9 +80,11 @@ export function AnalyticsRangeControl({
     [params, pathname, router],
   );
 
-  const activePreset = presets.find(
-    (p) => p.from === (from ?? "") && p.to === (to ?? ""),
-  );
+  const activePreset = isAllTime
+    ? presets.find((p) => p.allTime)
+    : presets.find((p) => !p.allTime && p.from === (from ?? "") && p.to === (to ?? ""));
+  // With no explicit range param and no bounds, empty from/to means all time.
+  const effectiveActive = activePreset ?? (!from && !to ? presets.find((p) => p.allTime) : undefined);
 
   return (
     <div
@@ -110,14 +121,14 @@ export function AnalyticsRangeControl({
 
       <div className="flex flex-wrap items-center gap-1.5">
         {presets.map((preset) => {
-          const active = activePreset?.label === preset.label;
+          const active = effectiveActive?.label === preset.label;
           return (
             <Button
               key={preset.label}
               type="button"
               variant={active ? "secondary" : "ghost"}
               size="sm"
-              onClick={() => apply(preset.from, preset.to)}
+              onClick={() => apply(preset.from, preset.to, preset.allTime)}
             >
               {preset.label}
             </Button>

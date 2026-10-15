@@ -128,7 +128,9 @@ export function TransactionsView({
       params.accountId ||
       params.categoryId ||
       params.dateFrom ||
-      params.dateTo,
+      params.dateTo ||
+      params.uncategorized ||
+      params.lowConfidence,
   );
 
   // Partial-failure state: the list loaded, but support data (accounts /
@@ -388,6 +390,29 @@ export function TransactionsView({
           </Alert>
         )}
 
+        {(params.uncategorized || params.lowConfidence) && (
+          <Alert tone="info" title="Reviewing flagged transactions">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                {params.uncategorized && params.lowConfidence
+                  ? "Showing transactions with no category and low-confidence categorizations."
+                  : params.uncategorized
+                    ? "Showing non-transfer transactions that have no category yet."
+                    : "Showing transactions whose AI category was low-confidence and may need a second look."}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  push({ uncategorized: undefined, lowConfidence: undefined })
+                }
+              >
+                Show all
+              </Button>
+            </div>
+          </Alert>
+        )}
+
         <Card className="overflow-hidden">
           <div className="flex w-full flex-wrap items-start gap-3 border-b border-border px-4 py-3">
             <form
@@ -510,6 +535,8 @@ export function TransactionsView({
                       categoryId: undefined,
                       dateFrom: undefined,
                       dateTo: undefined,
+                      uncategorized: undefined,
+                      lowConfidence: undefined,
                     });
                   }}
                 >

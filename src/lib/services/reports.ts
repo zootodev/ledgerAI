@@ -25,6 +25,12 @@ export type ReportType = (typeof REPORT_TYPES)[number];
 export interface ReportsQuery {
   dateFrom?: string;
   dateTo?: string;
+  /**
+   * Optional single-account scope. Only accounts owned by the session business
+   * are ever honored (validated in the page/route); the aggregation itself
+   * always keeps businessId as the isolation boundary.
+   */
+  accountId?: string;
 }
 
 /** One category line: amount plus its share of that transaction type's total. */
@@ -59,6 +65,8 @@ export interface ProfitReport {
   /** null when revenue is zero. */
   profitMargin: number | null;
   period: AnalyticsSummary["period"];
+  /** Prior-period comparison when the range is fully bounded, else null. */
+  prior: AnalyticsSummary["prior"];
 }
 
 export interface ReportData {
@@ -104,6 +112,7 @@ export async function getReportData(query: ReportsQuery = {}): Promise<ReportDat
     netProfit: summary.netProfit,
     profitMargin: summary.profitMargin,
     period: summary.period,
+    prior: summary.prior,
   };
 
   return { summary, monthly, category, income, expense, profit };
@@ -128,13 +137,13 @@ export async function getCategoryReport(
   if (!parsed.success) {
     throw new Error(zErrorMessage(parsed.error));
   }
-  const { dateFrom, dateTo } = parsed.data;
+  const { dateFrom, dateTo, accountId } = parsed.data;
 
   const { prisma, business } = await requireAuthContext();
 
   const groups = (await prisma.transaction.groupBy({
     by: ["categoryId", "type"],
-    where: buildWhere(business.id, dateFrom, dateTo),
+    where: buildWhere(business.id, dateFrom, dateTo, accountId),
     _sum: { amount: true },
   })) as unknown as CategoryGroup[];
 
@@ -189,10 +198,12 @@ function buildWhere(
   businessId: string,
   dateFrom?: string,
   dateTo?: string,
+  accountId?: string,
 ): Prisma.TransactionWhereInput {
   return {
     businessId,
     type: { in: ["income", "expense"] },
+    ...(accountId ? { accountId } : {}),
     ...(dateFrom || dateTo
       ? {
           date: {
@@ -206,6 +217,51 @@ function buildWhere(
         }
       : {}),
   };
+}
+
+/**
+ * Human period caption shared by the Reports header, report sections, and
+ * print output. Null bounds mean open-ended ("All time").
+ */
+export function reportPeriodLabel(period: {
+  from: string | null;
+  to: string | null;
+}): string {
+  if (!period.from && !period.to) return "All time";
+  const fmt = (iso: string): string =>
+    new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${iso}T00:00:00.000Z`));
+  if (period.from && period.to) return `${fmt(period.from)} – ${fmt(period.to)}`;
+  if (period.from) return `From ${fmt(period.from)}`;
+  return `Up to ${fmt(period.to as string)}`;
+}
+
+/**
+ * Inclusive month bounds for a "YYYY-MM" bucket key, so a monthly report row
+ * can drill through to the transactions that produced it.
+ */
+export function monthBounds(key: string): { from: string; to: string } {
+  const [year, month] = key.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    from: `${year}-${pad(month)}-01`,
+    to: `${year}-${pad(month)}-${pad(lastDay)}`,
+  };
+}
+
+/** Slugify an account name for safe inclusion in an export filename. */
+export function slugAccountName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return slug || "account";
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,8 @@ import type { TransactionModel } from "@/generated/prisma/models/Transaction";
 export interface AnalyticsQuery {
   dateFrom?: string;
   dateTo?: string;
+  /** Optional single-account scope; ownership is enforced via businessId. */
+  accountId?: string;
 }
 
 /**
@@ -37,26 +39,54 @@ export async function getAnalyticsSummary(
   if (!parsed.success) {
     throw new Error(zErrorMessage(parsed.error));
   }
-  const { dateFrom, dateTo } = parsed.data;
+  const { dateFrom, dateTo, accountId } = parsed.data;
 
   const { prisma, business } = await requireAuthContext();
 
   // Period subtotals — scoped to the session-derived business id.
   const periodGroups = await prisma.transaction.groupBy({
     by: ["type"],
-    where: buildWhere(business.id, dateFrom, dateTo),
+    where: buildWhere(business.id, dateFrom, dateTo, accountId),
     _sum: { amount: true },
   });
 
   // As-of snapshot for the balance — ignores dateFrom, capped at dateTo.
   const balanceGroups = await prisma.transaction.groupBy({
     by: ["type"],
-    where: buildWhere(business.id, undefined, dateTo),
+    where: buildWhere(business.id, undefined, dateTo, accountId),
     _sum: { amount: true },
   });
 
   const period = summarizeGroups(periodGroups);
   const balance = summarizeGroups(balanceGroups);
+
+  // Prior-period comparison only makes sense for a fully bounded window: the
+  // same-length span ending the day before dateFrom. Partial or all-time
+  // spans have no comparable baseline (mirrors the insights service).
+  let prior: AnalyticsSummary["prior"] = null;
+  if (dateFrom && dateTo) {
+    const [priorFrom, priorTo] = shiftRangeBack(dateFrom, dateTo);
+    const priorPeriodGroups = await prisma.transaction.groupBy({
+      by: ["type"],
+      where: buildWhere(business.id, priorFrom, priorTo, accountId),
+      _sum: { amount: true },
+    });
+    // Prior balance is the as-of snapshot at the end of the prior window.
+    const priorBalanceGroups = await prisma.transaction.groupBy({
+      by: ["type"],
+      where: buildWhere(business.id, undefined, priorTo, accountId),
+      _sum: { amount: true },
+    });
+    const priorPeriod = summarizeGroups(priorPeriodGroups);
+    const priorBalance = summarizeGroups(priorBalanceGroups);
+    prior = {
+      revenue: priorPeriod.revenue,
+      expenses: priorPeriod.expenses,
+      netProfit: priorPeriod.netProfit,
+      cashBalance: priorBalance.netProfit,
+      period: { from: priorFrom, to: priorTo },
+    };
+  }
 
   return {
     revenue: period.revenue,
@@ -66,6 +96,11 @@ export async function getAnalyticsSummary(
     profitMargin: period.profitMargin,
     cashBalance: balance.netProfit,
     period: { from: dateFrom ?? null, to: dateTo ?? null },
+    prior,
+    // True when the business has recorded ANY transaction up to dateTo. Used
+    // to tell "no data at all" apart from "no activity in this period".
+    hasAnyTransactions:
+      balance.revenue + balance.expenses + balance.transfers > 0,
   };
 }
 
@@ -77,12 +112,38 @@ export interface AnalyticsSummary {
   profitMargin: number | null;
   cashBalance: number;
   period: { from: string | null; to: string | null };
+  /**
+   * Same-length period immediately before `period`, or null when the window
+   * is open-ended (all-time / partial). Figures are the raw prior values; the
+   * UI derives deltas through the deterministic engine.
+   */
+  prior: {
+    revenue: number;
+    expenses: number;
+    netProfit: number;
+    cashBalance: number;
+    period: { from: string; to: string };
+  } | null;
+  /** Whether any transaction exists at all (up to dateTo), regardless of range. */
+  hasAnyTransactions: boolean;
+}
+
+/** Shift an inclusive [from, to] range one full span back (prior period). */
+function shiftRangeBack(from: string, to: string): [string, string] {
+  const start = new Date(`${from}T00:00:00.000Z`);
+  const end = new Date(`${to}T00:00:00.000Z`);
+  const lengthMs = Math.max(end.getTime() - start.getTime(), 0);
+  const priorEnd = new Date(start.getTime() - 1);
+  const priorStart = new Date(priorEnd.getTime() - lengthMs);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return [iso(priorStart), iso(priorEnd)];
 }
 
 /** Query params for trend charts (dates in YYYY-MM-DD). */
 export interface AnalyticsTrendsQuery {
   dateFrom?: string;
   dateTo?: string;
+  accountId?: string;
   groupBy?: "day" | "month";
 }
 
@@ -117,13 +178,13 @@ export async function getAnalyticsTrends(
   if (!parsed.success) {
     throw new Error(zErrorMessage(parsed.error));
   }
-  const { dateFrom, dateTo, groupBy } = parsed.data;
+  const { dateFrom, dateTo, accountId, groupBy } = parsed.data;
 
   const { prisma, business } = await requireAuthContext();
 
   const groups = await prisma.transaction.groupBy({
     by: ["type", "date"],
-    where: buildWhere(business.id, dateFrom, dateTo),
+    where: buildWhere(business.id, dateFrom, dateTo, accountId),
     _sum: { amount: true },
   });
   const rows = groups as DateTypeGroup[];
@@ -233,9 +294,13 @@ function buildWhere(
   businessId: string,
   dateFrom?: string,
   dateTo?: string,
+  accountId?: string,
 ): Prisma.TransactionWhereInput {
   return {
     businessId,
+    // An account id only ever narrows the business's own rows; the businessId
+    // above remains the isolation boundary.
+    ...(accountId ? { accountId } : {}),
     ...(dateFrom || dateTo
       ? {
           date: {

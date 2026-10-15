@@ -4,18 +4,28 @@ import * as React from "react";
 import { useActionState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { PasswordField } from "@/components/auth/password-field";
 import { updatePasswordAction, type AuthFormState } from "@/lib/auth/actions";
 
 const initialState: AuthFormState = {};
+
+/** Map the server's single error string onto the field that caused it. */
+function fieldErrors(
+  message: string | undefined,
+): { password?: string; confirm?: string } {
+  if (!message) return {};
+  if (/Passwords don't match/.test(message)) return { confirm: message };
+  if (/at least 8 characters/.test(message)) return { password: message };
+  return {};
+}
 
 export function ResetPasswordForm() {
   const [state, formAction, pending] = useActionState(
     updatePasswordAction,
     initialState,
   );
+  const { password, confirm } = fieldErrors(state.error);
 
   return (
     <div>
@@ -36,29 +46,22 @@ export function ResetPasswordForm() {
           </Alert>
         )}
 
-        <Field label="New password" required htmlFor="password">
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="••••••••"
-            minLength={8}
-            required
-          />
-        </Field>
+        <PasswordField
+          id="password"
+          name="password"
+          label="New password"
+          hint="At least 8 characters."
+          error={password}
+          autoComplete="new-password"
+        />
 
-        <Field label="Confirm new password" required htmlFor="confirm">
-          <Input
-            id="confirm"
-            name="confirm"
-            type="password"
-            autoComplete="new-password"
-            placeholder="••••••••"
-            minLength={8}
-            required
-          />
-        </Field>
+        <PasswordField
+          id="confirm"
+          name="confirm"
+          label="Confirm new password"
+          error={confirm}
+          autoComplete="new-password"
+        />
 
         <Button type="submit" loading={pending} fullWidth className="mt-2">
           Update password
