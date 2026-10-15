@@ -40,6 +40,7 @@ export function LoginForm() {
           name="password"
           label="Password"
           autoComplete="current-password"
+          required
         />
 
         <div className="-mt-1 text-right">

@@ -10,9 +10,11 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
   Upload,
 } from "lucide-react";
 import { Accordion } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
   title: {
@@ -48,19 +50,197 @@ function Logo() {
 function FeatureCard({
   icon,
   title,
+  badge,
+  muted = false,
   children,
 }: {
   icon: React.ReactNode;
   title: string;
+  /** Optional status tag rendered beside the title (e.g. "Coming soon"). */
+  badge?: string;
+  /** Visually de-emphasise a feature that is not shipped yet. */
+  muted?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-card border border-border bg-surface p-5">
-      <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft text-brand">
+    <div
+      className={
+        muted
+          ? "rounded-card border border-border bg-surface-subtle p-5 opacity-80"
+          : "rounded-card border border-border bg-surface p-5"
+      }
+    >
+      <span
+        className={
+          muted
+            ? "flex h-10 w-10 items-center justify-center rounded-lg bg-surface text-subtle"
+            : "flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft text-brand"
+        }
+      >
         {icon}
       </span>
-      <h3 className="mt-4 text-sm font-semibold text-foreground">{title}</h3>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        {badge && (
+          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+            {badge}
+          </Badge>
+        )}
+      </div>
       <p className="mt-1.5 text-sm leading-relaxed text-secondary">{children}</p>
+    </div>
+  );
+}
+
+/**
+ * Static, dependency-free product preview for the hero's right column.
+ * Illustrative NGN figures only — no live data, no external images. Hidden
+ * below `lg` so the hero stays text-first on mobile.
+ */
+function HeroPreview() {
+  const kpis: Array<[string, string, string]> = [
+    ["Income", "₦1,240,000", "text-success"],
+    ["Expenses", "₦612,400", "text-danger"],
+    ["Net", "₦627,600", "text-foreground"],
+  ];
+
+  return (
+    <div
+      aria-hidden="true"
+      className="rounded-card border border-border bg-background p-5 shadow-card"
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+          This month
+        </p>
+        <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">
+          <TrendingUp className="h-3 w-3" aria-hidden="true" />
+          +12%
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        {kpis.map(([label, value, tone]) => (
+          <div
+            key={label}
+            className="rounded-field border border-border bg-surface p-3"
+          >
+            <p className="text-[10px] uppercase tracking-wide text-muted">
+              {label}
+            </p>
+            <p className={`mt-1 text-sm font-semibold tabular-nums ${tone}`}>
+              {value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-field border border-border bg-surface p-4">
+        <p className="text-xs uppercase tracking-wide text-muted">
+          Net profit trend
+        </p>
+        <svg viewBox="0 0 320 100" className="mt-3 h-24 w-full" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="heroAreaFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="var(--brand)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M0,72 L40,58 L80,64 L120,40 L160,50 L200,26 L240,34 L280,18 L320,24 L320,100 L0,100 Z"
+            fill="url(#heroAreaFill)"
+          />
+          <path
+            d="M0,72 L40,58 L80,64 L120,40 L160,50 L200,26 L240,34 L280,18 L320,24"
+            fill="none"
+            stroke="var(--brand)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        </svg>
+        <div className="mt-1 flex justify-between text-[10px] text-subtle">
+          <span>May</span>
+          <span>Jun</span>
+          <span>Jul</span>
+          <span>Aug</span>
+          <span>Sep</span>
+          <span>Oct</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Static, labelled monthly-trend preview (illustrative NGN thousands). */
+function MonthlyTrendChart() {
+  const months = ["May", "Jun", "Jul", "Aug", "Sep", "Oct"];
+  const values = [38, 55, 47, 72, 61, 84]; // thousands of naira
+  const max = 120;
+  const plotLeft = 40;
+  const plotRight = 316;
+  const slot = 46;
+  const barWidth = 22;
+  const baseline = 100;
+  const top = 12;
+  const gridlines = [
+    { y: top, label: "₦120k" },
+    { y: (top + baseline) / 2, label: "₦60k" },
+    { y: baseline, label: "₦0" },
+  ];
+
+  return (
+    <div className="mt-4 rounded-field border border-border bg-surface p-3">
+      <p className="text-xs uppercase tracking-wide text-muted">Monthly trend</p>
+      <svg viewBox="0 0 320 132" className="mt-3 w-full">
+        {gridlines.map((g) => (
+          <g key={g.label}>
+            <line
+              x1={plotLeft}
+              y1={g.y}
+              x2={plotRight}
+              y2={g.y}
+              stroke="var(--border)"
+              strokeWidth="1"
+            />
+            <text
+              x={36}
+              y={g.y + 3}
+              textAnchor="end"
+              className="fill-subtle text-[9px]"
+            >
+              {g.label}
+            </text>
+          </g>
+        ))}
+        {values.map((value, i) => {
+          const height = (value / max) * (baseline - top);
+          const x = plotLeft + slot * i + (slot - barWidth) / 2;
+          return (
+            <rect
+              key={months[i]}
+              x={x}
+              y={baseline - height}
+              width={barWidth}
+              height={height}
+              rx="3"
+              fill="var(--brand)"
+              opacity="0.75"
+            />
+          );
+        })}
+        {months.map((month, i) => (
+          <text
+            key={month}
+            x={plotLeft + slot * i + slot / 2}
+            y={124}
+            textAnchor="middle"
+            className="fill-muted text-[9px]"
+          >
+            {month}
+          </text>
+        ))}
+      </svg>
     </div>
   );
 }
@@ -92,29 +272,35 @@ export default function Home() {
         {/* -------------------------------------------------------- Hero */}
         <section className="border-b border-border bg-surface">
           <div className={`${section} py-16 sm:py-24`}>
-            <div className="max-w-2xl">
-              <p className={eyebrow}>Financial intelligence, not bookkeeping busywork</p>
-              <h1 className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-5xl">
-                Know exactly where your business stands.
-              </h1>
-              <p className={lead}>
-                LedgerAI turns raw bank statements into clean books, clear
-                reports, and plain-language answers — so you can spend less time
-                reconciling and more time running the business.
-              </p>
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Link href="/signup" className={primaryCta}>
-                  Create your free account
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </Link>
-                <Link href="/login" className={secondaryCta}>
-                  Sign in
-                </Link>
+            <div className="grid items-center gap-12 lg:grid-cols-2">
+              <div className="max-w-2xl">
+                <p className={eyebrow}>Financial intelligence, not bookkeeping busywork</p>
+                <h1 className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-5xl">
+                  Know exactly where your business stands.
+                </h1>
+                <p className={lead}>
+                  LedgerAI turns raw bank statements into clean books, clear
+                  reports, and plain-language insights — so you can spend less
+                  time reconciling and more time running the business.
+                </p>
+                <div className="mt-8 flex flex-wrap items-center gap-3">
+                  <Link href="/signup" className={primaryCta}>
+                    Create your free account
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                  <Link href="/login" className={secondaryCta}>
+                    Sign in
+                  </Link>
+                </div>
+                <p className="mt-4 text-sm text-muted">
+                  Works with CSV, Excel and PDF statements · No spreadsheets, no
+                  accounting jargon.
+                </p>
               </div>
-              <p className="mt-4 text-sm text-muted">
-                Works with CSV, Excel and PDF statements · No spreadsheets, no
-                accounting jargon.
-              </p>
+
+              <div className="hidden lg:block">
+                <HeroPreview />
+              </div>
             </div>
           </div>
         </section>
@@ -127,7 +313,7 @@ export default function Home() {
               Small businesses don&apos;t fail from lack of work — they fail from
               blurry numbers.
             </h2>
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-card border border-border bg-surface p-5">
                 <h3 className="text-sm font-semibold text-foreground">
                   Records live everywhere
@@ -164,7 +350,7 @@ export default function Home() {
           <div className={`${section} py-16 sm:py-20`}>
             <p className={eyebrow}>How it works</p>
             <h2 className={`${heading} mt-3`}>From statement to insight in three steps.</h2>
-            <ol className="mt-8 grid gap-4 sm:grid-cols-3">
+            <ol className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 {
                   step: "1",
@@ -227,7 +413,12 @@ export default function Home() {
                 What changed this month, why, and what to watch — written as
                 sentences, not charts you have to decode.
               </FeatureCard>
-              <FeatureCard icon={<MessageSquare className="h-5 w-5" aria-hidden="true" />} title="Ask your ledger — coming soon">
+              <FeatureCard
+                muted
+                badge="Coming soon"
+                icon={<MessageSquare className="h-5 w-5" aria-hidden="true" />}
+                title="Ask your ledger"
+              >
                 Plain-language questions over your own records are on the
                 roadmap. It isn&apos;t available yet.
               </FeatureCard>
@@ -277,18 +468,7 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                <div className="mt-4 rounded-field border border-border bg-surface p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted">Monthly trend</p>
-                  <div className="mt-3 flex h-24 items-end gap-2">
-                    {[38, 55, 47, 72, 61, 84, 66, 92, 74, 88, 69, 96].map((h, i) => (
-                      <div
-                        key={i}
-                        className="flex-1 rounded-t bg-brand/70"
-                        style={{ height: `${h}%` }}
-                      />
-                    ))}
-                  </div>
-                </div>
+                <MonthlyTrendChart />
               </div>
             </div>
           </div>
@@ -332,7 +512,7 @@ export default function Home() {
           <div className={`${section} py-16 sm:py-20`}>
             <p className={eyebrow}>Import</p>
             <h2 className={`${heading} mt-3`}>Bring your history with you.</h2>
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <FeatureCard icon={<FileSpreadsheet className="h-5 w-5" aria-hidden="true" />} title="CSV, Excel, PDF">
                 Three formats out of the box, with automatic column detection and
                 a mapping step whenever the file is unusual.
@@ -483,13 +663,25 @@ export default function Home() {
           <Link href="/" aria-label="LedgerAI home">
             <Logo />
           </Link>
-          <nav className="flex items-center gap-5 text-sm text-secondary">
+          <nav className="flex flex-wrap items-center justify-center gap-5 text-sm text-secondary">
             <Link href="/login" className="transition-colors hover:text-foreground">
               Sign in
             </Link>
             <Link href="/signup" className="transition-colors hover:text-foreground">
               Get started
             </Link>
+            <Link href="/privacy" className="transition-colors hover:text-foreground">
+              Privacy
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-foreground">
+              Terms
+            </Link>
+            <a
+              href="mailto:ifeoluwaniolufunmilayo@gmail.com"
+              className="transition-colors hover:text-foreground"
+            >
+              Contact
+            </a>
           </nav>
           <p className="text-sm text-muted">
             © {new Date().getFullYear()} LedgerAI. All rights reserved.

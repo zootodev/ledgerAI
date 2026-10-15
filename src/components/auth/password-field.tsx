@@ -33,7 +33,7 @@ export function PasswordField({
   hint,
   error,
   autoComplete = "new-password",
-  placeholder = "••••••••",
+  placeholder = "Enter your password",
   minLength = 8,
   required,
   defaultValue,
@@ -43,7 +43,7 @@ export function PasswordField({
   const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
 
   return (
-    <Field label={label} htmlFor={id} hint={hint} error={error} id={id}>
+    <Field label={label} htmlFor={id} required={required} hint={hint} error={error} id={id}>
       <div className={cn("relative", className)}>
         <Input
           id={id}

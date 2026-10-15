@@ -18,6 +18,11 @@ function staticMarkup(Component: () => React.ReactElement) {
   return renderToStaticMarkup(React.createElement(Component));
 }
 
+/** Count browser-validated `required` attributes in a rendered form. */
+function countRequired(html: string) {
+  return (html.match(/required=""/g) ?? []).length;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -30,6 +35,14 @@ describe("signup form", () => {
     expect(html).toContain("Profit.");
     expect(html).toContain("Show password");
     expect(html).toContain('type="password"');
+  });
+
+  it("marks name, email and password as required so the asterisks are consistent", () => {
+    const html = staticMarkup(SignupForm);
+    expect(countRequired(html)).toBe(3);
+    // The password gets a real instruction rather than a pre-filled mask.
+    expect(html).toContain('placeholder="Create a password"');
+    expect(html).not.toContain("••••••••");
   });
 
   it("highlights the password field when the server says it is too short", async () => {
@@ -48,6 +61,12 @@ describe("login form", () => {
     expect(html).toContain("Forgot your password?");
     expect(html).toContain("Show password");
     expect(html).toContain('type="password"');
+  });
+
+  it("requires both email and password", () => {
+    const html = staticMarkup(LoginForm);
+    expect(countRequired(html)).toBe(2);
+    expect(html).toContain('placeholder="Enter your password"');
   });
 });
 

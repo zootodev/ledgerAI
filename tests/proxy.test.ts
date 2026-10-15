@@ -88,12 +88,19 @@ afterEach(() => {
 });
 
 describe("isPublicPath", () => {
-  it.each(["/", "/login", "/signup", "/design", "/auth/callback", "/forgot-password", "/reset-password"])(
-    "treats the intended route %s as public",
-    (path) => {
-      expect(isPublicPath(path)).toBe(true);
-    },
-  );
+  it.each([
+    "/",
+    "/login",
+    "/signup",
+    "/design",
+    "/privacy",
+    "/terms",
+    "/auth/callback",
+    "/forgot-password",
+    "/reset-password",
+  ])("treats the intended route %s as public", (path) => {
+    expect(isPublicPath(path)).toBe(true);
+  });
 
   it("normalizes a trailing slash for canonical pages", () => {
     expect(isPublicPath("/login/")).toBe(true);

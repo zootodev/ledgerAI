@@ -48,8 +48,8 @@ export function SignupForm() {
           </Alert>
         )}
 
-        <Field label="Full name" htmlFor="name">
-          <Input id="name" name="name" autoComplete="name" placeholder="Ngozi Adeyemi" />
+        <Field label="Full name" required htmlFor="name">
+          <Input id="name" name="name" autoComplete="name" placeholder="Ngozi Adeyemi" required />
         </Field>
 
         <Field label="Email" required htmlFor="email">
@@ -63,6 +63,8 @@ export function SignupForm() {
           hint="At least 8 characters."
           error={passwordError}
           autoComplete="new-password"
+          placeholder="Create a password"
+          required
         />
 
         <Button type="submit" loading={pending} fullWidth className="mt-2">
