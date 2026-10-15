@@ -18,6 +18,7 @@ import {
   deleteAllConversations,
   ConversationNotFoundError,
 } from "@/lib/services/assistant-conversations";
+import { isAskEnabled } from "@/lib/ask/config";
 import { requireAuthContext, AuthorizationError } from "@/lib/services/auth-context";
 import {
   consumeConfiguredLimit,
@@ -32,10 +33,16 @@ export type AskAssistantReturn =
   | AskOutcome
   | { kind: "error"; text: string; conversationGone?: boolean };
 
+/** Returned while the Ask surface is deliberately on hold (defence in depth). */
+const ASK_DISABLED_TEXT = "Ask is not available yet.";
+
 export async function askAssistant(
   question: string,
   conversationId?: string | null,
 ): Promise<AskAssistantReturn> {
+  // Defence in depth: the v1 surface is on hold, so no action may run even if
+  // a future entry point forgets the page-level gate.
+  if (!isAskEnabled()) return { kind: "error", text: ASK_DISABLED_TEXT };
   try {
     const ctx = await requireAuthContext();
     const decision = await consumeConfiguredLimit("ask:chat", ctx.business.id);
@@ -64,6 +71,7 @@ export type ListConversationsResult =
   | { ok: false };
 
 export async function listConversationsAction(): Promise<ListConversationsResult> {
+  if (!isAskEnabled()) return { ok: false };
   try {
     const conversations = await listConversations();
     return { ok: true, conversations };
@@ -84,6 +92,7 @@ export type GetConversationResult =
 export async function getConversationAction(
   conversationId: string,
 ): Promise<GetConversationResult> {
+  if (!isAskEnabled()) return { ok: false, gone: false };
   try {
     const result = await getConversationWithMessages(conversationId);
     if (!result) return { ok: false, gone: true };
@@ -102,6 +111,7 @@ export async function renameConversationAction(
   conversationId: string,
   title: string,
 ): Promise<{ ok: boolean }> {
+  if (!isAskEnabled()) return { ok: false };
   try {
     return await renameConversation(conversationId, title);
   } catch (error) {
@@ -113,6 +123,7 @@ export async function renameConversationAction(
 export async function deleteConversationAction(
   conversationId: string,
 ): Promise<{ ok: boolean }> {
+  if (!isAskEnabled()) return { ok: false };
   try {
     return await deleteConversation(conversationId);
   } catch (error) {
@@ -122,6 +133,7 @@ export async function deleteConversationAction(
 }
 
 export async function deleteAllConversationsAction(): Promise<{ ok: boolean }> {
+  if (!isAskEnabled()) return { ok: false };
   try {
     return await deleteAllConversations();
   } catch (error) {

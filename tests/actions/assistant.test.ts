@@ -40,6 +40,14 @@ vi.mock("@/lib/security/rate-limit", () => ({
   RATE_LIMIT_EXCEEDED_MESSAGE: "Too many requests. Please slow down and try again shortly.",
 }));
 
+const askConfigMocks = vi.hoisted(() => ({
+  isAskEnabled: vi.fn(() => true),
+}));
+
+vi.mock("@/lib/ask/config", () => ({
+  isAskEnabled: askConfigMocks.isAskEnabled,
+}));
+
 import {
   askAssistant,
   listConversationsAction,
@@ -70,6 +78,7 @@ const mockDeleteAll = vi.mocked(deleteAllConversations);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  askConfigMocks.isAskEnabled.mockReturnValue(true);
   mockRequireAuthContext.mockReset();
   mockRequireAuthContext.mockResolvedValue({
     user: { id: "u-1", email: "a@example.com" },
@@ -241,5 +250,32 @@ describe("conversation mutation actions", () => {
   it("rethrows authorization errors from mutations", async () => {
     mockDelete.mockRejectedValue(new AuthorizationError("No business"));
     await expect(deleteConversationAction("c1")).rejects.toBeInstanceOf(AuthorizationError);
+  });
+});
+
+describe("Ask disabled (defence in depth)", () => {
+  beforeEach(() => {
+    askConfigMocks.isAskEnabled.mockReturnValue(false);
+  });
+
+  it("askAssistant refuses without touching auth or the service", async () => {
+    const result = await askAssistant("How much income?");
+    expect(result).toEqual({ kind: "error", text: "Ask is not available yet." });
+    expect(mockRequireAuthContext).not.toHaveBeenCalled();
+    expect(mockAskAssistantQuestion).not.toHaveBeenCalled();
+  });
+
+  it("conversation actions return their disabled shape without calling the service", async () => {
+    await expect(listConversationsAction()).resolves.toEqual({ ok: false });
+    await expect(getConversationAction("c1")).resolves.toEqual({ ok: false, gone: false });
+    await expect(renameConversationAction("c1", "t")).resolves.toEqual({ ok: false });
+    await expect(deleteConversationAction("c1")).resolves.toEqual({ ok: false });
+    await expect(deleteAllConversationsAction()).resolves.toEqual({ ok: false });
+
+    expect(mockListConversations).not.toHaveBeenCalled();
+    expect(mockGetConversation).not.toHaveBeenCalled();
+    expect(mockRename).not.toHaveBeenCalled();
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockDeleteAll).not.toHaveBeenCalled();
   });
 });

@@ -179,7 +179,7 @@ export default function Home() {
                 {
                   step: "3",
                   title: "Read the answers",
-                  body: "Reports, month-over-month insights, and a plain-language Q&A over your own ledger — no formulas required.",
+                  body: "Reports, month-over-month insights, and clear, explainable numbers — no formulas required.",
                 },
               ].map((item) => (
                 <li
@@ -227,9 +227,9 @@ export default function Home() {
                 What changed this month, why, and what to watch — written as
                 sentences, not charts you have to decode.
               </FeatureCard>
-              <FeatureCard icon={<MessageSquare className="h-5 w-5" aria-hidden="true" />} title="Ask your ledger">
-                &quot;How much did I spend on transport last quarter?&quot; —
-                answers computed from your own records.
+              <FeatureCard icon={<MessageSquare className="h-5 w-5" aria-hidden="true" />} title="Ask your ledger — coming soon">
+                Plain-language questions over your own records are on the
+                roadmap. It isn&apos;t available yet.
               </FeatureCard>
             </div>
           </div>
