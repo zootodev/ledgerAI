@@ -192,18 +192,21 @@ export function DataTable<T>({
                         col.headerClassName,
                       )}
                     >
-                      <button
-                        type="button"
-                        onClick={() => (sortable ? handleSortClick(col) : undefined)}
-                        className={cn(
-                          "inline-flex items-center gap-1",
-                          col.align === "right" && "flex-row-reverse",
-                          sortable ? "cursor-pointer hover:text-foreground" : "cursor-default",
-                        )}
-                      >
-                        {col.header}
-                        {renderSortIcon(col)}
-                      </button>
+                      {sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSortClick(col)}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-foreground",
+                            col.align === "right" && "flex-row-reverse",
+                          )}
+                        >
+                          {col.header}
+                          {renderSortIcon(col)}
+                        </button>
+                      ) : (
+                        col.header
+                      )}
                     </th>
                   );
                 })}

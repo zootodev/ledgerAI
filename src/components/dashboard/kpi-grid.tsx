@@ -79,7 +79,6 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
   const revenueDelta = signedPercent(summary.revenue, prior?.revenue);
   const expensesDelta = signedPercent(summary.expenses, prior?.expenses);
   const profitDelta = signedPercent(summary.netProfit, prior?.netProfit);
-  const cashDelta = signedPercent(summary.cashBalance, prior?.cashBalance);
 
   return (
     <>
@@ -109,7 +108,6 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
         <StatCard
           label="Cash balance"
           value={formatAmount(summary.cashBalance, currency)}
-          delta={cashDelta}
           hint={CASH_BALANCE_HELP}
           href={reportsHref(summary.period)}
           icon={<Wallet className="h-4.5 w-4.5" />}

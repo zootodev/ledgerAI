@@ -108,6 +108,31 @@ describe("DataTable pagination contract (server slices, table renders)", () => {
   });
 });
 
+describe("DataTable header affordances", () => {
+  it("renders a non-sortable header as plain text with no button or sort icon", () => {
+    // `columns` above has no sortValue, so its header must not look clickable.
+    const html = renderToStaticMarkup(
+      <DataTable columns={columns} data={rowData([1])} rowKey={(r) => r.id} />,
+    );
+
+    expect(html).toContain(">Label<");
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("lucide-chevrons-up-down");
+  });
+
+  it("renders a sortable header as a button carrying the sort icon", () => {
+    const sortable: Column<Row>[] = [
+      { key: "label", header: "Label", sortValue: (r) => r.label, cell: (r) => r.label },
+    ];
+    const html = renderToStaticMarkup(
+      <DataTable columns={sortable} data={rowData([1])} rowKey={(r) => r.id} />,
+    );
+
+    expect(html).toContain("<button");
+    expect(html).toContain("lucide-chevrons-up-down");
+  });
+});
+
 // Footer numbers live in separate <span>s, so the raw-HTML match must ignore tags.
 function rangeSummaryRegex(start: number, end: number, total: number): RegExp {
   const gap = "(?:<[^>]*>|\\s)*";

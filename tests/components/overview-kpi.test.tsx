@@ -146,6 +146,37 @@ describe("AnalyticsKpiGrid (Overview data integration)", () => {
     expect(html).toContain("-20%"); // expenses 400 vs 500
   });
 
+  it("never shows a period-over-period delta on the Cash balance card", async () => {
+    mockedGetAnalyticsSummary.mockResolvedValue(
+      makeSummary({
+        revenue: 1000,
+        expenses: 400,
+        netProfit: 600,
+        cashBalance: 600,
+        // Prior is flat for the flow metrics but cash is half, so a naive
+        // cash delta would read "+100%". A cash balance is a position, not a
+        // flow, so no delta belongs on that card.
+        prior: {
+          revenue: 1000,
+          expenses: 400,
+          netProfit: 600,
+          cashBalance: 300,
+          period: { from: "2026-01-04", to: "2026-01-31" },
+        },
+      }),
+    );
+
+    const element = await AnalyticsKpiGrid({
+      currency: "NGN",
+      range: { dateFrom: "2026-02-01", dateTo: "2026-02-28" },
+    });
+    const html = renderToStaticMarkup(element as never);
+
+    expect(html).toContain("Cash balance");
+    expect(html).not.toContain("+100%");
+    expect(html).not.toContain("-100%");
+  });
+
   it("links each KPI to the matching records or report", async () => {
     mockedGetAnalyticsSummary.mockResolvedValue(
       makeSummary({ period: { from: "2026-02-01", to: "2026-02-28" } }),

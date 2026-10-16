@@ -23,7 +23,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               "block h-9.5 w-full min-w-0 rounded-field border bg-surface px-3 text-sm text-foreground",
               "placeholder:text-subtle",
               "focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand",
-              "disabled:cursor-not-allowed disabled:opacity-50",
+              "disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-muted disabled:opacity-70",
               leftIcon && "pl-9",
               invalid
                 ? "border-danger focus:border-danger focus:ring-danger/30"
