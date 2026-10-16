@@ -89,9 +89,10 @@ async function InsightsLoader({
     insights = await getInsights(range ?? {});
   } catch (e) {
     // A vanished session means the login page should handle it, not an
-    // error card. Anything else is rendered as a generic message: raw
-    // server/DB errors are never surfaced to the client.
+    // error card. Anything else is logged for diagnostics but rendered as a
+    // generic message: raw server/DB errors are never surfaced to the client.
     if (e instanceof AuthorizationError) redirect("/login");
+    console.error("[insights] failed to compute insights", range ?? {}, e);
     error = "We couldn’t compute your insights right now. Please try again.";
   }
 
@@ -103,6 +104,7 @@ async function InsightsLoader({
       currency={currency}
       insights={insights}
       error={error}
+      hasRange={Boolean(range?.dateFrom || range?.dateTo)}
       onSignOut={signOutAction}
       rangeControl={
         <AnalyticsRangeControl from={range?.dateFrom} to={range?.dateTo} params={params} />

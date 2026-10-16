@@ -9,7 +9,7 @@ import { InsightCard } from "@/components/insights/insight-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { BusinessWideNote } from "@/components/dashboard/business-wide-note";
-import { Sparkles, FileQuestion, FileUp, Plus } from "lucide-react";
+import { CalendarRange, Sparkles, FileQuestion, FileUp, Plus } from "lucide-react";
 import type { InspectInsight } from "@/lib/types/insights";
 
 export interface InsightsShellProps {
@@ -21,6 +21,8 @@ export interface InsightsShellProps {
   insights: InspectInsight[];
   /** Set when the server raised a clear error (e.g. query validation). */
   error?: string | null;
+  /** True when a bounded date range is active (drives the empty state copy). */
+  hasRange?: boolean;
   onSignOut?: () => void;
   /** Client date-range control shown above the insights grid. */
   rangeControl?: React.ReactNode;
@@ -36,6 +38,7 @@ export function InsightsShell({
   currency,
   insights,
   error,
+  hasRange = false,
   onSignOut,
   rangeControl,
   children,
@@ -78,31 +81,61 @@ export function InsightsShell({
             description={error}
           />
         ) : insights.length === 0 ? (
-          <EmptyState
-            icon={<Sparkles className="h-6 w-6" aria-hidden="true" />}
-            title="No insights yet"
-            description={
-              <>
-                Insights appear once you have transactions. Import a statement
-                or add transactions manually and they’ll show up here. Your
-                figures are shown in {currency}.
-              </>
-            }
-            action={
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <Link href="/import">
-                  <Button variant="primary" size="sm" leftIcon={<FileUp className="h-4 w-4" />}>
-                    Import a statement
-                  </Button>
-                </Link>
-                <Link href="/transactions">
-                  <Button variant="outline" size="sm" leftIcon={<Plus className="h-4 w-4" />}>
-                    Add a transaction
-                  </Button>
-                </Link>
-              </div>
-            }
-          />
+          hasRange ? (
+            <EmptyState
+              icon={<CalendarRange className="h-6 w-6" aria-hidden="true" />}
+              title="No activity in this period"
+              description="There are no transactions in the selected range, so there's nothing to analyse yet. View all time or import a statement to see more."
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <Link href="/insights?range=all">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      leftIcon={<CalendarRange className="h-4 w-4" />}
+                    >
+                      View all time
+                    </Button>
+                  </Link>
+                  <Link href="/import">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      leftIcon={<FileUp className="h-4 w-4" />}
+                    >
+                      Import a statement
+                    </Button>
+                  </Link>
+                </div>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={<Sparkles className="h-6 w-6" aria-hidden="true" />}
+              title="No insights yet"
+              description={
+                <>
+                  Insights appear once you have transactions. Import a statement
+                  or add transactions manually and they’ll show up here. Your
+                  figures are shown in {currency}.
+                </>
+              }
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <Link href="/import">
+                    <Button variant="primary" size="sm" leftIcon={<FileUp className="h-4 w-4" />}>
+                      Import a statement
+                    </Button>
+                  </Link>
+                  <Link href="/transactions">
+                    <Button variant="outline" size="sm" leftIcon={<Plus className="h-4 w-4" />}>
+                      Add a transaction
+                    </Button>
+                  </Link>
+                </div>
+              }
+            />
+          )
         ) : (
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

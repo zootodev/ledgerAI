@@ -81,16 +81,6 @@ export function TransactionForm({
       title={isEdit ? "Edit transaction" : "Add transaction"}
       description="All changes are scoped to your business and applied deterministically."
       size="md"
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose} disabled={pending}>
-            Cancel
-          </Button>
-          <Button type="submit" form="transaction-form" loading={pending}>
-            {isEdit ? "Save changes" : "Add transaction"}
-          </Button>
-        </>
-      }
     >
       <form
         id="transaction-form"
@@ -211,6 +201,17 @@ export function TransactionForm({
               defaultValue={transaction?.notes ?? ""}
             />
           </Field>
+        </div>
+
+        {/* Actions live INSIDE the form so click and Enter both submit
+            through React's form action — no cross-element `form=` wiring. */}
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <Button variant="outline" type="button" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={pending}>
+            {isEdit ? "Save changes" : "Add transaction"}
+          </Button>
         </div>
       </form>
     </Modal>
