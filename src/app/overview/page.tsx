@@ -88,12 +88,14 @@ function parseOverviewRange(search: OverviewSearchParams): AnalyticsQuery | unde
   return currentMonthRange();
 }
 
-/** Inclusive [first-of-month, today] window in UTC (server timezone). */
+/** Inclusive [first-of-month, today] window in local server time. */
 function currentMonthRange(): AnalyticsQuery {
   const now = new Date();
-  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
   return {
-    dateFrom: `${now.getUTCFullYear()}-${month}-01`,
-    dateTo: now.toISOString().slice(0, 10),
+    dateFrom: `${year}-${month}-01`,
+    dateTo: `${year}-${month}-${day}`,
   };
 }
