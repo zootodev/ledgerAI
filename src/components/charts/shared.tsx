@@ -95,7 +95,14 @@ export function formatValue(v: number): string {
  * "US$1.5m"). Uses the app's en-NG number locale so amounts stay symbolized
  * and grouped the same way as every other money figure.
  */
-export function compactCurrency(value: number, currency: string): string {
+export function compactCurrency(value: number, currency?: string, format?: "currency" | "number"): string {
+  const fmt = format ?? (currency ? "currency" : "number");
+  if (fmt === "number" || !currency) {
+    const abs = Math.abs(value);
+    if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+    if (abs >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+    return value.toLocaleString();
+  }
   const formatted = new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency,
@@ -103,7 +110,7 @@ export function compactCurrency(value: number, currency: string): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,
   }).format(value);
-  // Intl emits a "₦200K" magnitude suffix; the design uses lowercase ("₦200k").
+  // Intl emits a magnitude suffix like "KMBT"; the design uses lowercase.
   return formatted.replace(/([KMBT])$/, (m) => m.toLowerCase());
 }
 

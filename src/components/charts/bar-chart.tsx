@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { ChartTooltip, ChartLegend, chartColor, tickStyle, type ChartValueFormatter } from "@/components/charts/shared";
+import { ChartTooltip, ChartLegend, chartColor, tickStyle, type ChartValueFormatter, compactCurrency } from "@/components/charts/shared";
 import { cn } from "@/lib/utils/cn";
 
 export interface BarSeries {
@@ -28,8 +28,10 @@ export interface BarChartProps {
   height?: number;
   horizontal?: boolean;
   className?: string;
-  /** Currency-aware formatter for axis ticks and tooltip values. */
-  valueFormatter?: ChartValueFormatter;
+  /** Currency for formatting axis ticks and tooltip values. */
+  currency?: string;
+  /** Format to use; defaults to currency when currency is set, else number. */
+  format?: "currency" | "number";
 }
 
 export function BarChart({
@@ -39,8 +41,13 @@ export function BarChart({
   height = 280,
   horizontal = false,
   className,
-  valueFormatter,
+  currency,
+  format = currency ? "currency" : "number",
 }: BarChartProps) {
+  const valueFormatter: ChartValueFormatter | undefined = React.useMemo(
+    () => (v: number) => compactCurrency(v, currency, format),
+    [currency, format],
+  );
   return (
     <div className={cn("w-full", className)}>
       <ResponsiveContainer width="100%" height={height}>

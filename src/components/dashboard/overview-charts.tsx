@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getAnalyticsTrends, type AnalyticsQuery, type AnalyticsTrends } from "@/lib/services";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
-import { compactCurrency } from "@/components/charts/shared";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -88,8 +88,6 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
     );
   }
 
-  const money = (value: number) => compactCurrency(value, currency);
-
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <Card>
@@ -101,7 +99,7 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
             xKey="label"
             height={240}
             data={data}
-            valueFormatter={money}
+            currency={currency}
             series={[
               { key: "revenue", name: "Revenue", color: "var(--success)" },
               { key: "expenses", name: "Expenses", color: "var(--danger)" },
@@ -118,7 +116,7 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
             xKey="label"
             height={240}
             data={data}
-            valueFormatter={money}
+            currency={currency}
             series={[{ key: "netProfit", name: "Net profit" }]}
           />
         </CardContent>

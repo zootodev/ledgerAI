@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { ChartTooltip, ChartLegend, chartColor, tickStyle, type ChartValueFormatter } from "@/components/charts/shared";
+import { ChartTooltip, ChartLegend, chartColor, tickStyle, type ChartValueFormatter, compactCurrency } from "@/components/charts/shared";
 import { cn } from "@/lib/utils/cn";
 
 export interface Series {
@@ -27,8 +27,10 @@ export interface LineChartProps {
   series: Series[];
   height?: number;
   className?: string;
-  /** Currency-aware formatter for axis ticks and tooltip values. */
-  valueFormatter?: ChartValueFormatter;
+  /** Currency for formatting axis ticks and tooltip values. */
+  currency?: string;
+  /** Format to use; defaults to currency when currency is set, else number. */
+  format?: "currency" | "number";
 }
 
 export function LineChart({
@@ -37,8 +39,13 @@ export function LineChart({
   series,
   height = 280,
   className,
-  valueFormatter,
+  currency,
+  format = currency ? "currency" : "number",
 }: LineChartProps) {
+  const valueFormatter: ChartValueFormatter | undefined = React.useMemo(
+    () => (v: number) => compactCurrency(v, currency, format),
+    [currency, format],
+  );
   return (
     <div className={cn("w-full", className)}>
       <ResponsiveContainer width="100%" height={height}>
@@ -56,7 +63,7 @@ export function LineChart({
             axisLine={false}
             width={48}
             tick={tickStyle}
-            tickFormatter={valueFormatter ?? ((v: number) => compactNumber(v))}
+            tickFormatter={valueFormatter}
           />
           <Tooltip content={<ChartTooltip format={valueFormatter} />} cursor={{ stroke: "var(--border-strong)" }} />
           {series.length > 1 && <Legend content={<ChartLegend />} />}
@@ -79,10 +86,4 @@ export function LineChart({
   );
 }
 
-/** Compact numeric formatting for axis labels (e.g. 1.2k, 3.4M, ₦). */
-function compactNumber(v: number): string {
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (abs >= 1_000) return `${(v / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
-  return `${v}`;
-}
+
