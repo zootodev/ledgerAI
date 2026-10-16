@@ -100,6 +100,7 @@ export function compactCurrency(value: number, currency: string): string {
     style: "currency",
     currency,
     notation: "compact",
+    minimumFractionDigits: 0,
     maximumFractionDigits: 1,
   }).format(value);
   // Intl emits a "₦200K" magnitude suffix; the design uses lowercase ("₦200k").
