@@ -595,7 +595,8 @@ export function ImportWizard({
                 Choose a statement file
               </CardTitle>
               <CardDescription>
-                Supported: .csv, .xlsx (Excel / Google Sheets) and .pdf. Files up to 5 MB.
+                Supported: .csv, .xlsx (Excel, or Google Sheets downloaded as
+                .xlsx) and .pdf. Files up to 5 MB.
               </CardDescription>
             </CardHeader>
             <CardContent>

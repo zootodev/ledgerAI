@@ -122,6 +122,33 @@ export function TransactionsView({
     [categories],
   );
 
+  // The category filter only ever lists categories that can actually apply to
+  // the rows on screen: the locked type on /income and /expenses, or the type
+  // the user selected on /transactions. Transfers have no categories, so the
+  // filter stays unfiltered for them. A category that is already selected is
+  // always kept so the control never appears to drop the active filter.
+  const categoryFilterType =
+    lockedType ??
+    (params.type === "income" || params.type === "expense" ? params.type : undefined);
+  const categoryOptions = React.useMemo(() => {
+    if (!categoryFilterType) return categories;
+    const matching = categories.filter((c) => c.type === categoryFilterType);
+    const selected = params.categoryId
+      ? categories.find((c) => c.id === params.categoryId)
+      : undefined;
+    if (selected && !matching.some((c) => c.id === selected.id)) {
+      matching.push(selected);
+    }
+    return matching;
+  }, [categories, categoryFilterType, params.categoryId]);
+
+  const loadErrorTitle =
+    lockedType === "income"
+      ? "Couldn't load income"
+      : lockedType === "expense"
+        ? "Couldn't load expenses"
+        : "Couldn't load transactions";
+
   const hasFilters = Boolean(
     params.search ||
       (!lockedType && params.type) ||
@@ -490,7 +517,7 @@ export function TransactionsView({
                   aria-label="Filter by category"
                 >
                   <option value="">All categories</option>
-                  {categories.map((c) => (
+                  {categoryOptions.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
@@ -564,7 +591,7 @@ export function TransactionsView({
             error={
               loadError ? (
                 <ErrorState
-                  title="Couldn't load transactions"
+                  title={loadErrorTitle}
                   description={loadError}
                   onRetry={() => router.refresh()}
                 />

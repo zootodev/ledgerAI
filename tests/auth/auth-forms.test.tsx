@@ -18,6 +18,11 @@ function staticMarkup(Component: () => React.ReactElement) {
   return renderToStaticMarkup(React.createElement(Component));
 }
 
+/** Markup with tags removed, so assertions read as plain visible copy. */
+function visible(html: string): string {
+  return html.replace(/<[^>]*>/g, "");
+}
+
 /** Count browser-validated `required` attributes in a rendered form. */
 function countRequired(html: string) {
   return (html.match(/required=""/g) ?? []).length;
@@ -30,9 +35,10 @@ beforeEach(() => {
 describe("signup form", () => {
   it("leads with the import → review → profit outcome and a show-password toggle", () => {
     const html = staticMarkup(SignupForm);
-    expect(html).toContain("Import.");
-    expect(html).toContain("Review.");
-    expect(html).toContain("Profit.");
+    const copy = visible(html);
+    expect(copy).toContain("Import — Upload a bank or PDF statement");
+    expect(copy).toContain("Review — Confirm how each transaction is categorized");
+    expect(copy).toContain("Profit — See income minus costs, clearly");
     expect(html).toContain("Show password");
     expect(html).toContain('type="password"');
   });
@@ -57,7 +63,7 @@ describe("signup form", () => {
 describe("login form", () => {
   it("reframes the outcomes for sign-in and keeps the masked password toggle", () => {
     const html = staticMarkup(LoginForm);
-    expect(html).toContain("Review.");
+    expect(visible(html)).toContain("Review — Check recent imports and uncategorized rows");
     expect(html).toContain("Forgot your password?");
     expect(html).toContain("Show password");
     expect(html).toContain('type="password"');

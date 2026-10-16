@@ -54,12 +54,20 @@ export function Header({ title, user, actions, onSignOut, className }: HeaderPro
                   {initials(user.name)}
                 </span>
                 <span className="hidden max-w-36 truncate text-sm font-medium lg:block">
-                  {user.name}
+                  {firstName(user.name)}
                 </span>
                 <ChevronDown className="hidden h-4 w-4 text-subtle lg:block" aria-hidden="true" />
               </Button>
             }
           >
+            {/* The button shows only the first name (it used to truncate the
+                full name); the menu keeps the full identity visible. */}
+            <div className="border-b border-border px-3 pb-2 pt-1">
+              <p className="truncate text-sm font-medium text-foreground">{user.name}</p>
+              {user.email && (
+                <p className="truncate text-xs text-muted">{user.email}</p>
+              )}
+            </div>
             <DropdownItem onClick={() => router.push("/settings/profile")}>Profile</DropdownItem>
             <DropdownItem onClick={() => router.push("/settings")}>Settings</DropdownItem>
             <DropdownItem destructive onClick={handleSignOut}>
@@ -79,4 +87,9 @@ export function initials(name: string): string {
     .slice(0, 2)
     .map((n) => Array.from(n)[0]?.toUpperCase())
     .join("");
+}
+
+/** First whitespace-delimited name, so the header button never truncates. */
+export function firstName(name: string): string {
+  return name.split(/\s+/).filter(Boolean)[0] ?? name;
 }

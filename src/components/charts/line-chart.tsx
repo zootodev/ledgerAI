@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { ChartTooltip, ChartLegend, chartColor, tickStyle } from "@/components/charts/shared";
+import { ChartTooltip, ChartLegend, chartColor, tickStyle, type ChartValueFormatter } from "@/components/charts/shared";
 import { cn } from "@/lib/utils/cn";
 
 export interface Series {
@@ -27,6 +27,8 @@ export interface LineChartProps {
   series: Series[];
   height?: number;
   className?: string;
+  /** Currency-aware formatter for axis ticks and tooltip values. */
+  valueFormatter?: ChartValueFormatter;
 }
 
 export function LineChart({
@@ -35,6 +37,7 @@ export function LineChart({
   series,
   height = 280,
   className,
+  valueFormatter,
 }: LineChartProps) {
   return (
     <div className={cn("w-full", className)}>
@@ -53,9 +56,9 @@ export function LineChart({
             axisLine={false}
             width={48}
             tick={tickStyle}
-            tickFormatter={(v: number) => compactNumber(v)}
+            tickFormatter={valueFormatter ?? ((v: number) => compactNumber(v))}
           />
-          <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--border-strong)" }} />
+          <Tooltip content={<ChartTooltip format={valueFormatter} />} cursor={{ stroke: "var(--border-strong)" }} />
           {series.length > 1 && <Legend content={<ChartLegend />} />}
           {series.map((s, i) => (
             <Line

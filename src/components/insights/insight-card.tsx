@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { round } from "@/lib/finance/engine";
 import type { InspectInsight } from "@/lib/types/insights";
 import { cn } from "@/lib/utils/cn";
 
@@ -151,7 +152,8 @@ function entryList(insight: InspectInsight, currency: string): [string, string][
     out.push([label, fmt ? fmt(v) : money.format(v)]);
   };
 
-  const percent = (n: number) => `${n.toLocaleString("en-NG")}%`;
+  // One decimal, matching the prose in the insight description exactly.
+  const percent = (n: number) => `${round(n, 1).toLocaleString("en-NG")}%`;
 
   switch (insight.kind) {
     case "revenue":

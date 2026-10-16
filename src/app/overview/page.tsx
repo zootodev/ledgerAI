@@ -56,7 +56,7 @@ export default async function OverviewPage({
       }
       charts={
         <Suspense fallback={<ChartsFallback />}>
-          <OverviewCharts range={range} />
+          <OverviewCharts currency={ctx.business.currency} range={range} />
         </Suspense>
       }
       onSignOut={signOutAction}

@@ -189,6 +189,13 @@ function CategoryFormModal({
 }: CategoryFormModalProps) {
   const action = editing ? updateCategoryAction : createCategoryAction;
   const [state, formAction, pending] = useActionState(action, initialState);
+  // The type is controlled so the name hint can match it: an income category
+  // is usually better exemplified by "Consulting fees" than "Fuel & tolls".
+  const [categoryType, setCategoryType] = React.useState<"income" | "expense">(
+    editing?.type ?? defaultType,
+  );
+  const namePlaceholder =
+    categoryType === "income" ? "e.g. Consulting fees" : "e.g. Fuel & tolls";
 
   const notified = React.useRef(false);
   React.useEffect(() => {
@@ -229,7 +236,7 @@ function CategoryFormModal({
           <Input
             id="category-name"
             name="name"
-            placeholder="e.g. Fuel & tolls"
+            placeholder={namePlaceholder}
             required
             maxLength={60}
             defaultValue={editing?.name}
@@ -239,7 +246,8 @@ function CategoryFormModal({
           <Select
             id="category-type"
             name="type"
-            defaultValue={editing?.type ?? defaultType}
+            value={categoryType}
+            onChange={(e) => setCategoryType(e.target.value as "income" | "expense")}
           >
             <option value="income">Income</option>
             <option value="expense">Expense</option>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
+import { CalendarRange } from "lucide-react";
 import { format, startOfMonth, startOfQuarter, startOfYear, subDays } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -94,30 +95,39 @@ export function AnalyticsRangeControl({
         isPending && "pointer-events-none opacity-60",
       )}
     >
-      <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center">
-        <label className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted">
-            From
-          </span>
-          <Input
-            type="date"
-            value={from ?? ""}
-            onChange={(e) => apply(e.target.value, to ?? "")}
-            className="w-full"
-          />
-        </label>
-        <label className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted">
-            To
-          </span>
-          <Input
-            type="date"
-            value={to ?? ""}
-            onChange={(e) => apply(from ?? "", e.target.value)}
-            className="w-full"
-          />
-        </label>
-      </div>
+      {!from && !to ? (
+        // "All time" has no explicit bounds, so blank date inputs would read as
+        // an empty filter. Replace them with an explicit, non-editable label.
+        <div className="flex items-center gap-1.5 rounded-field border border-border bg-surface-subtle/40 px-3 py-2 text-sm text-muted">
+          <CalendarRange className="h-4 w-4 shrink-0" aria-hidden="true" />
+          All recorded transactions
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center">
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted">
+              From
+            </span>
+            <Input
+              type="date"
+              value={from ?? ""}
+              onChange={(e) => apply(e.target.value, to ?? "")}
+              className="w-full"
+            />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted">
+              To
+            </span>
+            <Input
+              type="date"
+              value={to ?? ""}
+              onChange={(e) => apply(from ?? "", e.target.value)}
+              className="w-full"
+            />
+          </label>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-1.5">
         {presets.map((preset) => {

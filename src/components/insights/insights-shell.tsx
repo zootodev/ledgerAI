@@ -62,11 +62,11 @@ export function InsightsShell({
         </div>
 
         {rangeControl}
-        <BusinessWideNote />
+        <BusinessWideNote variant="insights" />
 
         <Alert tone="info" title="Guidance, not accounting advice">
           Insights are computed from your recorded transactions and are meant
-          to guide decisions — not substitute for professional accounting or
+          to guide decisions — not a substitute for professional accounting or
           tax advice.
         </Alert>
 

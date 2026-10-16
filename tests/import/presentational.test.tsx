@@ -87,7 +87,10 @@ describe("ImportHistory", () => {
   it("renders one row per import with badges and counts", () => {
     const html = renderToStaticMarkup(<ImportHistory items={items} />);
     expect(html).toContain("moniepoint.csv");
-    expect(html).toContain("3 / 4 rows");
+    // Every row uses the same "N of M imported" summary — no bare "+N" badge.
+    expect(html).toContain("3 of 4 imported");
+    expect(html).toContain("0 of 0 imported");
+    expect(html).not.toContain("+3");
     expect(html).toContain("1 invalid");
     expect(html).toContain("2 already in ledger");
     expect(html).toContain("1 duplicate in file");

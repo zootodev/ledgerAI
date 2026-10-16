@@ -35,8 +35,8 @@ export function AuthValueStrip({ intent, className }: AuthValueStripProps) {
         <li key={title} className="flex items-baseline gap-2 text-sm">
           <Check className="h-4 w-4 shrink-0 translate-y-0.5 text-brand" aria-hidden="true" />
           <p>
-            <span className="font-medium text-foreground">{title}.</span>{" "}
-            <span className="text-muted">{text}</span>
+            <span className="font-medium text-foreground">{title}</span>
+            <span className="text-muted"> — {text}</span>
           </p>
         </li>
       ))}

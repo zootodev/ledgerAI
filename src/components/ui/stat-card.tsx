@@ -35,6 +35,9 @@ export function StatCard({
 }: StatCardProps) {
   const positive = delta != null && !delta.startsWith("-");
   const showDelta = !!delta && !loading;
+  // Exactly zero movement is neither up nor down: show a neutral "0%" with no
+  // arrow (and no success/danger tone) instead of implying a direction.
+  const unchanged = delta != null && /^[-+]?0%$/.test(delta.trim());
   // Tone reflects whether the movement is good, not merely its direction.
   const good = invertDelta ? !positive : positive;
 
@@ -61,14 +64,15 @@ export function StatCard({
               <span
                 className={cn(
                   "inline-flex items-center gap-0.5 text-sm font-medium tabular-nums",
-                  good ? "text-success" : "text-danger",
+                  unchanged ? "text-muted" : good ? "text-success" : "text-danger",
                 )}
               >
-                {positive ? (
-                  <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <TrendingDown className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
+                {!unchanged &&
+                  (positive ? (
+                    <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <TrendingDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  ))}
                 {delta.replace("%", "")}%
               </span>
             )}

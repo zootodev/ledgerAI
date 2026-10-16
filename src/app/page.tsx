@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Accordion } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { getCurrentUser } from "@/lib/auth/server";
 
 export const metadata: Metadata = {
   title: {
@@ -245,7 +246,12 @@ function MonthlyTrendChart() {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  // Session-aware marketing nav: a signed-in visitor gets a direct route back
+  // into the app. We only READ the session — the landing page is deliberately
+  // never redirected, so it stays viewable while authenticated.
+  const user = await getCurrentUser().catch(() => null);
+
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       {/* ---------------------------------------------------------- Header */}
@@ -255,15 +261,24 @@ export default function Home() {
             <Logo />
           </Link>
           <nav className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm font-medium text-secondary transition-colors hover:text-foreground"
-            >
-              Sign in
-            </Link>
-            <Link href="/signup" className={`${primaryCta} h-9 px-4 text-sm`}>
-              Get started
-            </Link>
+            {user ? (
+              <Link href="/overview" className={`${primaryCta} h-9 px-4 text-sm`}>
+                Go to dashboard
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="text-sm font-medium text-secondary transition-colors hover:text-foreground"
+                >
+                  Sign in
+                </Link>
+                <Link href="/signup" className={`${primaryCta} h-9 px-4 text-sm`}>
+                  Get started
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </header>

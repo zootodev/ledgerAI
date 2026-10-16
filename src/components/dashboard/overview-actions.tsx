@@ -46,7 +46,7 @@ export async function OverviewActionItems() {
       )}
 
       {lowConfidenceCount > 0 && (
-        <Alert tone="info" title="Some categories are low-confidence">
+        <Alert tone="info" title="Some transactions need a category check">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
               {lowConfidenceCount} transaction

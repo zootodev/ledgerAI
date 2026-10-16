@@ -91,7 +91,7 @@ describe("deriveInsights (deterministic insight engine)", () => {
     );
     const revenue = findKind(insights, "revenue");
     expect(revenue?.title).toContain("fell");
-    expect(revenue?.title).toContain("33%");
+    expect(revenue?.title).toContain("33.3%");
   });
 
   it("skips revenue insight when the prior period had no revenue", () => {

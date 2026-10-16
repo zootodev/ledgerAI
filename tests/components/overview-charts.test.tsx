@@ -29,7 +29,7 @@ describe("OverviewCharts (Overview chart integration)", () => {
   it("renders both chart cards when trend data is available", async () => {
     mockedGetAnalyticsTrends.mockResolvedValue(makeTrends());
 
-    const element = await OverviewCharts({});
+    const element = await OverviewCharts({ currency: "NGN" });
     const html = renderToStaticMarkup(element as never);
 
     expect(html).toContain("Revenue vs expenses");
@@ -39,7 +39,7 @@ describe("OverviewCharts (Overview chart integration)", () => {
   it("calls the trend service with the page range and a sensible groupBy", async () => {
     mockedGetAnalyticsTrends.mockResolvedValue(makeTrends());
 
-    await OverviewCharts({ range: { dateFrom: "2026-01-01", dateTo: "2026-01-15" } });
+    await OverviewCharts({ currency: "NGN", range: { dateFrom: "2026-01-01", dateTo: "2026-01-15" } });
 
     expect(mockedGetAnalyticsTrends).toHaveBeenCalledWith({
       dateFrom: "2026-01-01",
@@ -51,7 +51,7 @@ describe("OverviewCharts (Overview chart integration)", () => {
   it("falls back to monthly buckets for wide ranges", async () => {
     mockedGetAnalyticsTrends.mockResolvedValue(makeTrends());
 
-    await OverviewCharts({ range: { dateFrom: "2026-01-01", dateTo: "2026-04-01" } });
+    await OverviewCharts({ currency: "NGN", range: { dateFrom: "2026-01-01", dateTo: "2026-04-01" } });
 
     expect(mockedGetAnalyticsTrends).toHaveBeenCalledWith({
       dateFrom: "2026-01-01",
@@ -63,7 +63,7 @@ describe("OverviewCharts (Overview chart integration)", () => {
   it("requests all-time monthly trends when no range is provided", async () => {
     mockedGetAnalyticsTrends.mockResolvedValue(makeTrends());
 
-    await OverviewCharts({});
+    await OverviewCharts({ currency: "NGN" });
 
     expect(mockedGetAnalyticsTrends).toHaveBeenCalledWith({ groupBy: "month" });
   });
@@ -71,17 +71,50 @@ describe("OverviewCharts (Overview chart integration)", () => {
   it("shows the empty state when there are no trend points", async () => {
     mockedGetAnalyticsTrends.mockResolvedValue({ points: [], period: { from: null, to: null } });
 
-    const element = await OverviewCharts({});
+    const element = await OverviewCharts({ currency: "NGN" });
     const html = renderToStaticMarkup(element as never);
 
     expect(html).toContain("No chart data yet");
     expect(html).not.toContain("Revenue vs expenses");
   });
 
+  it("shows 'No activity in this period' instead of a flat zero chart", async () => {
+    mockedGetAnalyticsTrends.mockResolvedValue({
+      points: [
+        { key: "2026-01", label: "Jan 2026", revenue: 0, expenses: 0, transfers: 0, netProfit: 0, profitMargin: null },
+        { key: "2026-02", label: "Feb 2026", revenue: 0, expenses: 0, transfers: 0, netProfit: 0, profitMargin: null },
+      ],
+      period: { from: null, to: null },
+    });
+
+    const element = await OverviewCharts({ currency: "NGN" });
+    const html = renderToStaticMarkup(element as never);
+
+    expect(html).toContain("No activity in this period");
+    expect(html).not.toContain("Revenue vs expenses");
+    expect(html).not.toContain("Net profit trend");
+  });
+
+  it("plots the charts when a single bucket has activity", async () => {
+    mockedGetAnalyticsTrends.mockResolvedValue({
+      points: [
+        { key: "2026-01", label: "Jan 2026", revenue: 0, expenses: 0, transfers: 0, netProfit: 0, profitMargin: null },
+        { key: "2026-02", label: "Feb 2026", revenue: 500, expenses: 0, transfers: 0, netProfit: 500, profitMargin: 100 },
+      ],
+      period: { from: null, to: null },
+    });
+
+    const element = await OverviewCharts({ currency: "NGN" });
+    const html = renderToStaticMarkup(element as never);
+
+    expect(html).toContain("Revenue vs expenses");
+    expect(html).not.toContain("No activity in this period");
+  });
+
   it("shows the error state when the trend service fails", async () => {
     mockedGetAnalyticsTrends.mockRejectedValue(new Error("DATABASE_URL"));
 
-    const element = await OverviewCharts({});
+    const element = await OverviewCharts({ currency: "NGN" });
     const html = renderToStaticMarkup(element as never);
 
     expect(html).toContain("load your charts");

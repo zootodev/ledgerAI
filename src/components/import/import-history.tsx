@@ -17,6 +17,50 @@ function formatDateTime(iso: string): string {
   }).format(new Date(iso));
 }
 
+interface SummaryPart {
+  key: string;
+  text: string;
+  /** Optional tone class; omitted parts render in the inherited muted colour. */
+  tone?: string;
+}
+
+/**
+ * One consistent row summary for every import — "14 of 16 imported · 1 invalid
+ * · 1 excluded" — so the newest and oldest rows read the same way instead of
+ * the latest row showing a bare "+14".
+ */
+function summaryParts(item: ImportHistoryItem): SummaryPart[] {
+  const parts: SummaryPart[] = [
+    {
+      key: "imported",
+      text: `${item.transactionsImported} of ${item.transactionsFound} imported`,
+      tone: "text-success",
+    },
+  ];
+  const errors = item.errors;
+  if (errors) {
+    if (errors.invalidRows > 0) {
+      parts.push({ key: "invalid", text: `${errors.invalidRows} invalid`, tone: "text-danger" });
+    }
+    if (errors.excluded > 0) {
+      parts.push({ key: "excluded", text: `${errors.excluded} excluded` });
+    }
+    if (errors.existingDuplicates > 0) {
+      parts.push({
+        key: "existingDuplicates",
+        text: `${errors.existingDuplicates} already in ledger`,
+      });
+    }
+    if (errors.inFileDuplicates > 0) {
+      parts.push({
+        key: "inFileDuplicates",
+        text: `${errors.inFileDuplicates} duplicate in file`,
+      });
+    }
+  }
+  return parts;
+}
+
 export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
   return (
     <Card>
@@ -46,43 +90,19 @@ export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
                     <p className="text-xs text-muted">
                       {formatDateTime(item.createdAt)} · {item.fileType.toUpperCase()}
                     </p>
-                    {item.errors && (
-                      <p className="mt-0.5 text-xs text-muted">
-                        <span className="text-success">+{item.transactionsImported}</span>
-                        {item.errors.existingDuplicates > 0 && (
-                          <span className="text-muted">
-                            {" · "}
-                            {item.errors.existingDuplicates} already in ledger
-                          </span>
-                        )}
-                        {item.errors.inFileDuplicates > 0 && (
-                          <span className="text-muted">
-                            {" · "}
-                            {item.errors.inFileDuplicates} duplicate in file
-                          </span>
-                        )}
-                        {item.errors.invalidRows > 0 && (
-                          <span className="text-danger">
-                            {" · "}
-                            {item.errors.invalidRows} invalid
-                          </span>
-                        )}
-                        {item.errors.excluded > 0 && (
-                          <span className="text-muted">
-                            {" · "}
-                            {item.errors.excluded} excluded
-                          </span>
-                        )}
-                      </p>
-                    )}
+                    <p className="mt-0.5 text-xs text-muted">
+                      {summaryParts(item).map((part, i) => (
+                        <span key={part.key}>
+                          {i > 0 && <span className="text-muted"> · </span>}
+                          <span className={part.tone}>{part.text}</span>
+                        </span>
+                      ))}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge tone={item.status === "committed" ? "success" : "warning"}>
                       {item.status}
                     </Badge>
-                    <span className="whitespace-nowrap text-sm text-muted tabular-nums">
-                      {item.transactionsImported} / {item.transactionsFound} rows
-                    </span>
                   </div>
                 </div>
                 {item.errors && item.errors.exceptions.length > 0 && (

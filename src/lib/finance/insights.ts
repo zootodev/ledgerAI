@@ -146,8 +146,8 @@ function deriveKeyInsight(input: InsightsInput): DerivedInsight | null {
     const share = (top.amount / summary.expenses) * 100;
     return {
       kind: "key",
-      title: `${cap(top.categoryName)} was your top expense`,
-      description: `Spending on ${lower(top.categoryName)} (${money(top.amount)}) made up ${formatPercent(share)} of all expenses this period.`,
+      title: `${displayCategory(top.categoryName)} was your top expense`,
+      description: `Spending on ${displayCategory(top.categoryName)} (${money(top.amount)}) made up ${formatPercent(share)} of all expenses this period.`,
       metadata: {
         categoryName: top.categoryName,
         amount: top.amount,
@@ -197,8 +197,8 @@ function deriveSpendingInsight(input: InsightsInput): DerivedInsight | null {
   const up = delta > 0;
   return {
     kind: "spending",
-    title: `${cap(best.categoryName)} ${up ? "increased" : "decreased"} ${formatPercent(Math.abs(delta))}`,
-    description: `Spending on ${lower(best.categoryName)} moved from ${money(best.priorAmount)} to ${money(best.amount)} (${formatPercent(delta)}) between the two periods${best.transactions > 0 ? ` across ${best.transactions} transaction${best.transactions === 1 ? "" : "s"}` : ""}.`,
+    title: `${displayCategory(best.categoryName)} ${up ? "increased" : "decreased"} ${formatPercent(Math.abs(delta))}`,
+    description: `Spending on ${displayCategory(best.categoryName)} moved from ${money(best.priorAmount)} to ${money(best.amount)} (${formatPercent(delta)}) between the two periods${best.transactions > 0 ? ` across ${best.transactions} transaction${best.transactions === 1 ? "" : "s"}` : ""}.`,
     metadata: {
       categoryName: best.categoryName,
       priorAmount: best.priorAmount,
@@ -293,7 +293,7 @@ function deriveAnomalyInsight(input: InsightsInput): DerivedInsight | null {
   return {
     kind: "anomaly",
     title: `A single expense stood out`,
-    description: `${money(largestExpense.amount)} (${formatPercent(share)} of all expenses)${largestExpense.categoryName ? ` in ${lower(largestExpense.categoryName)}` : ""} dominated the period.${catShare >= 50 ? ` It accounts for ${formatPercent(catShare)} of that category's total spending.` : ""}`,
+    description: `${money(largestExpense.amount)} (${formatPercent(share)} of all expenses)${largestExpense.categoryName ? ` in ${displayCategory(largestExpense.categoryName)}` : ""} dominated the period.${catShare >= 50 ? ` It accounts for ${formatPercent(catShare)} of that category's total spending.` : ""}`,
     metadata: {
       categoryName: largestExpense.categoryName,
       amount: largestExpense.amount,
@@ -316,8 +316,8 @@ function deriveRecommendation(input: InsightsInput): DerivedInsight | null {
     if (share >= TOP_CATEGORY_SHARE * 100) {
       return {
         kind: "recommendation",
-        title: `Review ${lower(top.categoryName)} spend`,
-        description: `${cap(top.categoryName)} (${money(top.amount)}) is your largest category at ${formatPercent(share)} of expenses. Review recent ${lower(top.categoryName)} transactions to confirm the spend is still necessary.`,
+        title: `Review ${displayCategory(top.categoryName)} spend`,
+        description: `${displayCategory(top.categoryName)} (${money(top.amount)}) is your largest category at ${formatPercent(share)} of expenses. Review recent ${displayCategory(top.categoryName)} transactions to confirm the spend is still necessary.`,
         metadata: {
           categoryName: top.categoryName,
           amount: top.amount,
@@ -344,14 +344,14 @@ function deriveRecommendation(input: InsightsInput): DerivedInsight | null {
  * shared formatting helpers
  * ------------------------------------------------------------ */
 
-/** "SALES" -> "Sales"; "MTN DATA" -> "Mtn data" (title-cased first word). */
-function cap(value: string | null): string {
-  if (!value) return "Uncategorized";
-  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
-}
-
-function lower(value: string | null): string {
-  return value ? value.toLowerCase() : "uncategorized";
+/**
+ * Category display name exactly as stored ("Other Income" stays
+ * "Other Income"). Only a genuinely missing name falls back to
+ * "Uncategorized"; prose never re-cases a user-defined category.
+ */
+function displayCategory(value: string | null): string {
+  const name = value?.trim();
+  return name && name.length > 0 ? name : "Uncategorized";
 }
 
 function formatMajor(value: number, currency: string): string {
@@ -362,13 +362,18 @@ function formatMajor(value: number, currency: string): string {
   }).format(round(value, 0));
 }
 
+/**
+ * One-decimal percentage that drops a trailing ".0" (28%, 27.8%). Matches the
+ * stat values on the insight card (also rounded to one decimal) so the prose
+ * and the number never disagree.
+ */
 function formatPercent(value: number | null): string {
   if (value === null) return "0%";
-  return `${round(value, 0).toLocaleString("en-NG")}%`;
+  return `${round(value, 1).toLocaleString("en-NG")}%`;
 }
 
 function formatSignedPercent(value: number | null): string {
   if (value === null) return "0%";
-  const rounded = round(Math.abs(value), 0);
+  const rounded = round(Math.abs(value), 1);
   return `${value > 0 ? "+" : "-"}${rounded.toLocaleString("en-NG")}%`;
 }

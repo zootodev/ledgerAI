@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { ChartTooltip, ChartLegend, chartColor, tickStyle } from "@/components/charts/shared";
+import { ChartTooltip, ChartLegend, chartColor, tickStyle, type ChartValueFormatter } from "@/components/charts/shared";
 import { cn } from "@/lib/utils/cn";
 
 export interface BarSeries {
@@ -28,6 +28,8 @@ export interface BarChartProps {
   height?: number;
   horizontal?: boolean;
   className?: string;
+  /** Currency-aware formatter for axis ticks and tooltip values. */
+  valueFormatter?: ChartValueFormatter;
 }
 
 export function BarChart({
@@ -37,6 +39,7 @@ export function BarChart({
   height = 280,
   horizontal = false,
   className,
+  valueFormatter,
 }: BarChartProps) {
   return (
     <div className={cn("w-full", className)}>
@@ -69,9 +72,13 @@ export function BarChart({
               axisLine={false}
               width={48}
               tick={tickStyle}
+              tickFormatter={valueFormatter}
             />
           )}
-          <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--surface-subtle)" }} />
+          <Tooltip
+            content={<ChartTooltip format={valueFormatter} />}
+            cursor={{ fill: "var(--surface-subtle)" }}
+          />
           {series.length > 1 && <Legend content={<ChartLegend />} />}
           {series.map((s, i) => (
             <Bar

@@ -8,8 +8,16 @@ type ChartTooltipRenderProps = {
   label?: string | number;
 };
 
+/** Formats a single numeric chart value (e.g. currency-aware tooltips). */
+export type ChartValueFormatter = (value: number) => string;
+
 /** Accessible chart tooltip matching the design system. */
-export function ChartTooltip({ active, payload, label }: ChartTooltipRenderProps) {
+export function ChartTooltip({
+  active,
+  payload,
+  label,
+  format,
+}: ChartTooltipRenderProps & { format?: ChartValueFormatter }) {
   if (!active || !payload?.length) return null;
 
   return (
@@ -31,7 +39,9 @@ export function ChartTooltip({ active, payload, label }: ChartTooltipRenderProps
             />
             <span className="text-secondary">{entry.name}</span>
             <span className="ml-auto font-medium tabular-nums text-foreground">
-              {typeof entry.value === "number" ? formatValue(entry.value) : entry.value}
+              {typeof entry.value === "number"
+                ? (format ?? formatValue)(entry.value)
+                : entry.value}
             </span>
           </div>
         ))}
@@ -78,6 +88,22 @@ export function formatValue(v: number): string {
   return Number.isInteger(v)
     ? v.toLocaleString()
     : v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+/**
+ * Compact, currency-aware label for chart axes and tooltips ("₦200k",
+ * "US$1.5m"). Uses the app's en-NG number locale so amounts stay symbolized
+ * and grouped the same way as every other money figure.
+ */
+export function compactCurrency(value: number, currency: string): string {
+  const formatted = new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency,
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+  // Intl emits a "₦200K" magnitude suffix; the design uses lowercase ("₦200k").
+  return formatted.replace(/([KMBT])$/, (m) => m.toLowerCase());
 }
 
 /** Shared axis tick style. */

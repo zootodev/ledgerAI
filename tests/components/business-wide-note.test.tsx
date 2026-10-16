@@ -45,6 +45,7 @@ describe("BusinessWideNote", () => {
         insights={[]}
       />,
     );
-    expect(html).toContain("Totals across all accounts");
+    expect(html).toContain("Totals cover every account");
+    expect(html).not.toContain("Totals across all accounts");
   });
 });

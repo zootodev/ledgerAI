@@ -185,3 +185,25 @@ describe("report prior-period deltas — metric-aware tone", () => {
     expect(html).not.toContain("no prior figure to compare against");
   });
 });
+
+describe("report negative amounts and cash-balance note", () => {
+  it("paints a negative net profit in the danger colour", async () => {
+    const html = await render(
+      reportData({
+        summary: { ...reportData().summary, netProfit: -50_000, cashBalance: -10_000 },
+        profit: { ...reportData().profit, netProfit: -50_000 },
+      }),
+    );
+    const negative = new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      maximumFractionDigits: 2,
+    }).format(-50_000);
+    expect(html).toContain(`text-danger">${negative}`);
+  });
+
+  it("explains that cash balance is the end of the selected range", async () => {
+    const html = await render(reportData());
+    expect(html).toContain("Cash balance is as of the end of the selected range.");
+  });
+});

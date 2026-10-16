@@ -215,13 +215,15 @@ function SummarySection({
     label: string;
     value: string;
     href?: string;
+    /** Signed amount driving danger styling for losses / overdrawn balances. */
+    amount?: number;
   }> = [
-    { label: "Revenue", value: formatAmount(summary.revenue, currency), href: transactionsHref("income", range) },
-    { label: "Expenses", value: formatAmount(summary.expenses, currency), href: transactionsHref("expense", range) },
-    { label: "Transfers", value: formatAmount(summary.transfers, currency), href: transactionsHref("transfer", range) },
-    { label: "Net profit", value: formatAmount(summary.netProfit, currency) },
+    { label: "Revenue", value: formatAmount(summary.revenue, currency), href: transactionsHref("income", range), amount: summary.revenue },
+    { label: "Expenses", value: formatAmount(summary.expenses, currency), href: transactionsHref("expense", range), amount: summary.expenses },
+    { label: "Transfers", value: formatAmount(summary.transfers, currency), href: transactionsHref("transfer", range), amount: summary.transfers },
+    { label: "Net profit", value: formatAmount(summary.netProfit, currency), amount: summary.netProfit },
     { label: "Profit margin", value: percent(summary.profitMargin) },
-    { label: "Cash balance", value: formatAmount(summary.cashBalance, currency) },
+    { label: "Cash balance", value: formatAmount(summary.cashBalance, currency), amount: summary.cashBalance },
   ];
   return (
     <Card>
@@ -239,12 +241,17 @@ function SummarySection({
       <CardContent>
         <table className="w-full text-sm">
           <tbody>
-            {rows.map(({ label, value, href }) => (
+            {rows.map(({ label, value, href, amount }) => (
               <tr key={label} className="border-b border-border last:border-0">
                 <td className="py-2.5 text-muted">
                   {href ? <DrillLink href={href}>{label}</DrillLink> : label}
                 </td>
-                <td className="py-2.5 text-right font-medium text-foreground tabular-nums">
+                <td
+                  className={cn(
+                    "py-2.5 text-right font-medium tabular-nums",
+                    amount !== undefined && amount < 0 ? "text-danger" : "text-foreground",
+                  )}
+                >
                   {value}
                 </td>
               </tr>
@@ -271,7 +278,7 @@ function SummarySection({
           </div>
         )}
         <p className="mt-2 text-xs text-muted">
-          Cash balance is as of the &quot;to&quot; date.
+          Cash balance is as of the end of the selected range.
         </p>
       </CardContent>
     </Card>
@@ -347,7 +354,13 @@ function MonthlySection({
                     <td className={cn(cellNumber, "py-2.5 px-4 text-muted")}>
                       {formatAmount(p.transfers, currency)}
                     </td>
-                    <td className={cn(cellNumber, "py-2.5 px-4 font-medium text-foreground")}>
+                    <td
+                      className={cn(
+                        cellNumber,
+                        "py-2.5 px-4 font-medium",
+                        p.netProfit < 0 ? "text-danger" : "text-foreground",
+                      )}
+                    >
                       {formatAmount(p.netProfit, currency)}
                     </td>
                     <td className={cn(cellNumber, "py-2.5 pl-4 text-muted")}>
@@ -597,10 +610,10 @@ function ProfitSection({
   currency: string;
   range?: ReportsQuery;
 }) {
-  const rows: Array<{ label: string; value: string; href?: string }> = [
-    { label: "Revenue", value: formatAmount(report.revenue, currency), href: transactionsHref("income", range) },
-    { label: "Expenses", value: formatAmount(report.expenses, currency), href: transactionsHref("expense", range) },
-    { label: "Net profit", value: formatAmount(report.netProfit, currency) },
+  const rows: Array<{ label: string; value: string; href?: string; amount?: number }> = [
+    { label: "Revenue", value: formatAmount(report.revenue, currency), href: transactionsHref("income", range), amount: report.revenue },
+    { label: "Expenses", value: formatAmount(report.expenses, currency), href: transactionsHref("expense", range), amount: report.expenses },
+    { label: "Net profit", value: formatAmount(report.netProfit, currency), amount: report.netProfit },
     { label: "Profit margin", value: percent(report.profitMargin) },
   ];
   return (
@@ -619,12 +632,17 @@ function ProfitSection({
       <CardContent>
         <table className="w-full text-sm">
           <tbody>
-            {rows.map(({ label, value, href }) => (
+            {rows.map(({ label, value, href, amount }) => (
               <tr key={label} className="border-b border-border last:border-0">
                 <td className="py-2.5 text-muted">
                   {href ? <DrillLink href={href}>{label}</DrillLink> : label}
                 </td>
-                <td className="py-2.5 text-right font-medium text-foreground tabular-nums">
+                <td
+                  className={cn(
+                    "py-2.5 text-right font-medium tabular-nums",
+                    amount !== undefined && amount < 0 ? "text-danger" : "text-foreground",
+                  )}
+                >
                   {value}
                 </td>
               </tr>
