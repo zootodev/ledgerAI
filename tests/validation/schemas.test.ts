@@ -98,6 +98,20 @@ describe("transactionListQuerySchema", () => {
     expect(q.search).toBe("uber");
     expect(q.type).toBe("expense");
   });
+
+  it("accepts the preferred ?q= param and trims it", () => {
+    const q = transactionListQuerySchema.parse({ q: "  inv-7  " });
+    expect(q.q).toBe("inv-7");
+  });
+
+  it("rejects an over-long search term", () => {
+    expect(
+      transactionListQuerySchema.safeParse({ q: "x".repeat(101) }).success,
+    ).toBe(false);
+    expect(
+      transactionListQuerySchema.safeParse({ search: "x".repeat(101) }).success,
+    ).toBe(false);
+  });
 });
 
 describe("accountInputSchema", () => {

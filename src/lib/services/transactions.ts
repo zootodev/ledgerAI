@@ -47,6 +47,8 @@ export interface ListTransactionsParams {
   page?: number;
   pageSize?: number;
   search?: string;
+  /** Preferred free-text search param (`?q=`); `search` remains a legacy alias. */
+  q?: string;
   type?: "income" | "expense" | "transfer";
   accountId?: string;
   categoryId?: string;
@@ -60,12 +62,25 @@ export interface ListTransactionsParams {
   sortDir?: "asc" | "desc";
 }
 
+export interface TransactionTotals {
+  /** Sum of income in the filtered set (major units). */
+  income: number;
+  /** Sum of expenses in the filtered set (major units). */
+  expense: number;
+  /** income − expense for the filtered set (major units). */
+  net: number;
+  /** Sum of transfers in the filtered set (major units). */
+  transfer: number;
+}
+
 export interface ListTransactionsResult {
   items: TransactionServiceData[];
   total: number;
   page: number;
   pageSize: number;
   pages: number;
+  /** Money totals for the entire filtered set (not just the current page). */
+  totals: TransactionTotals;
 }
 
 const sortToOrder: Record<string, Prisma.TransactionOrderByWithRelationInput> = {
@@ -95,14 +110,18 @@ export async function listTransactions(
     ? queryParsed.data
     : transactionListQuerySchema.parse({});
 
+  const searchTerm = query.q ?? query.search;
+
   const where: Prisma.TransactionWhereInput = {
     businessId: business.id,
-    ...(query.search
+    // Free-text search matches the description OR the reference so a receipt
+    // number is findable from the same box.
+    ...(searchTerm
       ? {
-          description: {
-            contains: query.search,
-            mode: "insensitive" as const,
-          },
+          OR: [
+            { description: { contains: searchTerm, mode: "insensitive" as const } },
+            { reference: { contains: searchTerm, mode: "insensitive" as const } },
+          ],
         }
       : {}),
     ...(query.type ? { type: query.type } : {}),
@@ -145,6 +164,26 @@ export async function listTransactions(
   // empty body with a misleading footer — it falls back to the last valid
   // page. Zero rows still yields page 1 (pages are never empty).
   const total = await prisma.transaction.count({ where });
+
+  // Money totals for the whole filtered set (server-side, tenant-scoped), so
+  // the header can show income/expense/net without trusting page rows.
+  const typeGroups = await prisma.transaction.groupBy({
+    by: ["type"],
+    where,
+    _sum: { amount: true },
+  });
+  const totals: TransactionTotals = { income: 0, expense: 0, net: 0, transfer: 0 };
+  const groups = Array.isArray(typeGroups)
+    ? (typeGroups as Array<{ type: string; _sum: { amount: unknown } | null }>)
+    : [];
+  for (const group of groups) {
+    const amount = Number((group._sum as { amount: { toString: () => string } } | null)?.amount?.toString() ?? 0);
+    if (group.type === "income") totals.income = amount;
+    else if (group.type === "expense") totals.expense = amount;
+    else if (group.type === "transfer") totals.transfer = amount;
+  }
+  totals.net = totals.income - totals.expense;
+
   const pages = Math.max(1, Math.ceil(total / query.pageSize));
   const page = Math.min(Math.max(query.page, 1), pages);
 
@@ -161,6 +200,7 @@ export async function listTransactions(
     page,
     pageSize: query.pageSize,
     pages,
+    totals,
   };
 }
 

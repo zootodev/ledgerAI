@@ -83,6 +83,7 @@ export const transactionListQuerySchema = z.object({
     .int()
     .default(20)
     .transform((v) => Math.min(100, Math.max(1, v))),
+  q: z.string().trim().max(100).optional(),
   search: z.string().trim().max(100).optional(),
   type: z.enum(TRANSACTION_TYPES).optional(),
   accountId: z.uuid().optional(),

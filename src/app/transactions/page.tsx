@@ -46,7 +46,17 @@ export default async function TransactionsPage({
     listCategories(),
   ]);
 
-  const result = txs.status === "fulfilled" ? txs.value : { items: [], total: 0, page: 1, pageSize: 20, pages: 1 };
+  const result =
+    txs.status === "fulfilled"
+      ? txs.value
+      : {
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 20,
+          pages: 1,
+          totals: { income: 0, expense: 0, net: 0, transfer: 0 },
+        };
   const accountList = accounts.status === "fulfilled" ? accounts.value : [];
   const { loadError, accountsError, categoriesError } = summarizeTransactionLoads(txs, accounts, categories);
   if (txs.status === "rejected") console.error("[transactions] list failed", txs.reason);

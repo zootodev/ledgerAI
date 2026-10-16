@@ -107,7 +107,7 @@ export function TransactionsView({
   const [isPending, startTransition] = useTransition();
   const toast = useToast();
 
-  const [searchText, setSearchText] = React.useState(params.search ?? "");
+  const [searchText, setSearchText] = React.useState(params.q ?? params.search ?? "");
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<TransactionFormValues | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<TransactionServiceData | null>(null);
@@ -150,7 +150,8 @@ export function TransactionsView({
         : "Couldn't load transactions";
 
   const hasFilters = Boolean(
-    params.search ||
+    params.q ||
+      params.search ||
       (!lockedType && params.type) ||
       params.accountId ||
       params.categoryId ||
@@ -159,6 +160,11 @@ export function TransactionsView({
       params.uncategorized ||
       params.lowConfidence,
   );
+
+  // Whether the business has any accounts to filter or label rows with. When
+  // it has none, the Account control/column are dropped (a wall of "—" helps
+  // no one) and a hint points to where accounts are created.
+  const hasAccounts = accounts.length > 0;
 
   // Partial-failure state: the list loaded, but support data (accounts /
   // categories) did not. The table stays visible with safe placeholders, plus
@@ -198,6 +204,19 @@ export function TransactionsView({
     },
     [params, pathname, router],
   );
+
+  // Debounced free-text search: typing writes ?q= into the URL after a short
+  // pause so the server re-filters without a submit. The input stays mounted
+  // and controlled, so its value never reverts mid-typing.
+  const activeSearch = params.q ?? params.search ?? "";
+  React.useEffect(() => {
+    const next = searchText.trim();
+    if (next === activeSearch) return;
+    const id = window.setTimeout(() => {
+      push({ q: next || undefined, search: undefined });
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [searchText, activeSearch, push]);
 
   const handleSort = (key: string, direction: "asc" | "desc") => {
     push({ sortBy: key, sortDir: direction });
@@ -306,20 +325,24 @@ export function TransactionsView({
         );
       },
     },
-    {
-      key: "account",
-      header: "Account",
-      className: "min-w-32",
-      headerClassName: "min-w-32",
-      cell: (t) => {
-        const a = t.accountId ? accountsById.get(t.accountId) : undefined;
-        return a ? (
-          <span className="text-secondary">{a.name}</span>
-        ) : (
-          <span className="text-muted">—</span>
-        );
-      },
-    },
+    ...(hasAccounts
+      ? [
+          {
+            key: "account",
+            header: "Account",
+            className: "min-w-32",
+            headerClassName: "min-w-32",
+            cell: (t: TransactionServiceData) => {
+              const a = t.accountId ? accountsById.get(t.accountId) : undefined;
+              return a ? (
+                <span className="text-secondary">{a.name}</span>
+              ) : (
+                <span className="text-muted">—</span>
+              );
+            },
+          } satisfies Column<TransactionServiceData>,
+        ]
+      : []),
     {
       key: "type",
       header: "Type",
@@ -402,6 +425,46 @@ export function TransactionsView({
           </Button>
         </div>
 
+        {!loadError && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-card border border-border bg-surface px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                Income{hasFilters ? " (filtered)" : ""}
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-success">
+                +{formatAmount(result.totals.income, currency)}
+              </p>
+            </div>
+            <div className="rounded-card border border-border bg-surface px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                Expenses
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-danger">
+                −{formatAmount(result.totals.expense, currency)}
+              </p>
+            </div>
+            <div className="rounded-card border border-border bg-surface px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                Net
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-secondary">
+                {result.totals.net < 0 ? "−" : ""}
+                {formatAmount(Math.abs(result.totals.net), currency)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!hasAccounts && !accountsError && !loadError && (
+          <p className="text-sm text-muted">
+            No accounts yet —{" "}
+            <Link href="/settings/accounts" className="text-brand underline-offset-4 hover:underline">
+              add an account
+            </Link>{" "}
+            to tag transactions and filter by account.
+          </p>
+        )}
+
         {supportError && (
           <Alert tone="warning" title={supportError.title}>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -446,7 +509,7 @@ export function TransactionsView({
               className="flex w-full flex-wrap items-start gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
-                push({ search: searchText });
+                push({ q: searchText.trim() || undefined, search: undefined });
               }}
             >
               <label className="flex min-w-[200px] flex-col gap-1.5">
@@ -484,26 +547,28 @@ export function TransactionsView({
                   </Select>
                 </label>
               )}
-              <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted">
-                  Account
-                </span>
-                <Select
-                  value={params.accountId ?? ""}
-                  onChange={(e) =>
-                    push({ accountId: e.target.value || undefined })
-                  }
-                  className="w-44"
-                  aria-label="Filter by account"
-                >
-                  <option value="">All accounts</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
+              {hasAccounts && (
+                <label className="flex min-w-0 flex-col gap-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                    Account
+                  </span>
+                  <Select
+                    value={params.accountId ?? ""}
+                    onChange={(e) =>
+                      push({ accountId: e.target.value || undefined })
+                    }
+                    className="w-44"
+                    aria-label="Filter by account"
+                  >
+                    <option value="">All accounts</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+              )}
               <label className="flex min-w-0 flex-col gap-1.5">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted">
                   Category
@@ -556,6 +621,7 @@ export function TransactionsView({
                   onClick={() => {
                     setSearchText("");
                     push({
+                      q: undefined,
                       search: undefined,
                       type: undefined,
                       accountId: undefined,

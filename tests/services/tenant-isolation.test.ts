@@ -104,6 +104,7 @@ const mockPrisma = {
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    groupBy: vi.fn(),
   },
   account: {
     findMany: vi.fn(),
@@ -210,11 +211,61 @@ describe("transactions service (tenant-isolated data access)", () => {
   it("applies a free-text search alongside the tenant scope", async () => {
     mockPrisma.transaction.findMany.mockResolvedValue([]);
     mockPrisma.transaction.count.mockResolvedValue(0);
+    mockPrisma.transaction.groupBy.mockResolvedValue([]);
 
     await listTransactions({ search: "stripe" });
     const where = mockPrisma.transaction.findMany.mock.calls[0][0].where;
     expect(where.businessId).toBe(businessA.id);
-    expect(where.description.contains).toBe("stripe");
+    // Search matches the description OR the reference so a receipt number is
+    // findable from the same box.
+    expect(where.OR).toEqual([
+      { description: { contains: "stripe", mode: "insensitive" } },
+      { reference: { contains: "stripe", mode: "insensitive" } },
+    ]);
+  });
+
+  it("accepts the preferred ?q= search param and matches reference too", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(0);
+    mockPrisma.transaction.groupBy.mockResolvedValue([]);
+
+    await listTransactions({ q: "INV-7" });
+    const where = mockPrisma.transaction.findMany.mock.calls[0][0].where;
+    expect(where.businessId).toBe(businessA.id);
+    expect(where.OR).toContainEqual({
+      reference: { contains: "INV-7", mode: "insensitive" },
+    });
+  });
+
+  it("returns tenant-scoped money totals from a group-by over the filtered set", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(0);
+    mockPrisma.transaction.groupBy.mockResolvedValue([
+      { type: "income", _sum: { amount: makeDecimal(1000) } },
+      { type: "expense", _sum: { amount: makeDecimal(400) } },
+      { type: "transfer", _sum: { amount: makeDecimal(250) } },
+    ]);
+
+    const result = await listTransactions({});
+
+    expect(result.totals).toEqual({
+      income: 1000,
+      expense: 400,
+      net: 600,
+      transfer: 250,
+    });
+    const groupCall = mockPrisma.transaction.groupBy.mock.calls[0][0];
+    expect(groupCall.where.businessId).toBe(businessA.id);
+    expect(groupCall.by).toEqual(["type"]);
+  });
+
+  it("degrades to zero totals when the group-by returns nothing", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.transaction.count.mockResolvedValue(0);
+    mockPrisma.transaction.groupBy.mockResolvedValue([]);
+
+    const result = await listTransactions({});
+    expect(result.totals).toEqual({ income: 0, expense: 0, net: 0, transfer: 0 });
   });
 
   it("filters to uncategorized (non-transfer) rows within the tenant", async () => {

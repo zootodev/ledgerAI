@@ -46,7 +46,17 @@ export async function TransactionsTypePage({
     listCategories(),
   ]);
 
-  const result = txs.status === "fulfilled" ? txs.value : { items: [], total: 0, page: 1, pageSize: 20, pages: 1 };
+  const result =
+    txs.status === "fulfilled"
+      ? txs.value
+      : {
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 20,
+          pages: 1,
+          totals: { income: 0, expense: 0, net: 0, transfer: 0 },
+        };
   const { loadError, accountsError, categoriesError } = summarizeTransactionLoads(txs, accounts, categories);
   if (txs.status === "rejected") console.error("[type-page] list failed", txs.reason);
   if (accounts.status === "rejected") console.error("[type-page] accounts failed", accounts.reason);
