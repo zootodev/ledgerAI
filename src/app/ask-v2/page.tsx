@@ -5,6 +5,8 @@ import { requireAuthContext } from "@/lib/services/auth-context";
 
 export const metadata: Metadata = {
   title: "Ask LedgerAI",
+  // Hidden surface: keep it out of search indexes even along the redirect.
+  robots: { index: false, follow: false },
 };
 
 export const dynamic = "force-dynamic";

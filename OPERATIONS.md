@@ -113,3 +113,23 @@ future resumption. **Flipping those flags alone does NOT re-enable the
 product:** the page entry points redirect unconditionally, and restoring
 access requires deliberately reintroducing the roadmap-visible surface (nav
 item + page implementation) in a dedicated, reviewed change.
+
+This posture is enforced by tests rather than convention. The launch guard in
+`tests/release/ask-launch-guard.test.tsx` asserts the surfaces are not
+navigable, are served `noindex, nofollow`, and that both gates default OFF and
+accept only explicit truthy values. It sits alongside the focused suites
+(`tests/constants/navigation.test.ts`, `tests/ask/page.test.tsx`,
+`tests/ask-v2/page.test.tsx`, `tests/release/release-smoke.test.tsx`) and the
+disabled-action and tenant-isolation suites.
+
+**To resume Ask** (v1 or v2), a single reviewed change must:
+
+1. restore the page implementation that actually renders the surface
+   (today both routes only redirect);
+2. re-add the navigation entry so the surface is discoverable;
+3. set the matching `ASK_ENABLED` / `ASK_V2_ENABLED` to `true` in the
+   environment (they stay `"false"` in `.env.example`);
+4. re-confirm the invariants that guard the surface: RLS remains enabled on
+   `assistant_conversations` / `assistant_messages`, conversations remain
+   tenant-scoped, and the narration seam still only ever re-words server-derived
+   verified facts.
