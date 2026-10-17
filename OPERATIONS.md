@@ -35,23 +35,36 @@ code deliberately logs only messages/digests/ids.
 
 ---
 
-## 2. Supabase / Postgres backup, PITR & restore drills
+## 2. Postgres backups & restore drills
 
 - **Engine:** Supabase-managed Postgres (accessed via the pooled connection
   in `src/lib/db/client.ts`).
-- **Backups:** keep Supabase **daily automated backups** enabled; enable
-  **Point-in-Time Recovery (PITR)** on the production project so an accidental
-  destructive write can be rolled back to a specific timestamp.
+- **No built-in backups:** the project runs on the Supabase **Free plan**,
+  which provides **no automated backups and no Point-in-Time Recovery**. Never
+  assume either exists. (Should the project move to a paid plan, enable both
+  and keep them *alongside* the workflow below.)
+- **Backup of record:** `.github/workflows/db-backup.yml` takes a weekly,
+  **age-encrypted** `pg_dump` of the `public` and `auth` schemas and uploads
+  only the ciphertext as a 90-day Actions artifact. This repository is public
+  and artifacts are downloadable by any signed-in GitHub user, so the private
+  key is kept **offline** — losing it means losing every backup. Setup,
+  verification and restore steps: `docs/BACKUPS.md`.
+- **What it does not cover:** point-in-time granularity (each dump is a weekly
+  snapshot), Supabase Storage objects, and platform configuration. Operate on
+  the assumption that a failure can lose **up to one week** of writes.
 - **Ownership (assign explicitly):** one named **database owner** is
-  accountable for: verifying backups run, keeping PITR enabled, and owning
-  the restore procedure. A second **on-call engineer** must be able to perform
-  a restore without the database owner.
-- **Restore drills:** perform a **quarterly restore drill** into a scratch
-  project/environment, verify row counts + a spot-checked report render, and
-  record the drill date, duration, and outcome. A backup that has never been
-  restored is not a verified backup.
-- **RPO/RTO:** treat PITR window as the effective RPO; document the target RTO
-  (time to full recovery) alongside the drill result.
+  accountable for: confirming each weekly run succeeded (GitHub disables
+  scheduled workflows after 60 days without repository activity), keeping the
+  age private key safe and backed up, and owning the restore procedure. A
+  second **on-call engineer** must be able to perform a restore without the
+  database owner.
+- **Restore drills:** perform a **quarterly restore drill** into a **new**
+  Supabase project or branch — never over production — verify row counts + a
+  spot-checked report render, and record the drill date, duration, and
+  outcome. A backup that has never been restored is not a verified backup.
+- **RPO/RTO:** the weekly cadence is the effective RPO (up to seven days of
+  write loss); document the target RTO (time to full recovery) alongside the
+  drill result.
 
 ---
 
