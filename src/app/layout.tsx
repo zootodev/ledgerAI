@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Toaster } from "@/components/ui/toast";
+import { siteUrl } from "@/lib/site";
 import "./globals.css";
 
 // Fonts are the system stack (globals.css --font-sans/--font-mono). No
@@ -15,12 +16,27 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
+  metadataBase: siteUrl(),
   title: {
     default: "LedgerAI — Financial Intelligence for Small Businesses",
     template: "%s | LedgerAI",
   },
   description:
     "Turn bank statements and transaction records into clear financial insights, reports, and smarter decisions.",
+  applicationName: "LedgerAI",
+  openGraph: {
+    type: "website",
+    siteName: "LedgerAI",
+    title: "LedgerAI — Financial Intelligence for Small Businesses",
+    description:
+      "Turn bank statements and transaction records into clear financial insights, reports, and smarter decisions.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "LedgerAI — Financial Intelligence for Small Businesses",
+    description:
+      "Turn bank statements and transaction records into clear financial insights, reports, and smarter decisions.",
+  },
 };
 
 // Next.js reads themeColor from the viewport export (metadata.themeColor is

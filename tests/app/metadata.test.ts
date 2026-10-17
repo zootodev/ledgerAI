@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 import { config } from "@/proxy";
 import manifest from "@/app/manifest";
-import { viewport } from "@/app/layout";
+import robots from "@/app/robots";
+import sitemap from "@/app/sitemap";
+import { metadata, viewport } from "@/app/layout";
+import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal/constants";
 
 const root = process.cwd();
 const read = (p: string) => readFileSync(join(root, p));
@@ -101,7 +104,72 @@ describe("theme colour + CSP", () => {
     expect(regex.test("/icon.svg")).toBe(false);
     expect(regex.test("/apple-icon.png")).toBe(false);
     expect(regex.test("/favicon.ico")).toBe(false);
+    // Crawler metadata must be reachable without a session.
+    expect(regex.test("/robots.txt")).toBe(false);
+    expect(regex.test("/sitemap.xml")).toBe(false);
     // Real app routes are still gated.
     expect(regex.test("/overview")).toBe(true);
+  });
+});
+
+describe("robots.txt", () => {
+  const r = robots();
+  const rule = Array.isArray(r.rules) ? r.rules[0] : r.rules;
+  const asList = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value : value ? [value] : [];
+  const allow = asList(rule.allow);
+  const disallow = asList(rule.disallow);
+
+  it("allows only the public marketing pages", () => {
+    expect(allow).toEqual(expect.arrayContaining(["/", "/privacy", "/terms"]));
+  });
+
+  it("disallows the authenticated app, auth machinery and hidden surfaces", () => {
+    expect(disallow).toEqual(
+      expect.arrayContaining([
+        "/api/",
+        "/auth/",
+        "/account/",
+        "/overview",
+        "/transactions",
+        "/settings",
+        "/ask",
+        "/ask-v2",
+        "/design",
+      ]),
+    );
+  });
+
+  it("advertises an absolute sitemap URL and host", () => {
+    expect(r.sitemap).toMatch(/^https?:\/\/[^/]+\/sitemap\.xml$/);
+    expect(r.host).toMatch(/^https?:\/\//);
+  });
+});
+
+describe("sitemap.xml", () => {
+  it("lists only the public, indexable pages", () => {
+    const paths = sitemap().map((entry) => new URL(entry.url).pathname);
+    expect(paths).toEqual(["/", "/privacy", "/terms"]);
+  });
+
+  it("uses absolute URLs and stamps the legal pages with their versions", () => {
+    const entries = sitemap();
+    for (const entry of entries) {
+      expect(entry.url).toMatch(/^https?:\/\//);
+    }
+    const byPath = new Map(entries.map((e) => [new URL(e.url).pathname, e]));
+    expect(byPath.get("/privacy")?.lastModified).toBe(PRIVACY_VERSION);
+    expect(byPath.get("/terms")?.lastModified).toBe(TERMS_VERSION);
+  });
+});
+
+describe("root metadata", () => {
+  it("sets an absolute metadataBase so OG/sitemap URLs resolve", () => {
+    expect(metadata.metadataBase).toBeInstanceOf(URL);
+  });
+
+  it("declares Open Graph and Twitter card defaults", () => {
+    expect(metadata.openGraph).toMatchObject({ type: "website", siteName: "LedgerAI" });
+    expect(metadata.twitter).toMatchObject({ card: "summary_large_image" });
   });
 });
