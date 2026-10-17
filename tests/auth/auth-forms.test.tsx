@@ -43,12 +43,24 @@ describe("signup form", () => {
     expect(html).toContain('type="password"');
   });
 
-  it("marks name, email and password as required so the asterisks are consistent", () => {
+  it("marks name, email, password and the terms consent as required so the asterisks are consistent", () => {
     const html = staticMarkup(SignupForm);
-    expect(countRequired(html)).toBe(3);
+    expect(countRequired(html)).toBe(4);
     // The password gets a real instruction rather than a pre-filled mask.
     expect(html).toContain('placeholder="Create a password"');
     expect(html).not.toContain("••••••••");
+  });
+
+  it("requires an explicit Terms and Privacy consent with links to both documents", () => {
+    const html = staticMarkup(SignupForm);
+    expect(html).toContain('name="acceptTerms"');
+    expect(html).toContain('type="checkbox"');
+    const copy = visible(html);
+    expect(copy).toContain("I agree to the");
+    expect(copy).toContain("Terms");
+    expect(copy).toContain("Privacy Notice");
+    expect(html).toContain('href="/terms"');
+    expect(html).toContain('href="/privacy"');
   });
 
   it("highlights the password field when the server says it is too short", async () => {

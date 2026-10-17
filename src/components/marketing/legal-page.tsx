@@ -1,5 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
+import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/constants";
 
 export interface LegalPageProps {
   title: string;
@@ -55,7 +56,7 @@ export function LegalPage({ title, updated, children }: LegalPageProps) {
             Terms
           </Link>
           <a
-            href="mailto:ifeoluwaniolufunmilayo@gmail.com"
+            href={`mailto:${LEGAL_CONTACT_EMAIL}`}
             className="transition-colors hover:text-foreground"
           >
             Contact

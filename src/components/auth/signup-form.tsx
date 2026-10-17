@@ -68,6 +68,26 @@ export function SignupForm() {
           required
         />
 
+        <label className="flex items-start gap-2 text-sm text-secondary">
+          <input
+            type="checkbox"
+            name="acceptTerms"
+            required
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          />
+          <span>
+            I agree to the{" "}
+            <Link href="/terms" className="font-medium text-brand hover:underline">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="font-medium text-brand hover:underline">
+              Privacy Notice
+            </Link>
+            , and I have read how my data is handled.
+          </span>
+        </label>
+
         <Button type="submit" loading={pending} fullWidth className="mt-2">
           Create account
         </Button>

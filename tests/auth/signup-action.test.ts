@@ -26,11 +26,14 @@ import { signupAction, type AuthFormState } from "@/lib/auth/actions";
 
 const mockSignUp = vi.mocked(signUpService);
 
-function formData(overrides: { email?: string; password?: string; name?: string } = {}) {
+function formData(
+  overrides: { email?: string; password?: string; name?: string; acceptTerms?: boolean } = {},
+) {
   const fd = new FormData();
   fd.set("email", overrides.email ?? "new@example.com");
   fd.set("password", overrides.password ?? "correct-horse-battery");
   if (overrides.name !== undefined) fd.set("name", overrides.name);
+  if (overrides.acceptTerms !== false) fd.set("acceptTerms", "on");
   return fd;
 }
 
@@ -60,6 +63,29 @@ describe("signupAction", () => {
 
     expect(result.error).toContain("too common");
     expect(mockSignUp).not.toHaveBeenCalled();
+  });
+
+  it("rejects signup when the Terms and Privacy consent is not accepted", async () => {
+    const result = await signupAction(prev, formData({ acceptTerms: false }));
+
+    expect(result.error).toContain("Terms and Privacy");
+    expect(mockSignUp).not.toHaveBeenCalled();
+  });
+
+  it("forwards the accepted Terms/Privacy versions to the auth service", async () => {
+    mockSignUp.mockResolvedValue({ ok: true, session: false });
+
+    await signupAction(prev, formData());
+
+    expect(mockSignUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        acceptedTerms: expect.objectContaining({
+          at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+          termsVersion: expect.any(String),
+          privacyVersion: expect.any(String),
+        }),
+      }),
+    );
   });
 
   it("shows a neutral message (never 'Account created') for an existing email", async () => {

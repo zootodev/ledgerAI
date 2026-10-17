@@ -145,4 +145,44 @@ describe("signUp service", () => {
       }),
     );
   });
+
+  it("records the accepted Terms/Privacy versions in the auth user metadata", async () => {
+    signUpMock.mockResolvedValue(signUpResponse());
+
+    await signUp({
+      email: "new@example.com",
+      password: "password123",
+      name: "Ada",
+      acceptedTerms: {
+        at: "2026-10-17T09:00:00.000Z",
+        termsVersion: "2026-10-17",
+        privacyVersion: "2026-10-17",
+      },
+    });
+
+    expect(signUpMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          data: {
+            name: "Ada",
+            terms_accepted_at: "2026-10-17T09:00:00.000Z",
+            terms_version: "2026-10-17",
+            privacy_version: "2026-10-17",
+          },
+        }),
+      }),
+    );
+  });
+
+  it("omits consent metadata when nothing was accepted", async () => {
+    signUpMock.mockResolvedValue(signUpResponse());
+
+    await signUp({ email: "new@example.com", password: "password123", name: "Ada" });
+
+    const call = signUpMock.mock.calls.at(-1)?.[0] as {
+      options: { data: Record<string, unknown> };
+    };
+    expect(call.options.data).toEqual({ name: "Ada" });
+    expect(call.options.data).not.toHaveProperty("terms_accepted_at");
+  });
 });

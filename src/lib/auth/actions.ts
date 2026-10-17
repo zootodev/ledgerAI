@@ -26,6 +26,7 @@ import {
   RATE_LIMIT_EXCEEDED_MESSAGE,
 } from "@/lib/security/rate-limit";
 import { checkPasswordStrength } from "@/lib/validation/index";
+import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal/constants";
 
 export interface AuthFormState {
   error?: string;
@@ -132,6 +133,14 @@ export async function signupAction(
     return { error: strength.error };
   }
 
+  // NDPA accountability: the user must actively accept the Terms and Privacy
+  // Notice before an account is created. Enforced server-side (the checkbox's
+  // `required` is only a convenience — it can always be bypassed).
+  const acceptedTerms = formData.get("acceptTerms");
+  if (acceptedTerms !== "on" && acceptedTerms !== "true") {
+    return { error: "You must accept the Terms and Privacy Notice to create an account." };
+  }
+
   const ip = await getRequestClientIp();
   const accountKey = `${email.trim().toLowerCase()}|${ip}`;
   const [byAccount, byIp] = await Promise.all([
@@ -144,7 +153,16 @@ export async function signupAction(
 
   let sessionEstablished = false;
   try {
-    const result: AuthResult = await signUp({ email, password, name });
+    const result: AuthResult = await signUp({
+      email,
+      password,
+      name,
+      acceptedTerms: {
+        at: new Date().toISOString(),
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
+      },
+    });
     if (!result.ok) return { error: result.error };
     // Supabase signUp for an existing confirmed email returns intentional
     // "success" with no identities/session and sends no mail. Show the

@@ -201,6 +201,7 @@ describe("signupAction rate limiting", () => {
     const fd = new FormData();
     fd.set("email", "new@example.com");
     fd.set("password", "correct-horse-battery");
+    fd.set("acceptTerms", "on");
 
     const result = await (await import("@/lib/auth/actions")).signupAction(prevAuth, fd);
 

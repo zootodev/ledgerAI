@@ -11,6 +11,16 @@ export interface SignUpInput {
   password: string;
   name?: string;
   redirectTo?: string;
+  /**
+   * Recorded proof that the user accepted the Terms and Privacy Notice at
+   * signup, stored on the Supabase auth user's metadata so the acceptance can
+   * always be traced back to the document versions that were live.
+   */
+  acceptedTerms?: {
+    at: string;
+    termsVersion: string;
+    privacyVersion: string;
+  };
 }
 
 export interface SignInInput {
@@ -66,11 +76,21 @@ export async function signUp(input: SignUpInput): Promise<AuthResult> {
 
   const email = input.email.trim().toLowerCase();
   const redirectTo = input.redirectTo ?? `${(await getAppBaseUrl())}/auth/callback`;
+
+  // Only attach consent metadata when it was actually provided, so existing
+  // callers (and their tests) keep the minimal `{ name }` payload.
+  const metadata: Record<string, unknown> = { name: input.name ?? null };
+  if (input.acceptedTerms) {
+    metadata.terms_accepted_at = input.acceptedTerms.at;
+    metadata.terms_version = input.acceptedTerms.termsVersion;
+    metadata.privacy_version = input.acceptedTerms.privacyVersion;
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password: input.password,
     options: {
-      data: { name: input.name ?? null },
+      data: metadata,
       emailRedirectTo: redirectTo,
     },
   });
