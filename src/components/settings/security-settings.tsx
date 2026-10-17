@@ -125,7 +125,7 @@ export function SecuritySettings({ mfaEnabled, factorName }: SecuritySettingsPro
                   className="rounded-lg border border-border bg-white p-2"
                 />
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-subtle">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                     Or enter this key manually
                   </p>
                   <code className="mt-1 block break-all rounded-field bg-surface-subtle px-3 py-2 font-mono text-sm text-foreground">

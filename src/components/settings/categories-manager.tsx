@@ -14,6 +14,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/utils/cn";
 import {
   createCategoryAction,
   updateCategoryAction,
@@ -33,11 +34,19 @@ export function CategoriesManager({ categories }: CategoriesManagerProps) {
   const [editId, setEditId] = React.useState<string | null>(null);
   const [defaultType, setDefaultType] = React.useState<"income" | "expense">("expense");
   const [deleting, setDeleting] = React.useState<CategoryServiceData | null>(null);
+  /** Narrows the visible list; the two header buttons add rather than filter. */
+  const [typeFilter, setTypeFilter] = React.useState<"all" | "income" | "expense">(
+    "all",
+  );
 
   const editing =
     editId === null ? null : categories.find((c) => c.id === editId) ?? null;
 
   const customCount = categories.filter((c) => !c.isSystem).length;
+  const visibleCategories =
+    typeFilter === "all"
+      ? categories
+      : categories.filter((c) => c.type === typeFilter);
 
   const openCreate = (type: "income" | "expense") => {
     setDefaultType(type);
@@ -72,11 +81,20 @@ export function CategoriesManager({ categories }: CategoriesManagerProps) {
         <CardHeader className="flex-row items-center justify-between gap-3">
           <CardTitle>Categories</CardTitle>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => openCreate("income")} leftIcon={<Plus className="h-3.5 w-3.5" />}>
-              Income
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => openCreate("income")}
+              leftIcon={<Plus className="h-3.5 w-3.5" />}
+            >
+              Add income
             </Button>
-            <Button size="sm" onClick={() => openCreate("expense")} leftIcon={<Plus className="h-3.5 w-3.5" />}>
-              Expense
+            <Button
+              size="sm"
+              onClick={() => openCreate("expense")}
+              leftIcon={<Plus className="h-3.5 w-3.5" />}
+            >
+              Add expense
             </Button>
           </div>
         </CardHeader>
@@ -94,18 +112,55 @@ export function CategoriesManager({ categories }: CategoriesManagerProps) {
             />
           ) : (
             <>
-              <div className="mb-3 flex flex-wrap justify-between gap-2 text-sm text-muted">
-                <span>{categories.length} categories</span>
-                <span>{customCount} custom · built-ins are read-only</span>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                {/* A real filter (the header buttons are add actions, renamed
+                    accordingly). aria-pressed announces the active segment. */}
+                <div
+                  role="group"
+                  aria-label="Filter categories by type"
+                  className="inline-flex rounded-field border border-border-strong bg-surface p-0.5"
+                >
+                  {(
+                    [
+                      { value: "all", label: "All" },
+                      { value: "income", label: "Income" },
+                      { value: "expense", label: "Expense" },
+                    ] as const
+                  ).map((option) => {
+                    const selected = typeFilter === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setTypeFilter(option.value)}
+                        className={cn(
+                          "rounded-[calc(var(--radius-field)-2px)] px-3 py-1.5 text-xs font-medium transition-colors",
+                          selected
+                            ? "bg-brand text-on-accent"
+                            : "text-secondary hover:bg-surface-subtle hover:text-foreground",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-sm text-muted">
+                  {visibleCategories.length} categor
+                  {visibleCategories.length === 1 ? "y" : "ies"}
+                  {" · "}
+                  {customCount} custom · built-ins are read-only
+                </p>
               </div>
               <ul className="space-y-2">
-                {categories.map((category) => (
+                {visibleCategories.map((category) => (
                   <li
                     key={category.id}
                     className="flex flex-wrap items-center justify-between gap-3 rounded-field border border-border bg-surface-subtle/40 px-3 py-3"
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      <FolderOpen className="h-4 w-4 shrink-0 text-subtle" aria-hidden="true" />
+                      <FolderOpen className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
                       <p className="font-medium text-foreground">{category.name}</p>
                       {category.isSystem && (
                         <Badge tone="default">
@@ -142,6 +197,11 @@ export function CategoriesManager({ categories }: CategoriesManagerProps) {
                   </li>
                 ))}
               </ul>
+              {visibleCategories.length === 0 && (
+                <p className="rounded-field border border-dashed border-border px-3 py-6 text-center text-sm text-muted">
+                  No {typeFilter} categories yet.
+                </p>
+              )}
             </>
           )}
         </CardContent>

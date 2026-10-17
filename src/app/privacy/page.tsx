@@ -165,14 +165,16 @@ export default function PrivacyPage() {
           <li>withdraw any consent you have given.</li>
         </ul>
         <p>
-          You can exercise the first, second, third and fifth rights yourself,
-          without contacting us: open{" "}
+          You can exercise two of these yourself at any time, without contacting
+          us: open{" "}
           <span className="font-medium text-foreground">Settings → Account</span>{" "}
           to export everything we hold for you as CSV or JSON, or to permanently
           delete your account and all of its data.
         </p>
         <p>
-          For anything else, or if you want us to act on your behalf, email{" "}
+          For everything else — correcting anything that is inaccurate or
+          incomplete, restricting or objecting to processing, or withdrawing
+          consent — email{" "}
           <a
             href={`mailto:${LEGAL_CONTACT_EMAIL}`}
             className="font-medium text-brand hover:underline"

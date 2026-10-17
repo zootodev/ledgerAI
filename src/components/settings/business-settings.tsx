@@ -71,9 +71,9 @@ export function BusinessSettings({ business }: BusinessSettingsProps) {
             />
           </Field>
 
-          <Field label="What does the business do?" htmlFor="business-type">
+          <Field label="Business type" htmlFor="business-type">
             <Select id="business-type" name="type" defaultValue={business.type ?? ""}>
-              <option value="">Select a type</option>
+              <option value="">Select business type</option>
               {BUSINESS_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
