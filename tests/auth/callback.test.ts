@@ -76,15 +76,38 @@ describe("auth/callback route", () => {
     expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/overview");
   });
 
-  it("verifies a token_hash email link (cross-browser OTP flow)", async () => {
+  it("forwards a token_hash link to /auth/confirm without consuming it on GET", async () => {
+    // Regression guard: a mail scanner pre-fetches every link in an email. The
+    // GET must never verify the one-time token, or the human's own click would
+    // fail with "One-time token not found".
     const response = await GET(
       callbackRequest("http://172.20.10.2:3000/auth/callback?token_hash=abc123&type=email"),
     );
 
-    expect(verifyOtpMock).toHaveBeenCalledWith({ token_hash: "abc123", type: "email" });
+    expect(verifyOtpMock).not.toHaveBeenCalled();
     expect(exchangeMock).not.toHaveBeenCalled();
-    expect(ensureOnboarding).toHaveBeenCalledWith({ bounce: false });
-    expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/overview");
+    expect(ensureOnboarding).not.toHaveBeenCalled();
+
+    const location = redirectLocation(response);
+    const forwarded = new URL(location);
+    expect(forwarded.origin).toBe("http://172.20.10.2:3000");
+    expect(forwarded.pathname).toBe("/auth/confirm");
+    expect(forwarded.searchParams.get("token_hash")).toBe("abc123");
+    expect(forwarded.searchParams.get("type")).toBe("email");
+  });
+
+  it("preserves `next` when forwarding a token_hash link", async () => {
+    const response = await GET(
+      callbackRequest(
+        "http://172.20.10.2:3000/auth/callback?token_hash=abc123&type=recovery&next=%2Freset-password",
+      ),
+    );
+
+    expect(verifyOtpMock).not.toHaveBeenCalled();
+    const forwarded = new URL(redirectLocation(response));
+    expect(forwarded.pathname).toBe("/auth/confirm");
+    expect(forwarded.searchParams.get("type")).toBe("recovery");
+    expect(forwarded.searchParams.get("next")).toBe("/reset-password");
   });
 
   it("rejects a token_hash link with an unknown verification type", async () => {
@@ -185,6 +208,18 @@ describe("auth/callback route", () => {
 
     expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/login?error=auth_failed");
     expect(ensureOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("passes a known link type through on failure so the right recovery is offered", async () => {
+    exchangeMock.mockResolvedValue({ data: { session: null }, error: { message: "expired" } });
+
+    const response = await GET(
+      callbackRequest("http://172.20.10.2:3000/auth/callback?code=bad&type=recovery"),
+    );
+
+    expect(redirectLocation(response)).toBe(
+      "http://172.20.10.2:3000/login?error=auth_failed&type=recovery",
+    );
   });
 
   it("redirects to sign-in when Supabase is not configured", async () => {

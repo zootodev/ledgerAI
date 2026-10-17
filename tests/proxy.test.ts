@@ -98,6 +98,7 @@ describe("isPublicPath", () => {
     "/privacy",
     "/terms",
     "/auth/callback",
+    "/auth/confirm",
     "/forgot-password",
     "/reset-password",
     "/verify-email",
@@ -118,6 +119,7 @@ describe("isPublicPath", () => {
     "/login/secret",
     "/signup-extra",
     "/auth/callback/magic",
+    "/auth/confirm/magic",
     "/overview",
     "/settings",
     "/reports",
@@ -169,6 +171,13 @@ describe("proxy() route gating", () => {
     await proxy(requestFor("/auth/callback?code=abc"));
 
     expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("serves the email confirmation screen without a session", async () => {
+    await proxy(requestFor("/auth/confirm?token_hash=abc&type=recovery"));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.next).toHaveBeenCalled();
   });
 
   it("serves forgot-password and reset-password without a session", async () => {

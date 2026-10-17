@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolvePostAuthRedirect } from "@/lib/auth/redirect";
+import { resolveInternalNext, resolvePostAuthRedirect } from "@/lib/auth/redirect";
 
 describe("resolvePostAuthRedirect", () => {
   it("defaults to overview for empty", () => {
@@ -58,5 +58,33 @@ describe("resolvePostAuthRedirect", () => {
     const raw = new URL(r.url);
     console.log("DEBUG URL:", JSON.stringify(s));
     expect(raw.toString()).toBe(s);
+  });
+});
+
+describe("resolveInternalNext", () => {
+  const base = "http://172.20.10.2:3000";
+
+  it("returns null when no target was given", () => {
+    expect(resolveInternalNext(null, base)).toBeNull();
+    expect(resolveInternalNext("", base)).toBeNull();
+    expect(resolveInternalNext(undefined, base)).toBeNull();
+  });
+
+  it("returns a validated internal path in relative form", () => {
+    expect(resolveInternalNext("/reset-password", base)).toBe("/reset-password");
+    expect(resolveInternalNext("/transactions?page=2#top", base)).toBe(
+      "/transactions?page=2#top",
+    );
+  });
+
+  it.each([
+    ["protocol-relative", "//evil.example"],
+    ["absolute http", "http://evil.example"],
+    ["absolute https", "https://evil.example"],
+    ["backslash smuggle", "/\\evil.example"],
+    ["not a path", "overview"],
+    ["whitespace", "/overview next"],
+  ])("returns null for a %s target", (_label, value) => {
+    expect(resolveInternalNext(value, base)).toBeNull();
   });
 });

@@ -35,3 +35,29 @@ export function resolvePostAuthRedirect(
     return fallback;
   }
 }
+
+/**
+ * Validate a `next` value and return it as an internal, *relative* path
+ * (`/path?query#hash`) — or `null` when it is absent or fails validation.
+ *
+ * Unlike {@link resolvePostAuthRedirect} this carries no fallback, so callers
+ * can tell "the user asked for a specific page" from "no usable target given".
+ * Used where the value has to survive a round trip through a form (the
+ * `/auth/confirm` hidden field): only an already-validated, same-origin path is
+ * ever emitted, and a hostile value is dropped rather than forwarded.
+ */
+export function resolveInternalNext(
+  raw: string | null | undefined,
+  baseUrl: string,
+): string | null {
+  if (!raw || !SAFE_RELATIVE_PATH.test(raw)) return null;
+
+  try {
+    const base = new URL(baseUrl);
+    const resolved = new URL(raw, baseUrl);
+    if (resolved.origin !== base.origin) return null;
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return null;
+  }
+}

@@ -9,34 +9,49 @@ export const metadata: Metadata = {
   title: "Sign in",
 };
 
-// Failures from /auth/callback are mapped to fixed, safe copy here — nothing
-// from the provider is ever echoed to the client. Unknown `error` values
-// render no alert at all, and every known value carries a safe recovery path.
-const CALLBACK_ERRORS: Record<
-  string,
-  { title: string; message: string; action?: { label: string; href: string } }
-> = {
+// Failures from /auth/callback and /auth/confirm are mapped to fixed, safe copy
+// here — nothing from the provider is ever echoed to the client. Unknown
+// `error` values render no alert at all, and every known value carries a safe
+// recovery path.
+const CALLBACK_ERRORS: Record<string, { title: string; message: string }> = {
   missing_code: {
     title: "Incomplete sign-in link",
     message: "This link is missing its confirmation code and may have been truncated.",
-    action: {
-      label: "Request a new password-reset link",
-      href: "/forgot-password",
-    },
   },
   auth_failed: {
     title: "This link is invalid or has expired",
     message: "Confirmation links can only be used once. Sign in, or request a fresh link.",
-    action: {
-      label: "Request a new password-reset link",
-      href: "/forgot-password",
-    },
   },
   not_configured: {
     title: "Email sign-in isn't available right now",
     message: "Please try again shortly.",
   },
 };
+
+const RESET_ACTION = {
+  label: "Request a new password-reset link",
+  href: "/forgot-password",
+} as const;
+
+const RESEND_ACTION = {
+  label: "Resend confirmation email",
+  href: "/verify-email",
+} as const;
+
+/**
+ * The recovery action for a failed email link. Only a `recovery` link (the
+ * password-reset flow) offers a fresh reset link; every other failure — a
+ * signup/confirmation link, or a link that carried no type at all — offers a
+ * fresh confirmation email instead. `type` is passed through by /auth/callback
+ * and /auth/confirm.
+ */
+function errorAction(
+  errorKey: string,
+  type: string | undefined,
+): { label: string; href: string } | undefined {
+  if (errorKey !== "missing_code" && errorKey !== "auth_failed") return undefined;
+  return type === "recovery" ? RESET_ACTION : RESEND_ACTION;
+}
 
 export default async function LoginPage({
   searchParams,
@@ -46,21 +61,25 @@ export default async function LoginPage({
   const user = await getCurrentUser();
   if (user) redirect("/overview");
 
-  const { error } = await searchParams;
+  const { error, type } = await searchParams;
   const callbackError =
     typeof error === "string" ? CALLBACK_ERRORS[error] : undefined;
+  const action =
+    typeof error === "string"
+      ? errorAction(error, typeof type === "string" ? type : undefined)
+      : undefined;
 
   return (
     <>
       {callbackError && (
         <Alert tone="danger" title={callbackError.title} className="mb-6">
           <p>{callbackError.message}</p>
-          {callbackError.action && (
+          {action && (
             <Link
-              href={callbackError.action.href}
+              href={action.href}
               className="mt-2 inline-block text-sm font-medium text-brand hover:underline"
             >
-              {callbackError.action.label}
+              {action.label}
             </Link>
           )}
         </Alert>

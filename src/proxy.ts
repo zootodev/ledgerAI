@@ -7,8 +7,10 @@ import {
 } from "@/lib/auth/mfa";
 
 // Public routes are reachable without a session. Everything else under the
-// app area requires an authenticated user. /auth/callback must stay public:
-// it is hit without a session when the user first clicks an email link.
+// app area requires an authenticated user. /auth/callback and /auth/confirm
+// must stay public: both are hit without a session when the user first clicks
+// an email link (the callback forwards the token, the confirm page verifies it
+// on an explicit POST).
 // /forgot-password and /reset-password are reachable without a session (the
 // reset link's recovery page is hit before a session is established).
 // /api/health is an uptime probe: it must answer a monitor directly (not with
@@ -26,6 +28,7 @@ const PUBLIC_PATHS = new Set([
   "/privacy",
   "/terms",
   "/auth/callback",
+  "/auth/confirm",
   "/forgot-password",
   "/reset-password",
   "/verify-email",

@@ -1,56 +1,55 @@
 import { NextResponse } from "next/server";
-import type { EmailOtpType } from "@supabase/supabase-js";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
-import { resolvePostAuthRedirect } from "@/lib/auth/redirect";
+import { parseEmailOtpType } from "@/lib/auth/email-otp";
+import { resolvePostVerificationTarget } from "@/lib/auth/post-auth";
 import { getSupabaseServer } from "@/lib/auth/supabase";
-import { ensureOnboarding, needsOnboarding } from "@/lib/services/auth";
-
-/**
- * Verification types Supabase may put in an email link's `type` query param.
- * `email`/`signup` both denote a new-account confirmation depending on the
- * template; `recovery` is a password reset.
- */
-const EMAIL_OTP_TYPES = new Set<EmailOtpType>([
-  "signup",
-  "email",
-  "invite",
-  "magiclink",
-  "recovery",
-  "email_change",
-]);
 
 /**
  * One-time callback that Supabase redirects to after a user clicks a link in
  * an email. Supports BOTH link shapes:
  *
- *   - `?code=…` — the PKCE flow (Supabase's default `{{ .ConfirmationURL }}`).
- *     The code is exchanged for a session using the code-verifier cookie set in
- *     the browser that started the flow.
  *   - `?token_hash=…&type=…` — the OTP flow (a template built with
- *     `{{ .TokenHash }}`). Verified entirely server-side with no cookie, so it
- *     also succeeds when the link is opened in a different browser or a mail
- *     app's in-app browser (e.g. Gmail), where no PKCE verifier exists.
+ *     `{{ .TokenHash }}`). The link is NOT verified here: the untouched token
+ *     is forwarded to /auth/confirm, where a single explicit button POST does
+ *     the `verifyOtp` call.
+ *   - `?code=…` — the PKCE flow (Supabase's default `{{ .ConfirmationURL }}`).
+ *     The code is exchanged here for a session using the code-verifier cookie
+ *     set in the browser that started the flow.
  *
  * Either way the user's profile + first business are provisioned idempotently,
  * then the user continues into the app.
+ *
+ * WHY the OTP flow is split in two steps: mail providers and ESP link scanners
+ * pre-fetch every URL in an email. When this GET handler verified the OTP
+ * itself, that pre-fetch consumed the one-time token within seconds and the
+ * human's own click then failed with "One-time token not found". A GET must
+ * therefore stay side-effect free for `token_hash` links.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const tokenHash = url.searchParams.get("token_hash");
-  const rawType = url.searchParams.get("type");
+  const otpType = parseEmailOtpType(url.searchParams.get("type"));
   const rawNext = url.searchParams.get("next");
 
   const baseUrl = await getAppBaseUrl();
   const loginUrl = `${baseUrl}/login`;
+  const typeQuery = otpType ? `&type=${encodeURIComponent(otpType)}` : "";
 
-  const otpType =
-    rawType && EMAIL_OTP_TYPES.has(rawType as EmailOtpType)
-      ? (rawType as EmailOtpType)
-      : null;
+  // Forward the still-unused one-time token to the confirmation screen, which
+  // only verifies on an explicit, user-initiated POST. Preserve `next` (the
+  // password-reset flow sends `next=/reset-password`) for that POST to
+  // re-validate and use.
+  if (tokenHash && otpType) {
+    const confirm = new URL(`${baseUrl}/auth/confirm`);
+    confirm.searchParams.set("token_hash", tokenHash);
+    confirm.searchParams.set("type", otpType);
+    if (rawNext) confirm.searchParams.set("next", rawNext);
+    return NextResponse.redirect(confirm.toString());
+  }
 
-  if (!code && !(tokenHash && otpType)) {
-    return NextResponse.redirect(`${loginUrl}?error=missing_code`);
+  if (!code) {
+    return NextResponse.redirect(`${loginUrl}?error=missing_code${typeQuery}`);
   }
 
   const supabase = await getSupabaseServer();
@@ -58,33 +57,14 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${loginUrl}?error=not_configured`);
   }
 
-  const verified = code
-    ? (await supabase.auth.exchangeCodeForSession(code)).error === null
-    : (
-        await supabase.auth.verifyOtp({
-          token_hash: tokenHash as string,
-          type: otpType as EmailOtpType,
-        })
-      ).error === null;
-
+  const verified = (await supabase.auth.exchangeCodeForSession(code)).error === null;
   if (!verified) {
-    return NextResponse.redirect(`${loginUrl}?error=auth_failed`);
+    // `type` (when the link carried one) lets the sign-in page offer the right
+    // recovery action: a fresh reset link for recovery, otherwise a fresh
+    // confirmation email.
+    return NextResponse.redirect(`${loginUrl}?error=auth_failed${typeQuery}`);
   }
 
-  // Only reached with a freshly established, genuinely authenticated session.
-  // Idempotent: profile upsert + first-business lookup-or-create. Never bounce
-  // to /onboarding from here — `next` may point at the password-reset page and
-  // a recovery session must land there.
-  await ensureOnboarding({ bounce: false }).catch(() => null);
-
-  // A caller that supplied `next` (e.g. the reset link) lands exactly there.
-  // Otherwise send brand-new users to onboarding and everyone else to the
-  // dashboard.
-  const target = rawNext
-    ? resolvePostAuthRedirect(rawNext, baseUrl)
-    : (await needsOnboarding().catch(() => false))
-      ? `${baseUrl}/onboarding`
-      : `${baseUrl}/overview`;
-
+  const target = await resolvePostVerificationTarget(rawNext, baseUrl);
   return NextResponse.redirect(new URL(target, baseUrl).toString());
 }
