@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import {
   signIn,
   signUp,
@@ -9,6 +10,12 @@ import {
   updatePassword,
 } from "@/lib/services/auth";
 import type { AuthResult } from "@/lib/services/auth";
+import {
+  confirmTotpEnrollment,
+  disableTotp,
+  startTotpEnrollment,
+  verifyMfaChallenge,
+} from "@/lib/services/mfa";
 import {
   consumeConfiguredLimit,
   getRequestClientIp,
@@ -19,6 +26,27 @@ export interface AuthFormState {
   error?: string;
   success?: string;
   info?: string;
+}
+
+/** State for the 2FA enroll/verify/disable forms (Settings > Security). */
+export interface MfaFormState {
+  error?: string;
+  success?: string;
+}
+
+/** State for the enrollment step: carries the QR/secret to display. */
+export interface MfaEnrollState extends MfaFormState {
+  factorId?: string;
+  qrCode?: string;
+  secret?: string;
+}
+
+/** Only allow an internal, same-origin path as a post-MFA redirect target. */
+function safeNext(raw: string): string {
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("://")) {
+    return "/overview";
+  }
+  return raw;
 }
 
 export async function loginAction(
@@ -44,14 +72,20 @@ export async function loginAction(
     return { error: RATE_LIMIT_EXCEEDED_MESSAGE };
   }
 
+  let mfaRequired = false;
   try {
     const result: AuthResult = await signIn({ email, password });
     if (!result.ok) return { error: result.error };
+    mfaRequired = Boolean(result.mfaRequired);
   } catch (e) {
     return {
       error: e instanceof Error ? e.message : "Unable to sign in right now.",
     };
   }
+
+  // A verified second factor means the password-only session (aal1) may not
+  // reach the app: send the user to the challenge before any protected page.
+  if (mfaRequired) redirect("/auth/mfa");
 
   redirect("/overview");
 }
@@ -185,4 +219,68 @@ export async function updatePasswordAction(
   }
 
   return { success: "Your password has been updated. You can sign in now." };
+}
+
+/**
+ * Complete the login-time MFA challenge. Called from the /auth/mfa page with
+ * the 6-digit code; on success the session is promoted to aal2 and the user
+ * continues to `next` (or the overview).
+ */
+export async function verifyMfaAction(
+  _prev: MfaFormState,
+  formData: FormData,
+): Promise<MfaFormState> {
+  const code = String(formData.get("code") ?? "");
+  const next = safeNext(String(formData.get("next") ?? "/overview"));
+
+  const result = await verifyMfaChallenge(code);
+  if (!result.ok) return { error: result.error };
+
+  redirect(next);
+}
+
+/**
+ * Begin TOTP enrollment (Settings > Security). Returns the QR/secret to show
+ * for the authenticator app; the factor is not yet verified.
+ */
+export async function enrollMfaAction(
+  _prev: MfaEnrollState,
+  _formData: FormData,
+): Promise<MfaEnrollState> {
+  const result = await startTotpEnrollment();
+  if (!result.ok) return { error: result.error };
+  return {
+    factorId: result.value.factorId,
+    qrCode: result.value.qrCode,
+    secret: result.value.secret,
+  };
+}
+
+/** Confirm a pending TOTP enrollment with a code, turning 2FA on. */
+export async function confirmMfaAction(
+  _prev: MfaFormState,
+  formData: FormData,
+): Promise<MfaFormState> {
+  const factorId = String(formData.get("factorId") ?? "");
+  const code = String(formData.get("code") ?? "");
+
+  const result = await confirmTotpEnrollment(factorId, code);
+  if (!result.ok) return { error: result.error };
+
+  revalidatePath("/settings/security");
+  return { success: "Two-factor authentication is on." };
+}
+
+/** Turn 2FA off. Requires a current code from the authenticator app. */
+export async function disableMfaAction(
+  _prev: MfaFormState,
+  formData: FormData,
+): Promise<MfaFormState> {
+  const code = String(formData.get("code") ?? "");
+
+  const result = await disableTotp(code);
+  if (!result.ok) return { error: result.error };
+
+  revalidatePath("/settings/security");
+  return { success: "Two-factor authentication is off." };
 }

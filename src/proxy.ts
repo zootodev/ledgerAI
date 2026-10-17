@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import {
+  hasVerifiedFactor,
+  needsMfaStepUp,
+  readAalFromAccessToken,
+} from "@/lib/auth/mfa";
 
 // Public routes are reachable without a session. Everything else under the
 // app area requires an authenticated user. /auth/callback must stay public:
@@ -27,6 +32,18 @@ const PUBLIC_PATHS = new Set([
 export function isPublicPath(path: string): boolean {
   const normalized = path === "/" ? path : path.replace(/\/+$/, "");
   return PUBLIC_PATHS.has(normalized);
+}
+
+/**
+ * The one authenticated route reachable at aal1: the second-factor challenge.
+ * A user with a verified factor is parked here until the session is aal2.
+ */
+export const MFA_CHALLENGE_PATH = "/auth/mfa";
+
+/** True when the path is the MFA challenge itself (never step-up gated). */
+export function isMfaChallengePath(path: string): boolean {
+  const normalized = path === "/" ? path : path.replace(/\/+$/, "");
+  return normalized === MFA_CHALLENGE_PATH;
 }
 
 /** Content-Security-Policy with a per-request nonce (SG1-04). */
@@ -126,6 +143,17 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic = isPublicPath(path);
 
+  // 2FA step-up: a session whose account has a verified factor must reach
+  // aal2 before it can touch any protected surface. Only sessions that
+  // actually have a verified factor trigger the extra session read.
+  let mfaStepUp = false;
+  if (user && hasVerifiedFactor(user)) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    mfaStepUp = needsMfaStepUp(user, readAalFromAccessToken(session?.access_token));
+  }
+
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -135,9 +163,22 @@ export async function proxy(request: NextRequest) {
     return redirect;
   }
 
+  // Park an aal1 session with a verified factor on the challenge before it
+  // reaches anything else (the challenge page itself is exempt).
+  if (user && mfaStepUp && !isMfaChallengePath(path) && !isPublic) {
+    const url = request.nextUrl.clone();
+    url.pathname = MFA_CHALLENGE_PATH;
+    url.search = "";
+    if (path !== "/overview") url.searchParams.set("next", path);
+    const redirect = NextResponse.redirect(url);
+    applySecurityHeaders(redirect, nonce);
+    return redirect;
+  }
+
   if (user && (path === "/login" || path === "/signup")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/overview";
+    // A user who still owes a second factor goes to the challenge, not the app.
+    url.pathname = mfaStepUp ? MFA_CHALLENGE_PATH : "/overview";
     url.search = "";
     const redirect = NextResponse.redirect(url);
     applySecurityHeaders(redirect, nonce);

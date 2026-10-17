@@ -19,7 +19,13 @@ export interface SignInInput {
 }
 
 export type AuthResult =
-  | { ok: true; session?: boolean; alreadyExists?: boolean }
+  | {
+      ok: true;
+      session?: boolean;
+      alreadyExists?: boolean;
+      /** Password accepted but the account requires an MFA step-up to aal2. */
+      mfaRequired?: boolean;
+    }
   | { ok: false; error: string };
 
 const EMAIL_ERROR = "Invalid email, password, or account not found.";
@@ -110,7 +116,12 @@ export async function signIn(input: SignInInput): Promise<AuthResult> {
     return { ok: false, error: EMAIL_ERROR };
   }
 
-  return { ok: true };
+  // If the account has a verified second factor, the fresh session sits at
+  // aal1 and must complete the challenge before it can reach the app.
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  const mfaRequired = aal?.nextLevel === "aal2" && aal?.currentLevel !== "aal2";
+
+  return { ok: true, mfaRequired };
 }
 
 /** Sign the current user out. */

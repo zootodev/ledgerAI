@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   next: vi.fn(),
   redirect: vi.fn(),
   getUser: vi.fn(),
+  getSession: vi.fn(),
   createServerClient: vi.fn(),
 }));
 
@@ -69,6 +70,7 @@ beforeEach(() => {
     headers: mockHeaders(),
   }));
   mocks.getUser.mockResolvedValue({ data: { user: null } });
+  mocks.getSession.mockResolvedValue({ data: { session: null } });
   mocks.createServerClient.mockImplementation(
     (
       _url: string,
@@ -76,7 +78,7 @@ beforeEach(() => {
       options: { cookies?: { setAll?: (pairs: CookiePair[]) => void } },
     ) => {
       capturedSetAll = options?.cookies?.setAll;
-      return { auth: { getUser: mocks.getUser } };
+      return { auth: { getUser: mocks.getUser, getSession: mocks.getSession } };
     },
   );
 });
@@ -177,6 +179,82 @@ describe("proxy() route gating", () => {
 
     expect(mocks.redirect).not.toHaveBeenCalled();
     expect(mocks.next).toHaveBeenCalled();
+  });
+});
+
+describe("proxy() MFA step-up gating", () => {
+  /** Build a decodable JWT whose payload carries an `aal` claim. */
+  function jwtWithAal(aal: string): string {
+    const payload = Buffer.from(JSON.stringify({ aal })).toString("base64url");
+    return `header.${payload}.signature`;
+  }
+
+  const verifiedTotp = { id: "f1", status: "verified", factor_type: "totp" };
+  const unverifiedTotp = { id: "f2", status: "unverified", factor_type: "totp" };
+
+  function signInWith(factors: unknown[], accessToken: string | null) {
+    mocks.getUser.mockResolvedValue({ data: { user: { id: "u-1", factors } } });
+    mocks.getSession.mockResolvedValue({
+      data: { session: accessToken ? { access_token: accessToken } : null },
+    });
+  }
+
+  it("parks an aal1 session that has a verified factor on the MFA challenge", async () => {
+    signInWith([verifiedTotp], jwtWithAal("aal1"));
+
+    await proxy(requestFor("/transactions"));
+
+    expect(mocks.redirect).toHaveBeenCalledTimes(1);
+    const dest = mocks.redirect.mock.calls[0][0].toString();
+    expect(dest).toContain("/auth/mfa");
+    expect(dest).toContain("next=%2Ftransactions");
+  });
+
+  it("lets the MFA challenge page itself render at aal1", async () => {
+    signInWith([verifiedTotp], jwtWithAal("aal1"));
+
+    await proxy(requestFor("/auth/mfa"));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.next).toHaveBeenCalled();
+  });
+
+  it("lets an aal2 session through to protected pages", async () => {
+    signInWith([verifiedTotp], jwtWithAal("aal2"));
+
+    await proxy(requestFor("/transactions"));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.next).toHaveBeenCalled();
+  });
+
+  it("does not consult the session when there is no verified factor", async () => {
+    signInWith([unverifiedTotp], null);
+
+    await proxy(requestFor("/overview"));
+
+    expect(mocks.getSession).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("sends a stepped-up user away from /login to the app, not the challenge", async () => {
+    signInWith([verifiedTotp], jwtWithAal("aal2"));
+
+    await proxy(requestFor("/login"));
+
+    expect(mocks.redirect).toHaveBeenCalledTimes(1);
+    const dest = mocks.redirect.mock.calls[0][0].toString();
+    expect(dest).toContain("/overview");
+    expect(dest).not.toContain("/auth/mfa");
+  });
+
+  it("sends an un-stepped-up user away from /login to the challenge", async () => {
+    signInWith([verifiedTotp], jwtWithAal("aal1"));
+
+    await proxy(requestFor("/login"));
+
+    expect(mocks.redirect).toHaveBeenCalledTimes(1);
+    expect(mocks.redirect.mock.calls[0][0].toString()).toContain("/auth/mfa");
   });
 });
 

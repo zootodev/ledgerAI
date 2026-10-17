@@ -60,6 +60,14 @@ export type {
 export { getOverviewActionItems, LOW_CONFIDENCE_THRESHOLD } from "./overview";
 export type { OverviewActionItems, LatestImportOutcome } from "./overview";
 export {
+  getMfaStatus,
+  startTotpEnrollment,
+  confirmTotpEnrollment,
+  verifyMfaChallenge,
+  disableTotp,
+} from "./mfa";
+export type { MfaStatus, MfaFactorInfo, TotpEnrollment } from "./mfa";
+export {
   listImportHistory,
   getExistingFingerprints,
   commitImport,

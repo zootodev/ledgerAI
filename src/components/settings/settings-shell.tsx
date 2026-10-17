@@ -6,7 +6,14 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Tabs } from "@/components/ui/tabs";
 
 export interface SettingsShellProps {
-  active: "profile" | "business" | "accounts" | "categories" | "rules";
+  active:
+    | "profile"
+    | "business"
+    | "accounts"
+    | "categories"
+    | "rules"
+    | "security"
+    | "account";
   userName?: string;
   userEmail: string;
   businessName: string;
@@ -30,6 +37,8 @@ export function SettingsShell({
     accounts: "/settings/accounts",
     categories: "/settings/categories",
     rules: "/settings/rules",
+    security: "/settings/security",
+    account: "/settings/account",
   };
 
   return (
@@ -56,6 +65,7 @@ export function SettingsShell({
             { value: "accounts", label: "Accounts" },
             { value: "categories", label: "Categories" },
             { value: "rules", label: "Rules" },
+            { value: "security", label: "Security" },
           ]}
         />
 
