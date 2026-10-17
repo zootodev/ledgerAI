@@ -10,7 +10,7 @@
 //   3. import draft expiry and safe resume
 //   4. reports account filter (valid / invalid / foreign)
 //   5. CSV export preserves range + account scope
-//   6. authenticated /ask and /ask-v2 redirect to /overview
+//   6. authenticated /ask and /ask-v2 404 instead of redirecting
 //   7. signed-out /ask follows ordinary login protection
 //
 // It complements the focused unit suites; where a journey is also
@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   redirect: vi.fn(() => {
     throw new Error("NEXT_REDIRECT");
+  }),
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
   }),
   listAccounts: vi.fn(),
   listTransactions: vi.fn(),
@@ -64,7 +67,10 @@ vi.mock("@/lib/security/rate-limit", () => ({
 }));
 vi.mock("@/lib/db/client", () => ({ getPrismaClient: vi.fn() }));
 vi.mock("@/generated/prisma/client", () => ({ PrismaClient: class {} }));
-vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
+vi.mock("next/navigation", () => ({
+  redirect: mocks.redirect,
+  notFound: mocks.notFound,
+}));
 // Render only the auth page shells, not the interactive forms.
 vi.mock("@/components/auth/login-form", () => ({ LoginForm: () => null }));
 vi.mock("@/components/auth/signup-form", () => ({ SignupForm: () => null }));
@@ -331,9 +337,10 @@ describe("journeys 6 & 7 — Ask stays hidden and normally protected", () => {
   ];
 
   for (const [route, run] of askRoutes) {
-    it(`redirects an authenticated ${route} visit to /overview`, async () => {
-      await expect(run()).rejects.toThrow("NEXT_REDIRECT");
-      expect(mocks.redirect).toHaveBeenCalledWith("/overview");
+    it(`404s an authenticated ${route} visit instead of redirecting to the app`, async () => {
+      await expect(run()).rejects.toThrow("NEXT_NOT_FOUND");
+      expect(mocks.notFound).toHaveBeenCalled();
+      expect(mocks.redirect).not.toHaveBeenCalled();
     });
 
     it(`sends a signed-out ${route} visit to /login`, async () => {

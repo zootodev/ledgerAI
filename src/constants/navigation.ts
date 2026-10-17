@@ -27,7 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Reports", href: "/reports", icon: FileBarChart, section: "analysis" },
   { label: "AI Insights", href: "/insights", icon: Sparkles, section: "analysis" },
   // Phase 5: the Ask feature is intentionally absent from navigation while it
-  // is incomplete. The /ask and /ask-v2 routes exist but redirect; do not
+  // is incomplete. The /ask and /ask-v2 routes exist but answer 404; do not
   // re-add a nav item until Ask ships as a finished product surface.
   { label: "Import", href: "/import", icon: Upload, section: "manage" },
   { label: "Settings", href: "/settings", icon: Settings, section: "manage" },

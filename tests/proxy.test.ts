@@ -28,7 +28,7 @@ vi.mock("@supabase/ssr", () => ({
   createServerClient: mocks.createServerClient,
 }));
 
-import { proxy, isPublicPath, cspPolicy } from "@/proxy";
+import { proxy, isPublicPath, isProtectedPath, cspPolicy } from "@/proxy";
 
 function mockHeaders() {
   return { set: vi.fn() };
@@ -129,6 +129,39 @@ describe("isPublicPath", () => {
   });
 });
 
+describe("isProtectedPath", () => {
+  it.each([
+    "/overview",
+    "/transactions",
+    "/income",
+    "/expenses",
+    "/reports",
+    "/reports/export",
+    "/insights",
+    "/import",
+    "/onboarding",
+    "/settings",
+    "/settings/categories",
+    "/account",
+    "/account/export",
+    "/auth/mfa",
+  ])("treats the app route %s as protected", (path) => {
+    expect(isProtectedPath(path)).toBe(true);
+  });
+
+  it.each(["/design-editor", "/nonexistent", "/login-foo", "/", "/privacy"])(
+    "leaves the unknown or public route %s unprotected",
+    (path) => {
+      expect(isProtectedPath(path)).toBe(false);
+    },
+  );
+
+  it("normalizes a trailing slash", () => {
+    expect(isProtectedPath("/overview/")).toBe(true);
+    expect(isProtectedPath("/settings/categories/")).toBe(true);
+  });
+});
+
 describe("cspPolicy", () => {
   const nonce = "abc123";
 
@@ -203,8 +236,17 @@ describe("proxy() route gating", () => {
     expect(mocks.getUser).not.toHaveBeenCalled();
   });
 
-  it("redirects anonymous visitors of a lookalike path to /login", async () => {
+  it("lets an unknown lookalike path fall through so Next can 404 it", async () => {
+    // Item 3 of the pre-launch UX pass: an unknown URL must not be funnelled
+    // into /login. It renders (as a 404) instead of redirecting.
     await proxy(requestFor("/design-editor"));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.next).toHaveBeenCalled();
+  });
+
+  it("still redirects an anonymous visitor of a known child route", async () => {
+    await proxy(requestFor("/settings/categories"));
 
     expect(mocks.redirect).toHaveBeenCalledTimes(1);
     const dest = mocks.redirect.mock.calls[0][0].toString();

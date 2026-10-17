@@ -43,6 +43,40 @@ export function isPublicPath(path: string): boolean {
 }
 
 /**
+ * Root pathnames of the authenticated app. Only these (and their children)
+ * are sent to /login for an anonymous visitor: an unknown URL is left alone so
+ * Next renders the branded 404 instead of bouncing the visitor into a sign-in
+ * flow for a page that was never going to exist. Matching on a known root is
+ * what keeps lookalikes (/design-editor) unknown.
+ *
+ * This is a routing nicety, not the security boundary: every real page still
+ * calls requireAuthContext() and redirects itself.
+ */
+const PROTECTED_ROOT_PATHS = new Set([
+  "/overview",
+  "/transactions",
+  "/income",
+  "/expenses",
+  "/reports",
+  "/insights",
+  "/import",
+  "/onboarding",
+  "/account",
+  "/settings",
+  "/ask",
+  "/ask-v2",
+  MFA_CHALLENGE_PATH,
+]);
+
+/** True when `path` is a known authenticated app route (or a child of one). */
+export function isProtectedPath(path: string): boolean {
+  const normalized = path === "/" ? path : path.replace(/\/+$/, "");
+  if (PROTECTED_ROOT_PATHS.has(normalized)) return true;
+  const [root] = normalized.slice(1).split("/");
+  return PROTECTED_ROOT_PATHS.has(`/${root}`);
+}
+
+/**
  * The one authenticated route reachable at aal1: the second-factor challenge.
  * A user with a verified factor is parked here until the session is aal2.
  * Re-exported from the MFA helpers so the proxy, the post-verification routing
@@ -175,7 +209,10 @@ export async function proxy(request: NextRequest) {
     mfaStepUp = needsMfaStepUp(user, readAalFromAccessToken(session?.access_token));
   }
 
-  if (!user && !isPublic) {
+  // Only known app routes go to the sign-in screen. Anything else (a typo, a
+  // stale bookmark, a lookalike path) falls through to Next and renders the
+  // 404 page — no silent funnel into /login for a page that does not exist.
+  if (!user && !isPublic && isProtectedPath(path)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);

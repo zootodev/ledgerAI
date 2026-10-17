@@ -16,7 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+vi.mock("next/navigation", () => ({ redirect: vi.fn(), notFound: vi.fn() }));
 vi.mock("@/lib/services/auth", () => ({ ensureOnboarding: vi.fn() }));
 vi.mock("@/lib/services/auth-context", () => ({ requireAuthContext: vi.fn() }));
 

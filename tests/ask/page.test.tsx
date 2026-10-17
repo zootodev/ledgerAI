@@ -7,13 +7,19 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn(() => {
     throw new Error("NEXT_REDIRECT");
   }),
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
 }));
 
 vi.mock("@/lib/services/auth", () => ({ ensureOnboarding: mocks.ensureOnboarding }));
 vi.mock("@/lib/services/auth-context", () => ({
   requireAuthContext: mocks.requireAuthContext,
 }));
-vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
+vi.mock("next/navigation", () => ({
+  redirect: mocks.redirect,
+  notFound: mocks.notFound,
+}));
 
 const SESSION = {
   user: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com" },
@@ -27,14 +33,14 @@ beforeEach(() => {
 });
 
 describe("AskPage (hidden product surface)", () => {
-  it("redirects an authenticated visit to the overview, not an Ask surface", async () => {
+  it("404s an authenticated visit instead of silently redirecting to the app", async () => {
     mocks.requireAuthContext.mockResolvedValue(SESSION);
 
-    await expect(AskPage()).rejects.toThrow("NEXT_REDIRECT");
+    await expect(AskPage()).rejects.toThrow("NEXT_NOT_FOUND");
 
     expect(mocks.ensureOnboarding).toHaveBeenCalledOnce();
-    expect(mocks.redirect).toHaveBeenCalledTimes(1);
-    expect(mocks.redirect).toHaveBeenCalledWith("/overview");
+    expect(mocks.notFound).toHaveBeenCalledOnce();
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
   it("keeps normal auth protection: signed-out visitors go to /login", async () => {
@@ -43,6 +49,7 @@ describe("AskPage (hidden product surface)", () => {
     await expect(AskPage()).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.redirect).toHaveBeenCalledTimes(1);
     expect(mocks.redirect).toHaveBeenCalledWith("/login");
+    expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
   it("keeps normal onboarding protection for unfinished profiles", async () => {

@@ -7,13 +7,19 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn(() => {
     throw new Error("NEXT_REDIRECT");
   }),
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
 }));
 
 vi.mock("@/lib/services/auth", () => ({ ensureOnboarding: mocks.ensureOnboarding }));
 vi.mock("@/lib/services/auth-context", () => ({
   requireAuthContext: mocks.requireAuthContext,
 }));
-vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
+vi.mock("next/navigation", () => ({
+  redirect: mocks.redirect,
+  notFound: mocks.notFound,
+}));
 
 const ORIGINAL_ASK_V2_ENABLED = process.env.ASK_V2_ENABLED;
 
@@ -37,25 +43,25 @@ afterEach(() => {
 });
 
 describe("AskV2Page (hidden product surface)", () => {
-  it("redirects an authenticated visit to the overview, not an Ask surface", async () => {
+  it("404s an authenticated visit instead of silently redirecting to the app", async () => {
     mocks.requireAuthContext.mockResolvedValue(SESSION);
 
-    await expect(AskV2Page()).rejects.toThrow("NEXT_REDIRECT");
+    await expect(AskV2Page()).rejects.toThrow("NEXT_NOT_FOUND");
 
     expect(mocks.ensureOnboarding).toHaveBeenCalledOnce();
     expect(mocks.requireAuthContext).toHaveBeenCalledOnce();
-    expect(mocks.redirect).toHaveBeenCalledTimes(1);
-    expect(mocks.redirect).toHaveBeenCalledWith("/overview");
+    expect(mocks.notFound).toHaveBeenCalledOnce();
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
   it("stays hidden even when the ASK_V2_ENABLED server gate is on", async () => {
     // The gate governs the Ask implementation, not product visibility: the
-    // route must redirect either way.
+    // route must 404 either way.
     process.env.ASK_V2_ENABLED = "true";
     mocks.requireAuthContext.mockResolvedValue(SESSION);
 
-    await expect(AskV2Page()).rejects.toThrow("NEXT_REDIRECT");
-    expect(mocks.redirect).toHaveBeenCalledWith("/overview");
+    await expect(AskV2Page()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(mocks.notFound).toHaveBeenCalledOnce();
   });
 
   it("keeps normal auth protection: signed-out visitors go to /login", async () => {
@@ -64,6 +70,7 @@ describe("AskV2Page (hidden product surface)", () => {
     await expect(AskV2Page()).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.redirect).toHaveBeenCalledTimes(1);
     expect(mocks.redirect).toHaveBeenCalledWith("/login");
+    expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
   it("lets the onboarding bounce stand for unfinished profiles", async () => {
