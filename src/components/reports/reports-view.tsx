@@ -61,7 +61,9 @@ export function ReportsView({
             {periodLabel && (
               <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
                 <CalendarRange className="h-3.5 w-3.5" aria-hidden="true" />
-                {periodLabel}
+                {/* Prefixed so the period reads as context, not as a second
+                    copy of the "All time" pill in the range control below. */}
+                <span>Period: {periodLabel}</span>
                 {accountName && (
                   <>
                     <span aria-hidden="true">·</span>

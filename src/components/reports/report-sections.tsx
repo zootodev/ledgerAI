@@ -372,6 +372,12 @@ function MonthlySection({
             </table>
           </div>
         )}
+        {trends.points.length > 0 && (
+          <p className="mt-3 px-1 text-xs text-muted">
+            Margin is the month&apos;s net profit divided by its revenue. A
+            negative margin means the month ran at a loss.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
