@@ -199,7 +199,7 @@ jobs:
             echo
             echo "- Artifact: \`db-backup-${{ steps.stamp.outputs.date }}\`"
             echo "- File: \`${artifact}\` ($(wc -c < "${artifact}") bytes)"
-            echo "- SHA-256: \`$(sha256sum "${artifact}" | cut -d' ' -f1)\`"
+            echo "- SHA-256 of the .age file (unzip the artifact first): \`$(sha256sum "${artifact}" | cut -d' ' -f1)\`"
             echo
             echo "Restore instructions: docs/BACKUPS.md"
           } >> "$GITHUB_STEP_SUMMARY"

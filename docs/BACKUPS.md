@@ -174,8 +174,9 @@ thirteen available at any time.
 ### Restore steps
 
 ```bash
-# 0. Download the artifact (see §4) and confirm the SHA-256 against the value in
-#    the workflow run summary.
+# 0. Download the artifact (see §4) and confirm the .age file's SHA-256 against
+#    the value in the workflow run summary. (GitHub's own artifact digest, shown
+#    on the run page, covers the downloaded zip, so it is a different value.)
 
 # 1. Decrypt. Needs the offline private key.
 age -d -i ledgerai-backup.key -o ledgerai.dump ledgerai-YYYY-MM-DD.dump.age
