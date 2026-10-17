@@ -28,7 +28,7 @@ vi.mock("@supabase/ssr", () => ({
   createServerClient: mocks.createServerClient,
 }));
 
-import { proxy, isPublicPath } from "@/proxy";
+import { proxy, isPublicPath, cspPolicy } from "@/proxy";
 
 function mockHeaders() {
   return { set: vi.fn() };
@@ -123,6 +123,36 @@ describe("isPublicPath", () => {
     "/transactions",
   ])("treats the lookalike route %s as NOT public", (path) => {
     expect(isPublicPath(path)).toBe(false);
+  });
+});
+
+describe("cspPolicy", () => {
+  const nonce = "abc123";
+
+  it("locks the policy down to self with a nonce for scripts", () => {
+    const policy = cspPolicy(nonce);
+    expect(policy).toContain("default-src 'self'");
+    expect(policy).toContain(`script-src 'self' 'nonce-${nonce}'`);
+    expect(policy).toContain("object-src 'none'");
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(policy).toContain("base-uri 'self'");
+  });
+
+  it("does not fall back to unsafe-inline/unsafe-eval for scripts", () => {
+    const policy = cspPolicy(nonce);
+    const scriptSrc = policy
+      .split("; ")
+      .find((directive) => directive.startsWith("script-src"));
+    expect(scriptSrc).not.toContain("unsafe-inline");
+    expect(scriptSrc).not.toContain("unsafe-eval");
+  });
+
+  it("upgrades insecure subresource requests (pairs with HSTS)", () => {
+    expect(cspPolicy(nonce)).toContain("upgrade-insecure-requests");
+  });
+
+  it("uses the nonce it is given (per-request, never a constant)", () => {
+    expect(cspPolicy("one")).not.toBe(cspPolicy("two"));
   });
 });
 

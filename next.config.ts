@@ -4,19 +4,38 @@ import type { NextConfig } from "next";
    Content-Security-Policy (with a per-request nonce) is emitted from
    src/proxy.ts instead — it can only be generated per request — while the
    static, frame/referrer/mime headers below never change and are safe to
-   declare here. Strict-Transport-Security is intentionally NOT set here:
-   Vercel already emits HSTS on the production edge. */
-const securityHeaders = [
-  { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "X-Frame-Options", value: "DENY" },
-  {
-    key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-  },
-];
+   declare here.
+
+   Strict-Transport-Security is emitted ONLY in production: pinning HTTPS on a
+   dev or preview origin would make localhost / a preview alias unreachable
+   over plain HTTP, and for that host the pin is effectively irreversible.
+   `preload` is deliberately omitted until every subdomain is confirmed
+   HTTPS-only (submission is a one-way commitment). */
+export function buildSecurityHeaders(isProduction: boolean) {
+  return [
+    ...(isProduction
+      ? [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+        ]
+      : []),
+    { key: "X-Content-Type-Options", value: "nosniff" },
+    { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+    { key: "X-Frame-Options", value: "DENY" },
+    {
+      key: "Permissions-Policy",
+      value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+    },
+  ];
+}
+
+const securityHeaders = buildSecurityHeaders(process.env.NODE_ENV === "production");
 
 const nextConfig: NextConfig = {
+  /* Drop the `X-Powered-By: Next.js` fingerprint header from every response. */
+  poweredByHeader: false,
   /* pdf-parse (and its pdfjs-dist engine) uses runtime requires and a
      worker that break when bundled — keep it external so it loads from
      node_modules on the server only (it is never imported client-side). */

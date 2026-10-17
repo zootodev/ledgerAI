@@ -25,6 +25,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Blocks the build on any *production* dependency advisory. Dev-only
+      # advisories (e.g. the unfixable braces@3.0.3 DoS reached only through
+      # eslint-config-next's glob) are excluded on purpose — they never ship to
+      # the server runtime.
+      - name: Audit production dependencies
+        run: npm run audit
+
       - name: Lint
         run: npm run lint
 

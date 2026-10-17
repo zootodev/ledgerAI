@@ -48,7 +48,7 @@ export function isMfaChallengePath(path: string): boolean {
 }
 
 /** Content-Security-Policy with a per-request nonce (SG1-04). */
-function cspPolicy(nonce: string): string {
+export function cspPolicy(nonce: string): string {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
@@ -62,6 +62,7 @@ function cspPolicy(nonce: string): string {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
+    "upgrade-insecure-requests",
   ].join("; ");
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import nextConfig from "../../next.config";
+import nextConfig, { buildSecurityHeaders } from "../../next.config";
 
 /** Every origin the production server-actions allowlist must NEVER contain. */
 const CLAIMABLE_TUNNEL_ORIGINS = [
@@ -53,7 +53,33 @@ describe("next.config.ts — SG1-04 security headers", () => {
     expect(
       headerSet.some(([key, value]) => key === "permissions-policy" && value.includes("camera=()")),
     ).toBe(true);
-    // HSTS is intentionally left to Vercel, never duplicated here.
-    expect(headerSet.some(([key]) => key === "strict-transport-security")).toBe(false);
+  });
+
+  it("emits HSTS in production only (never on dev/preview origins)", () => {
+    const prod = buildSecurityHeaders(true);
+    const hsts = prod.find((h) => h.key === "Strict-Transport-Security");
+    expect(hsts).toBeDefined();
+    expect(hsts?.value).toContain("max-age=63072000");
+    expect(hsts?.value).toContain("includeSubDomains");
+    // `preload` is a deliberate omission (one-way commitment).
+    expect(hsts?.value).not.toContain("preload");
+
+    const dev = buildSecurityHeaders(false);
+    expect(dev.some((h) => h.key === "Strict-Transport-Security")).toBe(false);
+    // Every non-HSTS header is identical across environments.
+    expect(dev).toEqual(prod.filter((h) => h.key !== "Strict-Transport-Security"));
+  });
+
+  it("does not pin HSTS under the test/dev build the suite runs in", async () => {
+    const headers = await (nextConfig.headers as () => Promise<unknown> | unknown)();
+    const all = Array.isArray(headers) ? headers : [];
+    const keys = all
+      .flatMap((rule) => (rule as { headers?: { key: string }[] }).headers ?? [])
+      .map((h) => h.key.toLowerCase());
+    expect(keys).not.toContain("strict-transport-security");
+  });
+
+  it("drops the X-Powered-By fingerprint header", () => {
+    expect(nextConfig.poweredByHeader).toBe(false);
   });
 });
