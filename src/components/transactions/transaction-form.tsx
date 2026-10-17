@@ -13,7 +13,10 @@ import {
   updateTransactionAction,
   type TransactionActionState,
 } from "@/lib/actions/transactions";
-import { TRANSACTION_TYPE_LABELS } from "@/lib/validation/transaction";
+import {
+  TRANSACTION_TYPE_LABELS,
+  amountFieldError,
+} from "@/lib/validation/transaction";
 
 export interface TransactionFormValues {
   id?: string;
@@ -74,6 +77,22 @@ export function TransactionForm({
       ? []
       : categories.filter((c) => c.type === type);
 
+  // Inline amount feedback. The server re-validates and remains the source of
+  // truth; this only avoids a round-trip for an obviously bad number and stops
+  // the browser showing its own unstyled bubble (the form is `noValidate`).
+  const amountRef = React.useRef<HTMLInputElement>(null);
+  const [amountError, setAmountError] = React.useState<string | undefined>();
+
+  const checkAmount = React.useCallback(() => {
+    const message = amountFieldError(amountRef.current?.value ?? "");
+    setAmountError(message);
+    return message;
+  }, []);
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (checkAmount()) event.preventDefault();
+  };
+
   return (
     <Modal
       open={open}
@@ -85,6 +104,8 @@ export function TransactionForm({
       <form
         id="transaction-form"
         action={formAction}
+        noValidate
+        onSubmit={handleSubmit}
         className="flex flex-col gap-4"
       >
         {state.error && (
@@ -138,6 +159,7 @@ export function TransactionForm({
           label="Amount"
           required
           htmlFor="tx-amount"
+          error={amountError}
           hint="Positive number only — the transaction type decides income or expense."
         >
           <Input
@@ -146,6 +168,10 @@ export function TransactionForm({
             inputMode="decimal"
             placeholder="0.00"
             required
+            ref={amountRef}
+            onBlur={checkAmount}
+            aria-invalid={amountError ? true : undefined}
+            aria-describedby={amountError ? "tx-amount-error" : undefined}
             defaultValue={transaction?.amount}
           />
         </Field>
@@ -161,7 +187,15 @@ export function TransactionForm({
               ))}
             </Select>
           </Field>
-          <Field label="Category" htmlFor="tx-category">
+          <Field
+            label="Category"
+            htmlFor="tx-category"
+            hint={
+              type === "transfer"
+                ? undefined
+                : "Pick a category so this shows in reports."
+            }
+          >
             <Select
               id="tx-category"
               name="categoryId"

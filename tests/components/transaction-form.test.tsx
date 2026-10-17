@@ -56,4 +56,18 @@ describe("TransactionForm submit wiring (#1)", () => {
     // `form="transaction-form"` attribute; it must be gone.
     expect(html).not.toContain('form="transaction-form"');
   });
+
+  it("disables native bubbles so validation can render inline", () => {
+    // Item 15 of the pre-launch UX pass: the form owns its amount feedback
+    // instead of the browser's unstyled bubble.
+    const html = render();
+    expect(html.toLowerCase()).toContain("novalidate");
+  });
+
+  it("explains why a category matters", () => {
+    const html = render();
+
+    expect(html).toContain("Pick a category so this shows in reports.");
+    expect(html).toContain('id="tx-category-hint"');
+  });
 });

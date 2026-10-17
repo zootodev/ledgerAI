@@ -69,6 +69,20 @@ export const transactionInputSchema = z
 
 export const transactionIdSchema = z.uuid("Invalid transaction id.");
 
+/**
+ * Client-side mirror of the amount rule, for inline feedback before the server
+ * validates authoritatively. Returns the message to show, or undefined when the
+ * value is an acceptable positive decimal. Kept separate from the Zod schema
+ * because the form reads it on blur from the live input.
+ */
+export function amountFieldError(raw: string): string | undefined {
+  const value = raw.trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(value) || Number(value) <= 0) {
+    return "Enter a positive amount";
+  }
+  return undefined;
+}
+
 /** Sort keys the transactions list accepts. */
 export const TRANSACTION_SORT_KEYS = ["date", "amount", "description", "createdAt"] as const;
 

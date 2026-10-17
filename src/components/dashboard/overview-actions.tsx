@@ -1,7 +1,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { FileUp, Inbox, Sparkles, Tag } from "lucide-react";
-import { getOverviewActionItems } from "@/lib/services/overview";
+import { getOverviewActionItems, LOW_CONFIDENCE_THRESHOLD } from "@/lib/services/overview";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +24,10 @@ export async function OverviewActionItems() {
   const hasAnything =
     uncategorizedCount > 0 || lowConfidenceCount > 0 || latestImport !== null;
   if (!hasAnything) return null;
+
+  // Shown so "low confidence" is measurable rather than vague — the same
+  // number the Review queue uses.
+  const reviewPercent = Math.round(LOW_CONFIDENCE_THRESHOLD * 100);
 
   return (
     <section className="space-y-3" aria-label="Needs your attention">
@@ -51,8 +55,9 @@ export async function OverviewActionItems() {
             <span>
               {lowConfidenceCount} transaction
               {lowConfidenceCount === 1 ? "" : "s"} were auto-categorized with
-              low confidence. Confirm or correct them to improve future
-              suggestions.
+              low confidence. AI confidence is how sure the model is about its
+              category — under {reviewPercent}% goes to Review. Confirm or
+              correct them to improve future suggestions.
             </span>
             <Link href="/transactions?lowConfidence=1">
               <Button variant="outline" size="sm" leftIcon={<Sparkles className="h-3.5 w-3.5" />}>

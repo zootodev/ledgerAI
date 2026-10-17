@@ -31,7 +31,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TransactionForm, type TransactionFormValues } from "@/components/transactions/transaction-form";
 import { deleteTransactionAction } from "@/lib/actions/transactions";
+import { REVIEW_THRESHOLD } from "@/lib/ai/rules";
 import { formatAmount, majorAmount } from "@/lib/finance/engine";
+import { cn } from "@/lib/utils/cn";
 import { TRANSACTION_TYPE_LABELS, TRANSACTION_TYPES } from "@/lib/validation/transaction";
 import type { ListTransactionsResult, TransactionServiceData } from "@/lib/services/transactions";
 import type { AccountServiceData } from "@/lib/services/accounts";
@@ -74,13 +76,26 @@ const typeTone: Record<string, "success" | "danger" | "default"> = {
   transfer: "default",
 };
 
+/**
+ * Confidence at or above this lands a suggestion outside the Review queue.
+ * Derived from the same constant the categorization + review queries use, so
+ * the badge can never claim a different threshold than the engine.
+ */
+const REVIEW_PERCENT = Math.round(REVIEW_THRESHOLD * 100);
+
+const CONFIDENCE_LEGEND = `How confident the AI is in this category. Under ${REVIEW_PERCENT}% goes to Review.`;
+
 /** AI categorization confidence, e.g. "AI · 92%". Unknown when null. */
 function aiConfidenceBadge(confidence: number): React.ReactNode {
   const pct = Math.round(confidence * 100);
   const tone: "success" | "warning" | "danger" =
-    confidence >= 0.7 ? "success" : confidence >= 0.4 ? "warning" : "danger";
+    confidence >= REVIEW_THRESHOLD
+      ? "success"
+      : confidence >= 0.4
+        ? "warning"
+        : "danger";
   return (
-    <Badge tone={tone} title={`AI categorization confidence: ${pct}%`}>
+    <Badge tone={tone} title={CONFIDENCE_LEGEND}>
       AI · {pct}%
     </Badge>
   );
@@ -301,7 +316,12 @@ export function TransactionsView({
       headerClassName: "min-w-56",
       cell: (t) => (
         <div>
-          <p className="font-medium text-foreground">{t.description}</p>
+          <p
+            id={`tx-${t.id}-description`}
+            className="font-medium text-foreground"
+          >
+            {t.description}
+          </p>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
             {t.aiConfidence !== null && aiConfidenceBadge(t.aiConfidence)}
             {t.reference && (
@@ -377,18 +397,20 @@ export function TransactionsView({
           <Button
             variant="ghost"
             size="icon"
-            aria-label={`Edit ${t.description}`}
+            aria-label="Edit"
+            aria-describedby={`tx-${t.id}-description`}
             onClick={() => openEdit(t)}
           >
-            <Pencil className="h-4 w-4" />
+            <Pencil className="h-4 w-4" aria-hidden="true" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            aria-label={`Delete ${t.description}`}
+            aria-label="Delete"
+            aria-describedby={`tx-${t.id}-description`}
             onClick={() => setDeleteTarget(t)}
           >
-            <Trash2 className="h-4 w-4 text-danger" />
+            <Trash2 className="h-4 w-4 text-danger" aria-hidden="true" />
           </Button>
         </div>
       ),
@@ -399,6 +421,13 @@ export function TransactionsView({
     key: params.sortBy,
     direction: params.sortDir,
   };
+
+  // /income and /expenses are single-type lists: the opposite type's total
+  // there is always zero after the locked filter, so each page shows only its
+  // own total plus the net instead of an "Income +₦0.00" tile.
+  const showIncomeTile = lockedType !== "expense";
+  const showExpenseTile = lockedType !== "income";
+  const tileCount = Number(showIncomeTile) + Number(showExpenseTile) + 1;
 
   return (
     <AppShell
@@ -426,23 +455,32 @@ export function TransactionsView({
         </div>
 
         {!loadError && (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-card border border-border bg-surface px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                Income{hasFilters ? " (filtered)" : ""}
-              </p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-success">
-                +{formatAmount(result.totals.income, currency)}
-              </p>
-            </div>
-            <div className="rounded-card border border-border bg-surface px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                Expenses
-              </p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-danger">
-                −{formatAmount(result.totals.expense, currency)}
-              </p>
-            </div>
+          <div
+            className={cn(
+              "grid gap-3",
+              tileCount === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+            )}
+          >
+            {showIncomeTile && (
+              <div className="rounded-card border border-border bg-surface px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                  Income{hasFilters ? " (filtered)" : ""}
+                </p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-success">
+                  +{formatAmount(result.totals.income, currency)}
+                </p>
+              </div>
+            )}
+            {showExpenseTile && (
+              <div className="rounded-card border border-border bg-surface px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                  Expenses{hasFilters ? " (filtered)" : ""}
+                </p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-danger">
+                  −{formatAmount(result.totals.expense, currency)}
+                </p>
+              </div>
+            )}
             <div className="rounded-card border border-border bg-surface px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-muted">
                 Net
@@ -489,6 +527,8 @@ export function TransactionsView({
                   : params.uncategorized
                     ? "Showing non-transfer transactions that have no category yet."
                     : "Showing transactions whose AI category was low-confidence and may need a second look."}
+                {" "}
+                {CONFIDENCE_LEGEND}
               </span>
               <Button
                 variant="outline"
