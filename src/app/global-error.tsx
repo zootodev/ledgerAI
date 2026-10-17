@@ -1,19 +1,27 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { ErrorState } from "@/components/ui/error-state";
+import { captureException } from "@/lib/observability/capture";
 
 /**
  * Last-resort error boundary. Replaces the root layout entirely, so it must
  * render its own <html>/<body>. Used only when the root layout itself fails.
  * As with the route boundaries, no error message, stack, or digest is shown.
+ * The exception is reported to monitoring (scrubbed) rather than rendered.
  */
 export default function GlobalError({
+  error,
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    captureException(error);
+  }, [error]);
+
   return (
     <html lang="en">
       <body className="bg-background text-foreground">

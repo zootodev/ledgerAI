@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 /* Production security headers applied at the response level on every route.
    Content-Security-Policy (with a per-request nonce) is emitted from
@@ -84,4 +85,23 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Source-map upload only runs when an auth token is present (CI/production).
+  // Without one, debug IDs are still injected so stack traces correlate, but
+  // nothing is uploaded — keeping local and CI builds hermetic.
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: true,
+  telemetry: false,
+  sourcemaps: {
+    disable: process.env.SENTRY_AUTH_TOKEN ? false : "disable-upload",
+  },
+  webpack: {
+    // Instrument server functions/components for error monitoring only when a
+    // DSN is configured, so an un-monitored local build stays lean.
+    autoInstrumentServerFunctions: Boolean(
+      process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN,
+    ),
+  },
+});

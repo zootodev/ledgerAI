@@ -11,6 +11,8 @@ import {
 // it is hit without a session when the user first clicks an email link.
 // /forgot-password and /reset-password are reachable without a session (the
 // reset link's recovery page is hit before a session is established).
+// /api/health is an uptime probe: it must answer a monitor directly (not with
+// a /login redirect) and returns only a fixed, non-sensitive status body.
 //
 // Matching is EXACT (pathname equality only), never prefix-based, so lookalike
 // routes such as "/design-editor" are never accidentally public. A trailing
@@ -27,6 +29,7 @@ const PUBLIC_PATHS = new Set([
   "/forgot-password",
   "/reset-password",
   "/verify-email",
+  "/api/health",
 ]);
 
 /** True when `path` is one of the deliberately public route pathnames. */
@@ -110,6 +113,16 @@ function applySecurityHeaders(response: NextResponse, nonce: string): void {
 }
 
 export async function proxy(request: NextRequest) {
+  // Health probe fast-path: answer with security headers and no Supabase auth
+  // round-trip, so an uptime monitor gets a truthful signal about *this* app
+  // and its database even during an auth-provider incident. The route itself
+  // returns only a fixed, non-sensitive body.
+  if (request.nextUrl.pathname === "/api/health") {
+    const healthResponse = NextResponse.next();
+    applySecurityHeaders(healthResponse, generateCspNonce());
+    return healthResponse;
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

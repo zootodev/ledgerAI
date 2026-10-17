@@ -101,6 +101,7 @@ describe("isPublicPath", () => {
     "/forgot-password",
     "/reset-password",
     "/verify-email",
+    "/api/health",
   ])("treats the intended route %s as public", (path) => {
     expect(isPublicPath(path)).toBe(true);
   });
@@ -182,6 +183,15 @@ describe("proxy() route gating", () => {
 
     expect(mocks.redirect).not.toHaveBeenCalled();
     expect(mocks.next).toHaveBeenCalled();
+  });
+
+  it("serves /api/health without touching Supabase auth (fast path)", async () => {
+    await proxy(requestFor("/api/health"));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    // A monitor must get a truthful answer even during an auth incident.
+    expect(mocks.createServerClient).not.toHaveBeenCalled();
+    expect(mocks.getUser).not.toHaveBeenCalled();
   });
 
   it("redirects anonymous visitors of a lookalike path to /login", async () => {

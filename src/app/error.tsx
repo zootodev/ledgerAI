@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { ErrorState } from "@/components/ui/error-state";
+import { captureException } from "@/lib/observability/capture";
 
 /**
  * Root route error boundary. Catches unexpected render/data errors from any
@@ -11,7 +12,9 @@ import { ErrorState } from "@/components/ui/error-state";
  *
  * Safety: only `error.digest` (a stable, non-sensitive id Next attaches) is
  * logged. The raw message/stack — which can embed DB internals, tenant ids or
- * query text — is deliberately never rendered or logged.
+ * query text — is deliberately never rendered or logged. The exception itself
+ * is forwarded to error monitoring, where the shared scrubber strips request
+ * bodies/headers and user identity before it leaves the process.
  */
 export default function AppError({
   error,
@@ -24,6 +27,7 @@ export default function AppError({
     console.error(
       `[app] boundary caught${error.digest ? ` (digest ${error.digest})` : ""}`,
     );
+    captureException(error);
   }, [error]);
 
   return (
