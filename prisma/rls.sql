@@ -140,3 +140,49 @@ CREATE POLICY "users access own business category rules"
   ON "category_rules" FOR ALL
   USING (public.is_owner(business_id))
   WITH CHECK (public.is_owner(business_id));
+
+-- ---- assistant_conversations ----------------------------------------------
+-- Ask history is business-scoped, exactly like its sibling financial tables.
+ALTER TABLE "assistant_conversations" ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "users access own business conversations" ON "assistant_conversations";
+CREATE POLICY "users access own business conversations"
+  ON "assistant_conversations" FOR ALL
+  USING (public.is_owner(business_id))
+  WITH CHECK (public.is_owner(business_id));
+
+-- ---- assistant_messages ----------------------------------------------------
+-- Messages carry no business_id; ownership is derived through the parent
+-- conversation. SECURITY DEFINER keeps the lookup consistent regardless of the
+-- caller role.
+CREATE OR REPLACE FUNCTION public.is_conversation_owner(target_conversation_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM assistant_conversations c
+    JOIN businesses b ON b.id = c.business_id
+    WHERE c.id = target_conversation_id
+      AND b.user_id = auth.uid()
+  );
+$$;
+
+ALTER TABLE "assistant_messages" ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "users access own conversation messages" ON "assistant_messages";
+CREATE POLICY "users access own conversation messages"
+  ON "assistant_messages" FOR ALL
+  USING (public.is_conversation_owner(conversation_id))
+  WITH CHECK (public.is_conversation_owner(conversation_id));
+
+-- ---- rate_limit_buckets ----------------------------------------------------
+-- Deliberately deny-all: this table stores only SHA-256 digests of rate-limit
+-- keys (no PII, no financial data) and is written/read exclusively by the
+-- elevated service role, which bypasses RLS. Enabling RLS with no policies
+-- guarantees anon/authenticated can never read or write it even if a future
+-- grant is added by mistake.
+ALTER TABLE "rate_limit_buckets" ENABLE ROW LEVEL SECURITY;
