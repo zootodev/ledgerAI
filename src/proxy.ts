@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import {
   hasVerifiedFactor,
+  MFA_CHALLENGE_PATH,
   needsMfaStepUp,
   readAalFromAccessToken,
 } from "@/lib/auth/mfa";
@@ -44,8 +45,10 @@ export function isPublicPath(path: string): boolean {
 /**
  * The one authenticated route reachable at aal1: the second-factor challenge.
  * A user with a verified factor is parked here until the session is aal2.
+ * Re-exported from the MFA helpers so the proxy, the post-verification routing
+ * and the challenge page share one definition.
  */
-export const MFA_CHALLENGE_PATH = "/auth/mfa";
+export { MFA_CHALLENGE_PATH };
 
 /** True when the path is the MFA challenge itself (never step-up gated). */
 export function isMfaChallengePath(path: string): boolean {

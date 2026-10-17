@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { confirmEmailAction } from "./actions";
-import { EmailConfirmCard } from "@/components/auth/email-confirm-card";
+import {
+  EmailConfirmCard,
+  EmailConfirmError,
+} from "@/components/auth/email-confirm-card";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { parseEmailOtpType } from "@/lib/auth/email-otp";
 import { resolveInternalNext } from "@/lib/auth/redirect";
+import { confirmEmailAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Confirm your email",
@@ -29,6 +31,11 @@ export const dynamic = "force-dynamic";
  * known Supabase OTP type, and `next` is reduced to an internal, same-origin
  * path (or dropped) before it is put in the form. The action re-validates the
  * target with `resolvePostAuthRedirect` before it is ever used for a redirect.
+ *
+ * A failed link is shown *here*, not on /login: the proxy sends a signed-in
+ * visitor away from /login, so a redirect made the failure look like nothing
+ * happened. The failure URL never carries the token, and the card echoes
+ * nothing from the query string.
  */
 export default async function ConfirmEmailPage({
   searchParams,
@@ -36,14 +43,19 @@ export default async function ConfirmEmailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const error = typeof params.error === "string" ? params.error : "";
   const tokenHash = typeof params.token_hash === "string" ? params.token_hash : "";
   const rawType = typeof params.type === "string" ? params.type : "";
   const rawNext = typeof params.next === "string" ? params.next : "";
 
   const type = parseEmailOtpType(rawType);
-  // Without a token or a recognized type there is nothing to confirm: fall back
-  // to the sign-in error surface.
-  if (!tokenHash || !type) redirect("/login?error=missing_code");
+
+  // Failure surface: the action bounced back with an error, or the link itself
+  // is unusable (no token / unrecognized type). A known `type` selects the
+  // recovery action; anything else defaults to "resend confirmation email".
+  if (error || !tokenHash || !type) {
+    return <EmailConfirmError type={type} />;
+  }
 
   const next = resolveInternalNext(rawNext, await getAppBaseUrl()) ?? "";
 

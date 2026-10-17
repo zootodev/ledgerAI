@@ -36,6 +36,15 @@ function formData(fields: Record<string, string>): FormData {
   return data;
 }
 
+/** Build a decodable (unverified) JWT carrying the session's `aal` claim. */
+function jwt(payload: Record<string, unknown>): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `header.${body}.signature`;
+}
+
+/** A user with at least one verified second factor. */
+const MFA_USER = { factors: [{ status: "verified" }] };
+
 function redirectTarget(): string {
   return vi.mocked(mocks.redirect).mock.calls.at(-1)?.[0] as string;
 }
@@ -84,14 +93,20 @@ describe("confirmEmailAction", () => {
     await confirmEmailAction(formData({ token_hash: "abc123", type: "bogus" }));
 
     expect(verifyOtpMock).not.toHaveBeenCalled();
-    expect(redirectTarget()).toBe("http://172.20.10.2:3000/login?error=missing_code");
+    expect(redirectTarget()).toBe(
+      "http://172.20.10.2:3000/auth/confirm?error=missing_code",
+    );
   });
 
   it("rejects a missing token without touching Supabase", async () => {
     await confirmEmailAction(formData({ type: "recovery" }));
 
     expect(verifyOtpMock).not.toHaveBeenCalled();
-    expect(redirectTarget()).toBe("http://172.20.10.2:3000/login?error=missing_code");
+    // The type is valid but there is no token to spend; the error card still
+    // offers the recovery action for that link family.
+    expect(redirectTarget()).toBe(
+      "http://172.20.10.2:3000/auth/confirm?error=missing_code&type=recovery",
+    );
   });
 
   it("refuses an external next (open-redirect protection)", async () => {
@@ -102,15 +117,31 @@ describe("confirmEmailAction", () => {
     expect(redirectTarget()).toBe("http://172.20.10.2:3000/overview");
   });
 
-  it("carries the link type through on a failed verification", async () => {
+  it("re-renders the failure on /auth/confirm with the link type, never on /login", async () => {
+    // A signed-in visitor is bounced away from /login by the proxy, so the
+    // failure must surface on a public page instead of a redirect to /login.
     verifyOtpMock.mockResolvedValue({ data: { session: null }, error: { message: "expired" } });
 
     await confirmEmailAction(formData({ token_hash: "abc123", type: "recovery" }));
 
     expect(redirectTarget()).toBe(
-      "http://172.20.10.2:3000/login?error=auth_failed&type=recovery",
+      "http://172.20.10.2:3000/auth/confirm?error=auth_failed&type=recovery",
     );
+    expect(redirectTarget()).not.toContain("/login");
     expect(mocks.ensureOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("never leaks the one-time token into a failure URL", async () => {
+    verifyOtpMock.mockResolvedValue({ data: { session: null }, error: { message: "used" } });
+
+    await confirmEmailAction(
+      formData({ token_hash: "super-secret-token", type: "signup", next: "/reset-password" }),
+    );
+
+    expect(redirectTarget()).toBe(
+      "http://172.20.10.2:3000/auth/confirm?error=auth_failed&type=signup",
+    );
+    expect(redirectTarget()).not.toContain("super-secret-token");
   });
 
   it("reports an unconfigured Supabase instead of a dead end", async () => {
@@ -120,5 +151,50 @@ describe("confirmEmailAction", () => {
 
     expect(verifyOtpMock).not.toHaveBeenCalled();
     expect(redirectTarget()).toBe("http://172.20.10.2:3000/login?error=not_configured");
+  });
+
+  describe("recovery + 2FA", () => {
+    it("sends an MFA-enabled recovery session through the challenge before /reset-password", async () => {
+      // The provider returns an aal1 session for a fresh email verification, and
+      // Supabase refuses a password update without aal2.
+      verifyOtpMock.mockResolvedValue({
+        data: { user: MFA_USER, session: { access_token: jwt({ aal: "aal1" }) } },
+        error: null,
+      });
+
+      await confirmEmailAction(
+        formData({ token_hash: "abc123", type: "recovery", next: "/reset-password" }),
+      );
+
+      expect(redirectTarget()).toBe(
+        "http://172.20.10.2:3000/auth/mfa?next=%2Freset-password",
+      );
+    });
+
+    it("lands directly on /reset-password when the recovery session is already aal2", async () => {
+      verifyOtpMock.mockResolvedValue({
+        data: { user: MFA_USER, session: { access_token: jwt({ aal: "aal2" }) } },
+        error: null,
+      });
+
+      await confirmEmailAction(
+        formData({ token_hash: "abc123", type: "recovery", next: "/reset-password" }),
+      );
+
+      expect(redirectTarget()).toBe("http://172.20.10.2:3000/reset-password");
+    });
+
+    it("leaves non-reset targets to the proxy's step-up gate", async () => {
+      // /overview is protected, so the proxy parks the aal1 session itself — the
+      // action must not double-route it.
+      verifyOtpMock.mockResolvedValue({
+        data: { user: MFA_USER, session: { access_token: jwt({ aal: "aal1" }) } },
+        error: null,
+      });
+
+      await confirmEmailAction(formData({ token_hash: "abc123", type: "signup" }));
+
+      expect(redirectTarget()).toBe("http://172.20.10.2:3000/overview");
+    });
   });
 });

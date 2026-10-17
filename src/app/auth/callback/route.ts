@@ -34,7 +34,16 @@ export async function GET(request: Request) {
 
   const baseUrl = await getAppBaseUrl();
   const loginUrl = `${baseUrl}/login`;
-  const typeQuery = otpType ? `&type=${encodeURIComponent(otpType)}` : "";
+
+  // Every *link* failure lands on /auth/confirm's in-place error state, never on
+  // /login: the proxy bounces a signed-in visitor away from /login, which made
+  // the failure invisible. Only an infrastructure problem (Supabase not
+  // configured) is reported on the sign-in page. `type` is carried through so
+  // the error card can offer the right recovery action.
+  const linkError = (error: string) =>
+    `${baseUrl}/auth/confirm?error=${error}${
+      otpType ? `&type=${encodeURIComponent(otpType)}` : ""
+    }`;
 
   // Forward the still-unused one-time token to the confirmation screen, which
   // only verifies on an explicit, user-initiated POST. Preserve `next` (the
@@ -49,7 +58,7 @@ export async function GET(request: Request) {
   }
 
   if (!code) {
-    return NextResponse.redirect(`${loginUrl}?error=missing_code${typeQuery}`);
+    return NextResponse.redirect(linkError("missing_code"));
   }
 
   const supabase = await getSupabaseServer();
@@ -57,14 +66,14 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${loginUrl}?error=not_configured`);
   }
 
-  const verified = (await supabase.auth.exchangeCodeForSession(code)).error === null;
-  if (!verified) {
-    // `type` (when the link carried one) lets the sign-in page offer the right
-    // recovery action: a fresh reset link for recovery, otherwise a fresh
-    // confirmation email.
-    return NextResponse.redirect(`${loginUrl}?error=auth_failed${typeQuery}`);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error) {
+    return NextResponse.redirect(linkError("auth_failed"));
   }
 
-  const target = await resolvePostVerificationTarget(rawNext, baseUrl);
+  const target = await resolvePostVerificationTarget(rawNext, baseUrl, {
+    user: data.user,
+    accessToken: data.session?.access_token,
+  });
   return NextResponse.redirect(new URL(target, baseUrl).toString());
 }

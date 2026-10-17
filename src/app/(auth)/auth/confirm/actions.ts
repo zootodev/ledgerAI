@@ -31,28 +31,44 @@ export async function confirmEmailAction(formData: FormData): Promise<void> {
   const baseUrl = await getAppBaseUrl();
   const loginUrl = `${baseUrl}/login`;
 
+  // A failed link is re-rendered *in place* on /auth/confirm, never redirected
+  // to /login: the proxy sends a signed-in visitor away from /login (to
+  // /overview or the 2FA challenge), which made the failure look like nothing
+  // happened at all. The error URL deliberately carries no token — a dead link
+  // must not be retryable and the one-time secret must not linger in history.
+  // `type` travels along so the error card can offer the right recovery action.
+  const confirmError = (error: string) =>
+    `${baseUrl}/auth/confirm?error=${error}${
+      type ? `&type=${encodeURIComponent(type)}` : ""
+    }`;
+
   let target: string;
 
   if (!tokenHash || !type) {
-    // Nothing verifiable: send the user to the sign-in error surface rather
-    // than a dead end.
-    target = `${loginUrl}?error=missing_code`;
+    // Nothing verifiable: there is no token to consume and no valid type.
+    target = confirmError("missing_code");
   } else {
     const supabase = await getSupabaseServer();
 
     if (!supabase) {
+      // No session can exist without Supabase, so the sign-in page is visible
+      // here — this is an infrastructure problem, not a link failure.
       target = `${loginUrl}?error=not_configured`;
     } else {
-      const { error } = await supabase.auth.verifyOtp({
+      const { data, error } = await supabase.auth.verifyOtp({
         token_hash: tokenHash,
         type,
       });
 
       target = error
-        ? // Carry the link type so the sign-in page can offer the right
-          // recovery action (resend confirmation vs. request a reset link).
-          `${loginUrl}?error=auth_failed&type=${encodeURIComponent(type)}`
-        : await resolvePostVerificationTarget(rawNext, baseUrl);
+        ? // Expired, already used, or otherwise rejected. Carry the link type
+          // so the error card offers a fresh reset link vs. a fresh
+          // confirmation email.
+          confirmError("auth_failed")
+        : await resolvePostVerificationTarget(rawNext, baseUrl, {
+            user: data.user,
+            accessToken: data.session?.access_token,
+          });
     }
   }
 

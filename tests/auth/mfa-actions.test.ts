@@ -101,6 +101,17 @@ describe("verifyMfaAction", () => {
     await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow("REDIRECT:/overview");
   });
 
+  it("continues to the password-reset page after a recovery step-up", async () => {
+    mockVerify.mockResolvedValue({ ok: true });
+    const fd = new FormData();
+    fd.set("code", "123456");
+    fd.set("next", "/reset-password");
+
+    await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow(
+      "REDIRECT:/reset-password",
+    );
+  });
+
   it("returns the error and does not redirect on a bad code", async () => {
     mockVerify.mockResolvedValue({ ok: false, error: "That code didn't match. Try again." });
     const fd = new FormData();

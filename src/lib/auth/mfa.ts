@@ -15,6 +15,13 @@
 //     this session.
 // ============================================================
 
+/**
+ * The one authenticated route an `aal1` session may reach: the second-factor
+ * challenge. Defined here so the proxy gate, the post-verification routing and
+ * the challenge page all agree on a single path.
+ */
+export const MFA_CHALLENGE_PATH = "/auth/mfa";
+
 /** The subset of a Supabase user we need to decide whether 2FA is set up. */
 export interface FactorBearing {
   factors?: ReadonlyArray<{ status?: string }> | null;

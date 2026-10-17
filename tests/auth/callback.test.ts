@@ -35,6 +35,12 @@ function callbackWithNext(nextValue: string): string {
   return url.toString();
 }
 
+/** Build a decodable (unverified) JWT carrying the session's `aal` claim. */
+function jwt(payload: Record<string, unknown>): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `header.${body}.signature`;
+}
+
 function redirectLocation(response: Response): string {
   return response.headers.get("location") ?? "";
 }
@@ -58,7 +64,9 @@ describe("auth/callback route", () => {
 
     expect(response.status).toBeGreaterThanOrEqual(300);
     expect(response.status).toBeLessThanOrEqual(308);
-    expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/login?error=missing_code");
+    expect(redirectLocation(response)).toBe(
+      "http://172.20.10.2:3000/auth/confirm?error=missing_code",
+    );
     expect(exchangeMock).not.toHaveBeenCalled();
     expect(ensureOnboarding).not.toHaveBeenCalled();
   });
@@ -115,7 +123,9 @@ describe("auth/callback route", () => {
       callbackRequest("http://172.20.10.2:3000/auth/callback?token_hash=abc123&type=bogus"),
     );
 
-    expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/login?error=missing_code");
+    expect(redirectLocation(response)).toBe(
+      "http://172.20.10.2:3000/auth/confirm?error=missing_code",
+    );
     expect(verifyOtpMock).not.toHaveBeenCalled();
   });
 
@@ -201,12 +211,14 @@ describe("auth/callback route", () => {
     }
   });
 
-  it("redirects to sign-in and skips onboarding when the exchange fails", async () => {
+  it("re-renders the failure on /auth/confirm when the exchange fails", async () => {
     exchangeMock.mockResolvedValue({ data: { session: null }, error: { message: "invalid code" } });
 
     const response = await GET(callbackRequest("http://172.20.10.2:3000/auth/callback?code=bad"));
 
-    expect(redirectLocation(response)).toBe("http://172.20.10.2:3000/login?error=auth_failed");
+    expect(redirectLocation(response)).toBe(
+      "http://172.20.10.2:3000/auth/confirm?error=auth_failed",
+    );
     expect(ensureOnboarding).not.toHaveBeenCalled();
   });
 
@@ -218,7 +230,27 @@ describe("auth/callback route", () => {
     );
 
     expect(redirectLocation(response)).toBe(
-      "http://172.20.10.2:3000/login?error=auth_failed&type=recovery",
+      "http://172.20.10.2:3000/auth/confirm?error=auth_failed&type=recovery",
+    );
+  });
+
+  it("routes a recovery exchange for an MFA account through the challenge first", async () => {
+    exchangeMock.mockResolvedValue({
+      data: {
+        user: { factors: [{ status: "verified" }] },
+        session: { access_token: jwt({ aal: "aal1" }) },
+      },
+      error: null,
+    });
+
+    const response = await GET(
+      callbackRequest(
+        "http://172.20.10.2:3000/auth/callback?code=abc&next=%2Freset-password",
+      ),
+    );
+
+    expect(redirectLocation(response)).toBe(
+      "http://172.20.10.2:3000/auth/mfa?next=%2Freset-password",
     );
   });
 

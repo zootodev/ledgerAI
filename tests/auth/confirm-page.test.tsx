@@ -83,15 +83,63 @@ describe("/auth/confirm page", () => {
     expect(markup).not.toContain('name="next"');
   });
 
-  it("rejects an unknown verification type", async () => {
-    await expect(render({ token_hash: "tok123", type: "bogus" })).rejects.toThrow(
-      "NEXT_REDIRECT",
-    );
-    expect(mocks.redirect).toHaveBeenCalledWith("/login?error=missing_code");
-  });
+  describe("dead-link error state", () => {
+    it("re-renders the failure in place instead of redirecting to /login", async () => {
+      // Regression guard: a signed-in visitor is bounced away from /login, so a
+      // redirect there made the failure look like nothing happened.
+      const markup = await render({ error: "auth_failed", type: "recovery" });
 
-  it("rejects a missing token", async () => {
-    await expect(render({ type: "recovery" })).rejects.toThrow("NEXT_REDIRECT");
-    expect(mocks.redirect).toHaveBeenCalledWith("/login?error=missing_code");
+      expect(visible(markup)).toContain("This link has expired or was already used");
+      expect(mocks.redirect).not.toHaveBeenCalled();
+      // No form to submit: a dead link has no token to spend.
+      expect(markup).not.toContain("<form");
+      expect(markup.match(/<button/g) ?? []).toHaveLength(0);
+    });
+
+    it("offers a fresh reset link for a recovery failure", async () => {
+      const markup = await render({ error: "auth_failed", type: "recovery" });
+
+      expect(markup).toContain('href="/forgot-password"');
+      expect(markup).toContain("Request a new password-reset link");
+      expect(markup).not.toContain("/verify-email");
+    });
+
+    it("offers a fresh confirmation email for a non-recovery failure", async () => {
+      const markup = await render({ error: "auth_failed", type: "signup" });
+
+      expect(markup).toContain('href="/verify-email"');
+      expect(markup).toContain("Resend confirmation email");
+      expect(markup).not.toContain("/forgot-password");
+    });
+
+    it("defaults to a resend action when the link carried no usable type", async () => {
+      const markup = await render({ error: "auth_failed" });
+
+      expect(markup).toContain('href="/verify-email"');
+      expect(markup).not.toContain("/forgot-password");
+    });
+
+    it("renders the error state for a truncated link instead of redirecting", async () => {
+      const markup = await render({ type: "recovery" });
+
+      expect(visible(markup)).toContain("This link has expired or was already used");
+      expect(mocks.redirect).not.toHaveBeenCalled();
+    });
+
+    it("renders the error state for an unknown verification type and never echoes the token", async () => {
+      const markup = await render({ token_hash: "tok123", type: "bogus" });
+
+      expect(visible(markup)).toContain("This link has expired or was already used");
+      expect(markup).not.toContain("tok123");
+      expect(mocks.redirect).not.toHaveBeenCalled();
+    });
+
+    it("never reflects an error value from the URL", async () => {
+      const markup = await render({ error: "<img src=x onerror=alert(1)>" });
+
+      expect(markup).not.toContain("onerror");
+      expect(markup).not.toContain("<img");
+      expect(visible(markup)).toContain("This link has expired or was already used");
+    });
   });
 });
