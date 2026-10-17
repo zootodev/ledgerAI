@@ -6,7 +6,9 @@ import {
   signIn,
   signUp,
   signOut,
+  signOutEverywhere,
   requestPasswordReset,
+  resendVerificationEmail,
   updatePassword,
 } from "@/lib/services/auth";
 import type { AuthResult } from "@/lib/services/auth";
@@ -16,11 +18,14 @@ import {
   startTotpEnrollment,
   verifyMfaChallenge,
 } from "@/lib/services/mfa";
+import { deleteUserAccount } from "@/lib/services/account";
+import { getCurrentUser } from "@/lib/auth/server";
 import {
   consumeConfiguredLimit,
   getRequestClientIp,
   RATE_LIMIT_EXCEEDED_MESSAGE,
 } from "@/lib/security/rate-limit";
+import { checkPasswordStrength } from "@/lib/validation/index";
 
 export interface AuthFormState {
   error?: string;
@@ -39,6 +44,12 @@ export interface MfaEnrollState extends MfaFormState {
   factorId?: string;
   qrCode?: string;
   secret?: string;
+}
+
+/** State for the account-management (export/delete) forms. */
+export interface AccountActionState {
+  error?: string;
+  success?: string;
 }
 
 /** Only allow an internal, same-origin path as a post-MFA redirect target. */
@@ -73,14 +84,29 @@ export async function loginAction(
   }
 
   let mfaRequired = false;
+  let emailNotConfirmed = false;
   try {
     const result: AuthResult = await signIn({ email, password });
-    if (!result.ok) return { error: result.error };
-    mfaRequired = Boolean(result.mfaRequired);
+    if (!result.ok) {
+      // Valid credentials but the email was never confirmed: send the user to
+      // the resend-verification screen instead of a dead-end error.
+      if (result.emailNotConfirmed) {
+        emailNotConfirmed = true;
+      } else {
+        return { error: result.error };
+      }
+    } else {
+      mfaRequired = Boolean(result.mfaRequired);
+    }
   } catch (e) {
     return {
       error: e instanceof Error ? e.message : "Unable to sign in right now.",
     };
+  }
+
+  // redirect() throws, so it is always called outside the try/catch above.
+  if (emailNotConfirmed) {
+    redirect(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
   }
 
   // A verified second factor means the password-only session (aal1) may not
@@ -101,13 +127,18 @@ export async function signupAction(
   if (!email || !password) {
     return { error: "Email and password are required." };
   }
-  if (password.length < 8) {
-    return { error: "Password must be at least 8 characters." };
+  const strength = checkPasswordStrength(password);
+  if (!strength.ok) {
+    return { error: strength.error };
   }
 
   const ip = await getRequestClientIp();
-  const byIp = await consumeConfiguredLimit("auth:signup:ip", ip);
-  if (!byIp.ok) {
+  const accountKey = `${email.trim().toLowerCase()}|${ip}`;
+  const [byAccount, byIp] = await Promise.all([
+    consumeConfiguredLimit("auth:signup:account", accountKey),
+    consumeConfiguredLimit("auth:signup:ip", ip),
+  ]);
+  if (!byAccount.ok || !byIp.ok) {
     return { error: RATE_LIMIT_EXCEEDED_MESSAGE };
   }
 
@@ -202,8 +233,9 @@ export async function updatePasswordAction(
   if (!password || !confirm) {
     return { error: "Enter and confirm your new password." };
   }
-  if (password.length < 8) {
-    return { error: "Password must be at least 8 characters." };
+  const strength = checkPasswordStrength(password);
+  if (!strength.ok) {
+    return { error: strength.error };
   }
   if (password !== confirm) {
     return { error: "Passwords don't match." };
@@ -224,7 +256,8 @@ export async function updatePasswordAction(
 /**
  * Complete the login-time MFA challenge. Called from the /auth/mfa page with
  * the 6-digit code; on success the session is promoted to aal2 and the user
- * continues to `next` (or the overview).
+ * continues to `next` (or the overview). Throttled per IP and per account so a
+ * stolen password can't be used to brute-force the 6-digit space.
  */
 export async function verifyMfaAction(
   _prev: MfaFormState,
@@ -232,6 +265,17 @@ export async function verifyMfaAction(
 ): Promise<MfaFormState> {
   const code = String(formData.get("code") ?? "");
   const next = safeNext(String(formData.get("next") ?? "/overview"));
+
+  const ip = await getRequestClientIp();
+  const user = await getCurrentUser();
+  const accountKey = `${user?.id ?? "anon"}|${ip}`;
+  const [byAccount, byIp] = await Promise.all([
+    consumeConfiguredLimit("auth:mfa:account", accountKey),
+    consumeConfiguredLimit("auth:mfa:ip", ip),
+  ]);
+  if (!byAccount.ok || !byIp.ok) {
+    return { error: RATE_LIMIT_EXCEEDED_MESSAGE };
+  }
 
   const result = await verifyMfaChallenge(code);
   if (!result.ok) return { error: result.error };
@@ -283,4 +327,73 @@ export async function disableMfaAction(
 
   revalidatePath("/settings/security");
   return { success: "Two-factor authentication is off." };
+}
+
+/**
+ * Revoke every other session for the current user (all devices), then clear
+ * this session too. Called from Settings > Security.
+ */
+export async function signOutEverywhereAction(): Promise<void> {
+  await signOutEverywhere();
+  redirect("/login");
+}
+
+/**
+ * Re-send the signup confirmation email. Always answers neutrally so it can
+ * never be used to discover whether an address has an account.
+ */
+export async function resendVerificationAction(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim();
+
+  if (!email) {
+    return { error: "Enter your email address." };
+  }
+
+  const ip = await getRequestClientIp();
+  const accountKey = `${email.toLowerCase()}|${ip}`;
+  const [byAccount, byIp] = await Promise.all([
+    consumeConfiguredLimit("auth:resend:account", accountKey),
+    consumeConfiguredLimit("auth:resend:ip", ip),
+  ]);
+  if (!byAccount.ok || !byIp.ok) {
+    return { error: RATE_LIMIT_EXCEEDED_MESSAGE };
+  }
+
+  try {
+    const result = await resendVerificationEmail(email);
+    if (!result.ok) {
+      console.error("[auth] resend-verification: request failed", {
+        error: result.error,
+      });
+    }
+  } catch (e) {
+    console.error("[auth] resend-verification: request threw", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  return {
+    success:
+      "If that email needs confirming, we've sent a new link. Check your inbox and spam folder.",
+  };
+}
+
+/**
+ * Permanently delete the signed-in user's account and all owned data. Requires
+ * the caller to type DELETE exactly. On success the session is cleared and the
+ * user lands back on the public home page.
+ */
+export async function deleteAccountAction(
+  _prev: AccountActionState,
+  formData: FormData,
+): Promise<AccountActionState> {
+  const confirmation = String(formData.get("confirm") ?? "");
+
+  const result = await deleteUserAccount(confirmation);
+  if (!result.ok) return { error: result.error };
+
+  redirect("/?deleted=1");
 }

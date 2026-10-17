@@ -100,6 +100,7 @@ describe("isPublicPath", () => {
     "/auth/callback",
     "/forgot-password",
     "/reset-password",
+    "/verify-email",
   ])("treats the intended route %s as public", (path) => {
     expect(isPublicPath(path)).toBe(true);
   });
@@ -144,6 +145,13 @@ describe("proxy() route gating", () => {
     await proxy(requestFor("/reset-password"));
 
     expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("serves the verify-email screen without a session", async () => {
+    await proxy(requestFor("/verify-email?email=a%40example.com"));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.next).toHaveBeenCalled();
   });
 
   it("redirects anonymous visitors of a lookalike path to /login", async () => {

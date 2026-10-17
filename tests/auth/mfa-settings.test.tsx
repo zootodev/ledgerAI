@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 vi.mock("@/lib/auth/actions", () => ({
   verifyMfaAction: vi.fn(),
   signOutAction: vi.fn(),
+  signOutEverywhereAction: vi.fn(),
   enrollMfaAction: vi.fn(),
   confirmMfaAction: vi.fn(),
   disableMfaAction: vi.fn(),
@@ -56,5 +57,10 @@ describe("SecuritySettings", () => {
     // Disabling always requires a current code.
     expect(out).toContain('name="code"');
     expect(out).toMatch(/autocomplete="one-time-code"/i);
+  });
+
+  it("offers a sign-out-of-all-devices control", () => {
+    const out = html(<SecuritySettings mfaEnabled={false} />);
+    expect(visible(out)).toContain("Sign out of all devices");
   });
 });

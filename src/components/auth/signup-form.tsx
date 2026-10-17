@@ -60,10 +60,11 @@ export function SignupForm() {
           id="password"
           name="password"
           label="Password"
-          hint="At least 8 characters."
+          hint="At least 10 characters. Avoid common passwords."
           error={passwordError}
           autoComplete="new-password"
           placeholder="Create a password"
+          minLength={10}
           required
         />
 

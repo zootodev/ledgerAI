@@ -7,10 +7,12 @@ export {
   signUp,
   signIn,
   signOut,
+  signOutEverywhere,
   syncUserProfile,
   createInitialBusiness,
   ensureOnboarding,
   requestPasswordReset,
+  resendVerificationEmail,
   updatePassword,
   updateOwnProfile,
 } from "./auth";
@@ -67,6 +69,8 @@ export {
   disableTotp,
 } from "./mfa";
 export type { MfaStatus, MfaFactorInfo, TotpEnrollment } from "./mfa";
+export { exportAccountData, exportToCsv, deleteUserAccount } from "./account";
+export type { ExportedAccount, ExportedBusiness } from "./account";
 export {
   listImportHistory,
   getExistingFingerprints,

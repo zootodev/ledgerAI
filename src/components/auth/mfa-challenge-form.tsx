@@ -63,7 +63,7 @@ export function MfaChallengeForm({ next, email }: MfaChallengeFormProps) {
             placeholder="123456"
             autoFocus
             required
-            aria-invalid={state.error ? true : undefined}
+            invalid={Boolean(state.error)}
             className="tracking-[0.4em]"
           />
         </Field>

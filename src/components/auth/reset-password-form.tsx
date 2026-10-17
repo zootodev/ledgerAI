@@ -16,7 +16,7 @@ function fieldErrors(
 ): { password?: string; confirm?: string } {
   if (!message) return {};
   if (/Passwords don't match/.test(message)) return { confirm: message };
-  if (/at least 8 characters/.test(message)) return { password: message };
+  if (/password/i.test(message)) return { password: message };
   return {};
 }
 
@@ -31,7 +31,8 @@ export function ResetPasswordForm() {
     <div>
       <h1 className="text-xl font-semibold text-foreground">Set a new password</h1>
       <p className="mt-1 text-sm text-muted">
-        Choose a new password with at least 8 characters.
+        Choose a new password with at least 10 characters. Avoid common
+        passwords.
       </p>
 
       <form action={formAction} suppressHydrationWarning className="mt-6 flex flex-col gap-4">
@@ -50,9 +51,10 @@ export function ResetPasswordForm() {
           id="password"
           name="password"
           label="New password"
-          hint="At least 8 characters."
+          hint="At least 10 characters. Avoid common passwords."
           error={password}
           autoComplete="new-password"
+          minLength={10}
         />
 
         <PasswordField

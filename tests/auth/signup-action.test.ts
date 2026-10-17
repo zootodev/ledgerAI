@@ -29,7 +29,7 @@ const mockSignUp = vi.mocked(signUpService);
 function formData(overrides: { email?: string; password?: string; name?: string } = {}) {
   const fd = new FormData();
   fd.set("email", overrides.email ?? "new@example.com");
-  fd.set("password", overrides.password ?? "password123");
+  fd.set("password", overrides.password ?? "correct-horse-battery");
   if (overrides.name !== undefined) fd.set("name", overrides.name);
   return fd;
 }
@@ -51,7 +51,14 @@ describe("signupAction", () => {
   it("rejects a weak password", async () => {
     const result = await signupAction(prev, formData({ password: "short" }));
 
-    expect(result).toEqual({ error: "Password must be at least 8 characters." });
+    expect(result).toEqual({ error: "Password must be at least 10 characters." });
+    expect(mockSignUp).not.toHaveBeenCalled();
+  });
+
+  it("rejects a common password even when it is long enough", async () => {
+    const result = await signupAction(prev, formData({ password: "password123" }));
+
+    expect(result.error).toContain("too common");
     expect(mockSignUp).not.toHaveBeenCalled();
   });
 

@@ -26,7 +26,16 @@ export type AuthResult =
       /** Password accepted but the account requires an MFA step-up to aal2. */
       mfaRequired?: boolean;
     }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /**
+       * The credentials were valid but the email address has not been
+       * confirmed yet. Only ever set after the password was checked, so it
+       * cannot be used to enumerate accounts.
+       */
+      emailNotConfirmed?: boolean;
+    };
 
 const EMAIL_ERROR = "Invalid email, password, or account not found.";
 
@@ -107,13 +116,26 @@ export async function signUp(input: SignUpInput): Promise<AuthResult> {
 export async function signIn(input: SignInInput): Promise<AuthResult> {
   const supabase = await assertServerClient();
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: input.email.trim().toLowerCase(),
     password: input.password,
   });
 
   if (error) {
+    // Supabase only reports an unconfirmed email *after* the password was
+    // checked, so distinguishing it here leaks nothing (the caller already
+    // knew the password).
+    if (/email not confirmed/i.test(error.message)) {
+      return { ok: false, error: EMAIL_ERROR, emailNotConfirmed: true };
+    }
     return { ok: false, error: EMAIL_ERROR };
+  }
+
+  // Defence-in-depth: even if the Supabase project has "Confirm email" turned
+  // off, a session whose email was never confirmed must not be allowed in.
+  if (data.user && !data.user.email_confirmed_at) {
+    await supabase.auth.signOut().catch(() => undefined);
+    return { ok: false, error: EMAIL_ERROR, emailNotConfirmed: true };
   }
 
   // If the account has a verified second factor, the fresh session sits at
@@ -128,6 +150,42 @@ export async function signIn(input: SignInInput): Promise<AuthResult> {
 export async function signOut(): Promise<void> {
   const supabaseServer = await getSupabaseServer();
   if (supabaseServer) await supabaseServer.auth.signOut();
+}
+
+/**
+ * Revoke every refresh token for the current user across all devices, then
+ * clear the local session. Used by "Sign out of all devices".
+ */
+export async function signOutEverywhere(): Promise<void> {
+  const supabaseServer = await getSupabaseServer();
+  if (!supabaseServer) return;
+  const { error } = await supabaseServer.auth.signOut({ scope: "global" });
+  if (error) {
+    console.error("[auth] sign-out-all: revoking sessions failed", {
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * Re-send the signup confirmation email. Neutral by design: Supabase returns
+ * success for unknown/unconfirmed addresses alike, so the caller must show a
+ * generic "check your inbox" message and never an enumeration hint.
+ */
+export async function resendVerificationEmail(
+  email: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await assertServerClient();
+  const redirectTo = `${(await getAppBaseUrl())}/auth/callback`;
+
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email: email.trim().toLowerCase(),
+    options: { emailRedirectTo: redirectTo },
+  });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 /**

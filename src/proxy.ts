@@ -26,6 +26,7 @@ const PUBLIC_PATHS = new Set([
   "/auth/callback",
   "/forgot-password",
   "/reset-password",
+  "/verify-email",
 ]);
 
 /** True when `path` is one of the deliberately public route pathnames. */

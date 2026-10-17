@@ -66,6 +66,7 @@ export function SettingsShell({
             { value: "categories", label: "Categories" },
             { value: "rules", label: "Rules" },
             { value: "security", label: "Security" },
+            { value: "account", label: "Account" },
           ]}
         />
 

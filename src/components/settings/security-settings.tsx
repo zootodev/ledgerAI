@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useActionState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, LogOut } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -18,6 +18,7 @@ import {
   confirmMfaAction,
   disableMfaAction,
   enrollMfaAction,
+  signOutEverywhereAction,
   type MfaEnrollState,
   type MfaFormState,
 } from "@/lib/auth/actions";
@@ -173,6 +174,27 @@ export function SecuritySettings({ mfaEnabled, factorName }: SecuritySettingsPro
               </Button>
             </form>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <LogOut className="h-4 w-4 text-brand" aria-hidden="true" />
+            Active sessions
+          </CardTitle>
+          <CardDescription>
+            Signed in somewhere you don&apos;t recognise, or on a shared device?
+            Revoke every session on all devices. You&apos;ll need to sign in
+            again everywhere, including here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={signOutEverywhereAction}>
+            <Button type="submit" variant="outline">
+              Sign out of all devices
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

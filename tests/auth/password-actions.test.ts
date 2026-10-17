@@ -40,8 +40,8 @@ const prev: AuthFormState = {};
 function formData(overrides: Record<string, string | undefined> = {}) {
   const fd = new FormData();
   fd.set("email", overrides.email ?? "user@example.com");
-  fd.set("password", overrides.password ?? "password123");
-  fd.set("confirm", overrides.confirm ?? "password123");
+  fd.set("password", overrides.password ?? "brand-new-password");
+  fd.set("confirm", overrides.confirm ?? "brand-new-password");
   return fd;
 }
 
@@ -130,20 +130,30 @@ describe("updatePasswordAction", () => {
     expect(mockUpdatePassword).not.toHaveBeenCalled();
   });
 
-  it("rejects a password shorter than 8 characters", async () => {
+  it("rejects a password shorter than 10 characters", async () => {
     const result = await updatePasswordAction(
       prev,
       formData({ password: "tiny", confirm: "tiny" }),
     );
 
-    expect(result).toEqual({ error: "Password must be at least 8 characters." });
+    expect(result).toEqual({ error: "Password must be at least 10 characters." });
+    expect(mockUpdatePassword).not.toHaveBeenCalled();
+  });
+
+  it("rejects a common password", async () => {
+    const result = await updatePasswordAction(
+      prev,
+      formData({ password: "password123", confirm: "password123" }),
+    );
+
+    expect(result.error).toContain("too common");
     expect(mockUpdatePassword).not.toHaveBeenCalled();
   });
 
   it("rejects mismatched passwords", async () => {
     const result = await updatePasswordAction(
       prev,
-      formData({ password: "password123", confirm: "password124" }),
+      formData({ password: "brand-new-password", confirm: "brand-new-password2" }),
     );
 
     expect(result).toEqual({ error: "Passwords don't match." });
