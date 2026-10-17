@@ -6,6 +6,13 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { PasswordField } from "@/components/auth/password-field";
+import { useAuthFieldErrors } from "@/components/auth/use-auth-field-errors";
+import {
+  fieldValue,
+  validateConfirmPassword,
+  validateNewPassword,
+  type FieldValidators,
+} from "@/lib/auth/form-validation";
 import { updatePasswordAction, type AuthFormState } from "@/lib/auth/actions";
 
 const initialState: AuthFormState = {};
@@ -36,12 +43,26 @@ export function resetFieldErrors(state: AuthFormState): {
   return fieldErrors(state.error);
 }
 
+/** Client-side checks; the server action validates again and stays canonical. */
+const RESET_VALIDATORS: FieldValidators = {
+  password: (data) => validateNewPassword(fieldValue(data, "password")),
+  confirm: (data) =>
+    validateConfirmPassword(
+      fieldValue(data, "password"),
+      fieldValue(data, "confirm"),
+    ),
+};
+
 export function ResetPasswordForm() {
   const [state, formAction, pending] = useActionState(
     updatePasswordAction,
     initialState,
   );
-  const { password, confirm } = resetFieldErrors(state);
+  const { errors, formRef, onBlur, onSubmit } = useAuthFieldErrors(RESET_VALIDATORS);
+  const fromServer = resetFieldErrors(state);
+
+  const passwordError = fromServer.password ?? errors.password;
+  const confirmError = fromServer.confirm ?? errors.confirm;
 
   return (
     <div>
@@ -51,7 +72,15 @@ export function ResetPasswordForm() {
         passwords.
       </p>
 
-      <form action={formAction} suppressHydrationWarning className="mt-6 flex flex-col gap-4">
+      <form
+        ref={formRef}
+        action={formAction}
+        noValidate
+        onBlur={onBlur}
+        onSubmit={onSubmit}
+        suppressHydrationWarning
+        className="mt-6 flex flex-col gap-4"
+      >
         {state.error && (
           <Alert tone="danger" title="Couldn't update your password">
             {state.error}
@@ -76,17 +105,19 @@ export function ResetPasswordForm() {
           name="password"
           label="New password"
           hint="At least 10 characters. Avoid common passwords."
-          error={password}
+          error={passwordError}
           autoComplete="new-password"
           minLength={10}
+          required
         />
 
         <PasswordField
           id="confirm"
           name="confirm"
           label="Confirm new password"
-          error={confirm}
+          error={confirmError}
           autoComplete="new-password"
+          required
         />
 
         <Button type="submit" loading={pending} fullWidth className="mt-2">

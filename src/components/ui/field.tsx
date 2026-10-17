@@ -24,21 +24,25 @@ export function Field({
   className,
   children,
 }: FieldProps) {
+  // Fall back to `htmlFor` so a field given only a label target still gets a
+  // usable error/hint id for `aria-describedby` (never `undefined-error`).
+  const fieldId = htmlFor ?? id;
+
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
       {label && (
-        <Label required={required} htmlFor={htmlFor ?? id}>
+        <Label required={required} htmlFor={fieldId}>
           {label}
         </Label>
       )}
       {children}
       {error && (
-        <p id={`${id}-error`} className="text-sm text-danger">
+        <p id={`${fieldId}-error`} className="text-sm font-medium text-danger-strong">
           {error}
         </p>
       )}
       {!error && hint && (
-        <p id={`${id}-hint`} className="text-sm text-muted">
+        <p id={`${fieldId}-hint`} className="text-sm text-muted">
           {hint}
         </p>
       )}
