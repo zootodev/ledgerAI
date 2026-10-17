@@ -1,0 +1,205 @@
+name: Database backup
+
+# Weekly encrypted logical backup of the Supabase database.
+#
+# WHY: the Supabase Free plan has no built-in backups, so this is the only copy
+# of the data outside the live project.
+#
+# The dump contains real user data. This repository is PUBLIC, and Actions
+# artifacts on a public repository are downloadable by anyone signed in to
+# GitHub — so the dump is encrypted with `age` before it is uploaded and the
+# plaintext never leaves the runner. See docs/BACKUPS.md.
+on:
+  schedule:
+    # Sundays 02:00 UTC. Scheduled workflows only run on the default branch, and
+    # GitHub disables them after 60 days without repository activity.
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+
+# Read the repository, nothing else: the only credentials this job needs are
+# the database URL and the age recipient, which come from secrets.
+permissions:
+  contents: read
+
+# One backup at a time. A run is never cancelled in progress — an interrupted
+# dump would leave the week without a backup.
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Dump public + auth, encrypt, upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Pinned age release (https://github.com/FiloSottile/age). The checksum is
+      # the SHA-256 of age-v1.3.2-linux-amd64.tar.gz from that release.
+      AGE_VERSION: "1.3.2"
+      AGE_SHA256: "cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10"
+      # PostgreSQL client major version, matched to the server (verified with
+      # SELECT version(): PostgreSQL 17.6). pg_dump refuses to dump a server
+      # newer than itself, so this must be bumped when Supabase does.
+      PG_CLIENT_MAJOR: "17"
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Stamp the backup date
+        id: stamp
+        run: |
+          set -euo pipefail
+          echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      # Ubuntu's own postgresql-client is a different (usually older) major
+      # version and pg_dump refuses to dump from a newer server, so install the
+      # matching client from the PostgreSQL APT repository (PGDG).
+      - name: Install PostgreSQL ${{ env.PG_CLIENT_MAJOR }} client from PGDG
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error --location \
+            --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          # shellcheck disable=SC1091
+          . /etc/os-release
+          printf 'Types: deb\nURIs: https://apt.postgresql.org/pub/repos/apt\nSuites: %s-pgdg\nArchitectures: amd64\nComponents: main\nSigned-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc\n' \
+            "$VERSION_CODENAME" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.sources > /dev/null
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            "postgresql-client-${PG_CLIENT_MAJOR}"
+          # Put the matching binaries ahead of the distro's pg_wrapper so every
+          # later step uses this client, whatever else is installed.
+          echo "/usr/lib/postgresql/${PG_CLIENT_MAJOR}/bin" >> "$GITHUB_PATH"
+          "/usr/lib/postgresql/${PG_CLIENT_MAJOR}/bin/pg_dump" --version
+
+      - name: Check the client matches the server
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_DATABASE_URL:-}" ]; then
+            echo "::error::The BACKUP_DATABASE_URL secret is not set. See docs/BACKUPS.md."
+            exit 1
+          fi
+          # The URL is used, never printed.
+          server_version="$(psql --no-password -At -c "select current_setting('server_version')" "$BACKUP_DATABASE_URL")"
+          server_major="${server_version%%.*}"
+          client_major="$(pg_dump --version | sed -E 's/^.* ([0-9]+)\..*$/\1/')"
+          echo "server PostgreSQL ${server_version}, pg_dump (PostgreSQL) ${client_major}"
+          if [ "${server_major}" != "${client_major}" ]; then
+            echo "::error::pg_dump ${client_major} does not match server ${server_version}. Bump PG_CLIENT_MAJOR (and the pinned client) in .github/workflows/db-backup.yml."
+            exit 1
+          fi
+
+      - name: Dump the database
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          # public = the application's Prisma schema and RLS policies,
+          # auth = Supabase's user/identity tables. No roles: pg_dump never
+          # dumps cluster roles (that is pg_dumpall), and --no-owner
+          # --no-privileges keeps ownership/ACL statements out as well.
+          pg_dump "$BACKUP_DATABASE_URL" \
+            --format=custom \
+            --no-owner \
+            --no-privileges \
+            --schema=public \
+            --schema=auth \
+            --file=ledgerai.dump
+          ls -l ledgerai.dump
+
+      - name: Write a schema-only SQL reference file
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          # Plain text, roles-free, for eyeballing/review. It is deleted with
+          # the dump below and never uploaded.
+          pg_dump "$BACKUP_DATABASE_URL" \
+            --schema-only \
+            --no-owner \
+            --no-privileges \
+            --schema=public \
+            --schema=auth \
+            --file=ledgerai-schema.sql
+          wc -l ledgerai-schema.sql
+
+      - name: Verify the dump before encrypting it
+        run: |
+          set -euo pipefail
+          if [ ! -s ledgerai.dump ]; then
+            echo "::error::pg_dump produced no output."
+            exit 1
+          fi
+          # Must be a readable archive: a truncated or empty dump fails here,
+          # before anything is encrypted or uploaded.
+          pg_restore --list ledgerai.dump > ledgerai.toc
+          if ! grep -q "SCHEMA - public" ledgerai.toc; then
+            echo "::error::The dump does not contain the public schema."
+            exit 1
+          fi
+          size="$(wc -c < ledgerai.dump)"
+          echo "dump size: ${size} bytes, $(wc -l < ledgerai.toc) archive entries"
+          if [ "${size}" -le 10240 ]; then
+            echo "::error::Dump is only ${size} bytes; refusing to upload what is almost certainly an empty backup."
+            exit 1
+          fi
+
+      - name: Encrypt the dump with age
+        env:
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_AGE_RECIPIENT:-}" ]; then
+            echo "::error::The BACKUP_AGE_RECIPIENT secret is not set. See docs/BACKUPS.md."
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location \
+            --output age.tar.gz \
+            "https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-amd64.tar.gz"
+          echo "${AGE_SHA256}  age.tar.gz" | sha256sum --check --strict -
+          tar -xzf age.tar.gz
+
+          # Public-key encryption: the private key is never on the runner, so a
+          # leaked runner cannot decrypt an artifact it produced.
+          "./age/age" --recipient "$BACKUP_AGE_RECIPIENT" \
+            --output "ledgerai-${{ steps.stamp.outputs.date }}.dump.age" \
+            ledgerai.dump
+
+          # The plaintext must not survive this step, let alone reach the
+          # artifact upload below.
+          rm -f -- ledgerai.dump ledgerai-schema.sql ledgerai.toc
+          leftover="$(find . -maxdepth 1 \( -name '*.dump' -o -name 'ledgerai-schema.sql' \) -print)"
+          if [ -n "${leftover}" ]; then
+            echo "::error::Plaintext backup files are still present; refusing to continue."
+            printf '%s\n' "${leftover}"
+            exit 1
+          fi
+          echo "encrypted artifact ready"
+
+      - name: Upload the encrypted backup
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: db-backup-${{ steps.stamp.outputs.date }}
+          # Only the encrypted file — never the plaintext dump or schema SQL.
+          path: ledgerai-${{ steps.stamp.outputs.date }}.dump.age
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Summarise the run
+        run: |
+          set -euo pipefail
+          artifact="ledgerai-${{ steps.stamp.outputs.date }}.dump.age"
+          {
+            echo "### Encrypted database backup"
+            echo
+            echo "- Artifact: \`db-backup-${{ steps.stamp.outputs.date }}\`"
+            echo "- File: \`${artifact}\` ($(wc -c < "${artifact}") bytes)"
+            echo "- SHA-256: \`$(sha256sum "${artifact}" | cut -d' ' -f1)\`"
+            echo
+            echo "Restore instructions: docs/BACKUPS.md"
+          } >> "$GITHUB_STEP_SUMMARY"
