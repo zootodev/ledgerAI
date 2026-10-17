@@ -89,7 +89,8 @@ describe("ImportHistory", () => {
     expect(html).toContain("moniepoint.csv");
     // Every row uses the same "N of M imported" summary — no bare "+N" badge.
     expect(html).toContain("3 of 4 imported");
-    expect(html).toContain("0 of 0 imported");
+    // A row that landed nothing says so plainly instead of "0 of 0 imported".
+    expect(html).toContain("No rows imported");
     expect(html).not.toContain("+3");
     expect(html).toContain("1 invalid");
     expect(html).toContain("2 already in ledger");
@@ -97,6 +98,24 @@ describe("ImportHistory", () => {
     expect(html).toContain("1 excluded");
     expect(html).toContain("committed");
     expect(html).toContain("O&#x27;Brien&#x27;s statement.xlsx");
+  });
+
+  it("colours the summary by outcome — green full, amber partial, red none", () => {
+    const base = items[0];
+    const full = { ...base, transactionsFound: 3, transactionsImported: 3, errors: null };
+    const partial = { ...base, transactionsFound: 10, transactionsImported: 4, errors: null };
+    const none = { ...base, transactionsFound: 5, transactionsImported: 0, errors: null };
+
+    const html = renderToStaticMarkup(
+      <ImportHistory items={[full, partial, none]} />,
+    );
+
+    expect(html).toContain("3 of 3 imported");
+    expect(html).toContain("text-success-strong");
+    expect(html).toContain("Partial import — 4 of 10 imported");
+    expect(html).toContain("text-warning-strong");
+    expect(html).toContain("No rows imported");
+    expect(html).toContain("text-danger-strong");
   });
 });
 

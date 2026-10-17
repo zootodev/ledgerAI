@@ -41,8 +41,8 @@ export function WizardStepper({
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
                 active && "bg-brand text-on-accent",
-                done && "bg-success-soft text-success",
-                !active && !done && "bg-surface-subtle text-muted",
+                done && "bg-success-soft text-success-strong",
+                !active && !done && "bg-surface-subtle text-secondary",
               )}
             >
               {done ? (

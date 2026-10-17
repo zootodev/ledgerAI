@@ -614,21 +614,11 @@ export function ImportWizard({
                   </Alert>
                 </div>
               )}
+              {/* The drop target stays a plain element; the keyboard- and
+                  click-accessible affordance is the real "Browse files"
+                  button inside it (a div with role="button" could not be
+                  triggered by Enter/Space in every browser). */}
               <div
-                role="button"
-                tabIndex={0}
-                aria-label="Choose a CSV, XLSX or PDF file to import"
-                aria-disabled={working}
-                onClick={() => {
-                  if (!working) inputRef.current?.click();
-                }}
-                onKeyDown={(e) => {
-                  if (working) return;
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    inputRef.current?.click();
-                  }
-                }}
                 onDragOver={(e) => {
                   if (working) return;
                   e.preventDefault();
@@ -640,7 +630,7 @@ export function ImportWizard({
                   const next = e.dataTransfer.files?.[0];
                   if (next) void handleFile(next);
                 }}
-                className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed border-border-strong bg-surface-subtle/30 px-6 py-12 text-center transition-colors ${
+                className={`flex flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed border-border-strong bg-surface-subtle/30 px-6 py-12 text-center transition-colors ${
                   working
                     ? "opacity-80"
                     : "hover:border-brand/50 hover:bg-brand-soft/20"
@@ -665,13 +655,21 @@ export function ImportWizard({
                       <UploadCloud className="h-6 w-6" aria-hidden="true" />
                     </div>
                     <p className="font-medium text-foreground">
-                      Drop a file here or click to browse
+                      Drop a statement file here
                     </p>
                     <p className="text-sm text-muted">
                       Statements from Moniepoint, Kuda, Opay, Access, GTB, and
                       similar exports work best. Column names are detected
                       automatically and can be corrected next.
                     </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => inputRef.current?.click()}
+                      leftIcon={<FileUp className="h-4 w-4" aria-hidden="true" />}
+                    >
+                      Browse files
+                    </Button>
                   </>
                 )}
                 <input
@@ -680,6 +678,7 @@ export function ImportWizard({
                   type="file"
                   accept=".csv,.xlsx,.pdf"
                   className="sr-only"
+                  aria-label="Choose a CSV, XLSX or PDF file to import"
                   onChange={(e) => {
                     const next = e.currentTarget.files?.[0];
                     if (next) void handleFile(next);

@@ -24,23 +24,46 @@ interface SummaryPart {
   tone?: string;
 }
 
+type ImportOutcome = "full" | "partial" | "none";
+
+/**
+ * How an import went. "none" means nothing landed in the ledger (every row was
+ * a duplicate or invalid), "partial" means only some rows landed, and "full"
+ * means every row in the file did.
+ */
+function importOutcome(item: ImportHistoryItem): ImportOutcome {
+  if (item.transactionsImported <= 0) return "none";
+  if (item.transactionsFound > 0 && item.transactionsImported >= item.transactionsFound) {
+    return "full";
+  }
+  return "partial";
+}
+
+/** Tone + copy for the leading "N of M imported" summary part. */
+function importedSummary(item: ImportHistoryItem): SummaryPart {
+  const outcome = importOutcome(item);
+  if (outcome === "none") {
+    return { key: "imported", text: "No rows imported", tone: "text-danger-strong" };
+  }
+  const counts = `${item.transactionsImported} of ${item.transactionsFound} imported`;
+  if (outcome === "partial") {
+    return { key: "imported", text: `Partial import — ${counts}`, tone: "text-warning-strong" };
+  }
+  return { key: "imported", text: counts, tone: "text-success-strong" };
+}
+
 /**
  * One consistent row summary for every import — "14 of 16 imported · 1 invalid
  * · 1 excluded" — so the newest and oldest rows read the same way instead of
- * the latest row showing a bare "+14".
+ * the latest row showing a bare "+14". The leading part is coloured by outcome:
+ * green for a full import, amber for a partial one, red when nothing landed.
  */
 function summaryParts(item: ImportHistoryItem): SummaryPart[] {
-  const parts: SummaryPart[] = [
-    {
-      key: "imported",
-      text: `${item.transactionsImported} of ${item.transactionsFound} imported`,
-      tone: "text-success",
-    },
-  ];
+  const parts: SummaryPart[] = [importedSummary(item)];
   const errors = item.errors;
   if (errors) {
     if (errors.invalidRows > 0) {
-      parts.push({ key: "invalid", text: `${errors.invalidRows} invalid`, tone: "text-danger" });
+      parts.push({ key: "invalid", text: `${errors.invalidRows} invalid`, tone: "text-danger-strong" });
     }
     if (errors.excluded > 0) {
       parts.push({ key: "excluded", text: `${errors.excluded} excluded` });
@@ -59,6 +82,14 @@ function summaryParts(item: ImportHistoryItem): SummaryPart[] {
     }
   }
   return parts;
+}
+
+/** Badge tone for the import status, honest about a low-yield commit. */
+function statusTone(item: ImportHistoryItem): "success" | "warning" | "danger" {
+  if (item.status !== "committed") return "warning";
+  const outcome = importOutcome(item);
+  if (outcome === "full") return "success";
+  return outcome === "partial" ? "warning" : "danger";
 }
 
 export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
@@ -100,7 +131,7 @@ export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge tone={item.status === "committed" ? "success" : "warning"}>
+                    <Badge tone={statusTone(item)}>
                       {item.status}
                     </Badge>
                   </div>

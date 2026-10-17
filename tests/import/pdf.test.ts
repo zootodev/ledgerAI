@@ -457,14 +457,21 @@ describe("extractTransactionsFromText — Nigerian bank layouts", () => {
 });
 
 describe("parsePdf", () => {
-  it("returns synthetic headers and extracted rows", async () => {
-    pdfMock.text = twoColumnText;
-    const result = await parsePdf(new Uint8Array([1, 2, 3]));
-    expect(result.headers).toEqual([...PDF_IMPORT_HEADERS]);
-    expect(result.headers).toEqual(["Date", "Description", "Debit", "Credit"]);
-    expect(result.rows).toHaveLength(3);
-    expect(destroyMock.destroy).toHaveBeenCalled();
-  });
+  // The first parse of the full two-column fixture warms up text extraction and
+  // can exceed Vitest's 5s default on a loaded machine; the assertions are
+  // unchanged, only the budget.
+  it(
+    "returns synthetic headers and extracted rows",
+    async () => {
+      pdfMock.text = twoColumnText;
+      const result = await parsePdf(new Uint8Array([1, 2, 3]));
+      expect(result.headers).toEqual([...PDF_IMPORT_HEADERS]);
+      expect(result.headers).toEqual(["Date", "Description", "Debit", "Credit"]);
+      expect(result.rows).toHaveLength(3);
+      expect(destroyMock.destroy).toHaveBeenCalled();
+    },
+    30_000,
+  );
 
   it("requests line-enforced extraction so EOL-less statements still split by row", async () => {
     pdfMock.text = twoColumnText;

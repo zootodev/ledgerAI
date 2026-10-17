@@ -129,7 +129,7 @@ export function ImportRowsTable({
           </p>
           {row.reference && <p className="text-xs text-muted">Ref: {row.reference}</p>}
           {row.errors.length > 0 && (
-            <p className="text-xs text-danger">{row.errors.join(" · ")}</p>
+            <p className="text-xs text-danger-strong">{row.errors.join(" · ")}</p>
           )}
         </div>
       ),
