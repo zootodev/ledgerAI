@@ -37,6 +37,7 @@ function cspPolicy(nonce: string): string {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
+    "manifest-src 'self'",
     "connect-src 'self'",
     "frame-src 'none'",
     "object-src 'none'",
@@ -150,6 +151,6 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Run on everything except static assets and internal Next routes.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest|css|js|woff2?)$).*)",
   ],
 };

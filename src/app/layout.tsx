@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Toaster } from "@/components/ui/toast";
 import "./globals.css";
@@ -21,6 +21,13 @@ export const metadata: Metadata = {
   },
   description:
     "Turn bank statements and transaction records into clear financial insights, reports, and smarter decisions.",
+};
+
+// Next.js reads themeColor from the viewport export (metadata.themeColor is
+// deprecated). Matches the brand token so the browser chrome/tab bar tints.
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
