@@ -185,4 +185,27 @@ describe("updatePasswordAction", () => {
 
     expect(result.error).toContain("expired");
   });
+
+  it("turns the aal2 refusal into a step-up instruction, never the raw provider text", async () => {
+    // A recovery session is aal1; on an account with a verified factor GoTrue
+    // refuses the update and says so in an unfriendly sentence.
+    mockUpdatePassword.mockResolvedValue({
+      ok: false,
+      aal2Required: true,
+      error: "AAL2 session is required to update email or password when MFA is enabled.",
+    });
+
+    const result = await updatePasswordAction(
+      prev,
+      formData({ password: "brand-new-password", confirm: "brand-new-password" }),
+    );
+
+    expect(result.error).toBe("Enter your 2FA code to continue.");
+    expect(result.error).not.toMatch(/AAL2|session is required/i);
+    expect(result.errorAction).toEqual({
+      label: "Complete two-step verification",
+      href: "/auth/mfa?next=%2Freset-password",
+    });
+    expect(result.success).toBeUndefined();
+  });
 });

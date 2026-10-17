@@ -11,7 +11,10 @@ vi.mock("@/lib/auth/actions", () => ({
 
 import { SignupForm } from "@/components/auth/signup-form";
 import { LoginForm } from "@/components/auth/login-form";
-import { ResetPasswordForm } from "@/components/auth/reset-password-form";
+import {
+  ResetPasswordForm,
+  resetFieldErrors,
+} from "@/components/auth/reset-password-form";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 
 function staticMarkup(Component: () => React.ReactElement) {
@@ -96,6 +99,45 @@ describe("reset password form", () => {
     expect(html).toContain('name="password"');
     expect(html).toContain('name="confirm"');
     expect(html).toContain("Show password");
+  });
+});
+
+describe("resetFieldErrors", () => {
+  it("routes field-specific copy onto the field that caused it", () => {
+    expect(
+      resetFieldErrors({ error: "Password must be at least 10 characters." }),
+    ).toEqual({ password: "Password must be at least 10 characters." });
+    expect(resetFieldErrors({ error: "Passwords don't match." })).toEqual({
+      confirm: "Passwords don't match.",
+    });
+  });
+
+  it("keeps a step-up message out of the fields so it is only shown once", () => {
+    // The alert renders this copy together with its link; mapping it onto the
+    // password field as well would show the same sentence twice.
+    expect(
+      resetFieldErrors({
+        error: "Enter your 2FA code to continue.",
+        errorAction: {
+          label: "Complete two-step verification",
+          href: "/auth/mfa?next=%2Freset-password",
+        },
+      }),
+    ).toEqual({});
+  });
+
+  it("treats any copy with a recovery action as form-level", () => {
+    expect(
+      resetFieldErrors({
+        error: "Passwords don't match.",
+        errorAction: { label: "Retry", href: "/reset-password" },
+      }),
+    ).toEqual({});
+  });
+
+  it("has nothing to route for success or an empty state", () => {
+    expect(resetFieldErrors({})).toEqual({});
+    expect(resetFieldErrors({ success: "Your password has been updated." })).toEqual({});
   });
 });
 

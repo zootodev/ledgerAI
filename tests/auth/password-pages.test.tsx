@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
-  getMfaStatus: vi.fn(),
+  getSession: vi.fn(),
   redirect: vi.fn(() => {
     throw new Error("NEXT_REDIRECT");
   }),
@@ -15,8 +15,10 @@ vi.mock("@/lib/auth/server", () => ({
   getCurrentUser: mocks.getCurrentUser,
 }));
 
-vi.mock("@/lib/services/mfa", () => ({
-  getMfaStatus: mocks.getMfaStatus,
+vi.mock("@/lib/auth/supabase", () => ({
+  getSupabaseServer: vi.fn(async () => ({
+    auth: { getSession: mocks.getSession },
+  })),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -36,15 +38,24 @@ import ResetPasswordPage from "@/app/(auth)/reset-password/page";
 
 const AUTHED = { id: "auth-user-a", email: "a@example.com", name: "User A" };
 
-const MFA_OFF = { enabled: false, currentLevel: null, nextLevel: null, factors: [] };
-const MFA_AAL1 = { enabled: true, currentLevel: "aal1", nextLevel: "aal2", factors: [] };
-const MFA_AAL2 = { enabled: true, currentLevel: "aal2", nextLevel: "aal2", factors: [] };
+const VERIFIED = [{ id: "factor-1", status: "verified" }];
+const UNVERIFIED = [{ id: "factor-1", status: "unverified" }];
+
+/** Build a decodable access token carrying an `aal` claim. */
+function accessToken(aal: "aal1" | "aal2"): string {
+  const payload = Buffer.from(JSON.stringify({ aal })).toString("base64url");
+  return `header.${payload}.signature`;
+}
+
+function session(aal: "aal1" | "aal2", factors: Array<{ status: string }>) {
+  return { access_token: accessToken(aal), user: { id: "auth-user-a", factors } };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.ForgotPasswordForm.mockImplementation(() => null as never);
   mocks.ResetPasswordForm.mockImplementation(() => null as never);
-  mocks.getMfaStatus.mockResolvedValue(MFA_OFF);
+  mocks.getSession.mockResolvedValue({ data: { session: null }, error: null });
 });
 
 describe("forgot-password page", () => {
@@ -76,8 +87,12 @@ describe("reset-password page", () => {
     expect(mocks.ResetPasswordForm).not.toHaveBeenCalled();
   });
 
-  it("renders the new-password form only for a validated recovery session", async () => {
+  it("renders the form for a validated recovery session with no second factor", async () => {
     mocks.getCurrentUser.mockResolvedValue(AUTHED);
+    mocks.getSession.mockResolvedValue({
+      data: { session: session("aal1", []) },
+      error: null,
+    });
 
     const element = await ResetPasswordPage();
     renderToStaticMarkup(element);
@@ -86,20 +101,41 @@ describe("reset-password page", () => {
     expect(mocks.ResetPasswordForm).toHaveBeenCalledTimes(1);
   });
 
-  it("sends an MFA-enabled recovery session to the challenge before the form", async () => {
-    // Supabase refuses a password update without aal2, and this page is public,
-    // so the proxy never steps it up — the page has to.
+  it("renders the form for an unverified factor (2FA not actually set up)", async () => {
     mocks.getCurrentUser.mockResolvedValue(AUTHED);
-    mocks.getMfaStatus.mockResolvedValue(MFA_AAL1);
+    mocks.getSession.mockResolvedValue({
+      data: { session: session("aal1", UNVERIFIED) },
+      error: null,
+    });
+
+    const element = await ResetPasswordPage();
+    renderToStaticMarkup(element);
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.ResetPasswordForm).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends an aal1 recovery session on an MFA account to the challenge first", async () => {
+    // Supabase refuses a password update without aal2, and this page is public,
+    // so the proxy never steps it up — the page has to. The recovery session
+    // verifyOtp hands back is exactly this: aal1 on a verified-factor account.
+    mocks.getCurrentUser.mockResolvedValue(AUTHED);
+    mocks.getSession.mockResolvedValue({
+      data: { session: session("aal1", VERIFIED) },
+      error: null,
+    });
 
     await expect(ResetPasswordPage()).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.redirect).toHaveBeenCalledWith("/auth/mfa?next=%2Freset-password");
     expect(mocks.ResetPasswordForm).not.toHaveBeenCalled();
   });
 
-  it("renders the form once the MFA session is at aal2", async () => {
+  it("renders the form once the recovery session is at aal2", async () => {
     mocks.getCurrentUser.mockResolvedValue(AUTHED);
-    mocks.getMfaStatus.mockResolvedValue(MFA_AAL2);
+    mocks.getSession.mockResolvedValue({
+      data: { session: session("aal2", VERIFIED) },
+      error: null,
+    });
 
     const element = await ResetPasswordPage();
     renderToStaticMarkup(element);

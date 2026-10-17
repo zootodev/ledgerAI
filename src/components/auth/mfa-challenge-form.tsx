@@ -25,7 +25,8 @@ export interface MfaChallengeFormProps {
  * Login-time second-factor challenge. Submits through the same React action
  * handler as the button (Enter in the code field triggers it), and the button
  * is disabled while the request is in flight so a code can't be double-spent.
- * A sign-out escape is always available for a user who has lost their device.
+ * A sign-out escape is always available for a user who has lost their device;
+ * there is no self-serve recovery-code flow yet, so that path points at support.
  */
 export function MfaChallengeForm({ next, email }: MfaChallengeFormProps) {
   const [state, formAction, pending] = useActionState(verifyMfaAction, initialState);
@@ -78,6 +79,10 @@ export function MfaChallengeForm({ next, email }: MfaChallengeFormProps) {
           Sign out
         </Button>
       </form>
+
+      <p className="mt-4 text-center text-xs text-muted">
+        Lost your authenticator? Contact support
+      </p>
     </div>
   );
 }

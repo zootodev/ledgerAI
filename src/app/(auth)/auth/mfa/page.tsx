@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/server";
+import { getAppBaseUrl } from "@/lib/auth/app-url";
+import { resolveInternalNext } from "@/lib/auth/redirect";
 import { getMfaStatus } from "@/lib/services/mfa";
 import { MfaChallengeForm } from "@/components/auth/mfa-challenge-form";
 
@@ -31,8 +33,13 @@ export default async function MfaChallengePage({
   // Nothing to challenge: 2FA isn't enabled, or this session already stepped up.
   if (!status.enabled || status.currentLevel === "aal2") redirect("/overview");
 
+  // Pre-sanitize the target before it enters the hidden field: only an already
+  // validated, same-origin path survives. `verifyMfaAction` re-validates the
+  // posted value with the same allowlist, so neither hop trusts the client.
   const { next } = await searchParams;
-  const nextPath = typeof next === "string" ? next : "/overview";
+  const nextPath =
+    resolveInternalNext(typeof next === "string" ? next : null, await getAppBaseUrl()) ??
+    "/overview";
 
   return <MfaChallengeForm next={nextPath} email={user.email} />;
 }

@@ -37,6 +37,10 @@ describe("MfaChallengeForm", () => {
     expect(visible(base)).toContain("Sign out");
   });
 
+  it("points a user who lost their device at support (no recovery codes yet)", () => {
+    expect(visible(base)).toContain("Lost your authenticator? Contact support");
+  });
+
   it("shows the account being verified without exposing anything else", () => {
     expect(visible(base)).toContain("a@example.com");
   });

@@ -6,6 +6,10 @@ const revalidateMock = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ redirect: redirectMock }));
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 
+vi.mock("@/lib/auth/app-url", () => ({
+  getAppBaseUrl: vi.fn(async () => "http://localhost:3000"),
+}));
+
 vi.mock("@/lib/services/auth", () => ({
   signIn: vi.fn(),
   signUp: vi.fn(),
@@ -73,13 +77,17 @@ beforeEach(() => {
 });
 
 describe("verifyMfaAction", () => {
-  it("verifies the code then redirects to the requested internal page", async () => {
+  // `next` is re-validated with the shared post-auth sanitizer, which returns an
+  // absolute same-origin URL (and the overview fallback for anything external).
+  it("verifies the code then continues to the requested internal page", async () => {
     mockVerify.mockResolvedValue({ ok: true });
     const fd = new FormData();
     fd.set("code", "123456");
     fd.set("next", "/transactions");
 
-    await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow("REDIRECT:/transactions");
+    await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow(
+      "REDIRECT:http://localhost:3000/transactions",
+    );
     expect(mockVerify).toHaveBeenCalledWith("123456");
   });
 
@@ -89,7 +97,9 @@ describe("verifyMfaAction", () => {
     fd.set("code", "123456");
     fd.set("next", "https://evil.example.com");
 
-    await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow("REDIRECT:/overview");
+    await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow(
+      "REDIRECT:http://localhost:3000/overview",
+    );
   });
 
   it("rejects a protocol-relative next target", async () => {
@@ -98,7 +108,20 @@ describe("verifyMfaAction", () => {
     fd.set("code", "123456");
     fd.set("next", "//evil.example.com");
 
-    await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow("REDIRECT:/overview");
+    await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow(
+      "REDIRECT:http://localhost:3000/overview",
+    );
+  });
+
+  it("rejects an absolute same-path target on another origin", async () => {
+    mockVerify.mockResolvedValue({ ok: true });
+    const fd = new FormData();
+    fd.set("code", "123456");
+    fd.set("next", "http://localhost:3001/transactions");
+
+    await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow(
+      "REDIRECT:http://localhost:3000/overview",
+    );
   });
 
   it("continues to the password-reset page after a recovery step-up", async () => {
@@ -108,7 +131,7 @@ describe("verifyMfaAction", () => {
     fd.set("next", "/reset-password");
 
     await expect(verifyMfaAction(prevForm, fd)).rejects.toThrow(
-      "REDIRECT:/reset-password",
+      "REDIRECT:http://localhost:3000/reset-password",
     );
   });
 

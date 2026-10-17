@@ -20,6 +20,8 @@ import {
 } from "@/lib/services/mfa";
 import { deleteUserAccount } from "@/lib/services/account";
 import { getCurrentUser } from "@/lib/auth/server";
+import { resolvePostAuthRedirect } from "@/lib/auth/redirect";
+import { getAppBaseUrl } from "@/lib/auth/app-url";
 import {
   consumeConfiguredLimit,
   getRequestClientIp,
@@ -32,6 +34,12 @@ export interface AuthFormState {
   error?: string;
   success?: string;
   info?: string;
+  /**
+   * Optional next step rendered alongside the error (e.g. complete two-step
+   * verification before a password change is accepted). Copy that carries an
+   * action is form-level: the form must not also repeat it under a field.
+   */
+  errorAction?: { label: string; href: string };
 }
 
 /** State for the 2FA enroll/verify/disable forms (Settings > Security). */
@@ -51,14 +59,6 @@ export interface MfaEnrollState extends MfaFormState {
 export interface AccountActionState {
   error?: string;
   success?: string;
-}
-
-/** Only allow an internal, same-origin path as a post-MFA redirect target. */
-function safeNext(raw: string): string {
-  if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("://")) {
-    return "/overview";
-  }
-  return raw;
 }
 
 export async function loginAction(
@@ -261,7 +261,21 @@ export async function updatePasswordAction(
 
   try {
     const result = await updatePassword(password);
-    if (!result.ok) return { error: result.error };
+    if (!result.ok) {
+      // On an account with a verified factor, GoTrue refuses the change while
+      // the (recovery) session is still aal1. Tell the user what to do next
+      // rather than echoing the provider's "AAL2 session is required…" text.
+      if (result.aal2Required) {
+        return {
+          error: "Enter your 2FA code to continue.",
+          errorAction: {
+            label: "Complete two-step verification",
+            href: `/auth/mfa?next=${encodeURIComponent("/reset-password")}`,
+          },
+        };
+      }
+      return { error: result.error };
+    }
   } catch (e) {
     return {
       error: e instanceof Error ? e.message : "Unable to update your password right now.",
@@ -282,7 +296,13 @@ export async function verifyMfaAction(
   formData: FormData,
 ): Promise<MfaFormState> {
   const code = String(formData.get("code") ?? "");
-  const next = safeNext(String(formData.get("next") ?? "/overview"));
+  // `next` round-trips through the challenge form, so it is re-validated here
+  // with the same allowlist + resolved-origin check every other post-auth
+  // redirect uses. An external or malformed value falls back to the overview.
+  const next = resolvePostAuthRedirect(
+    String(formData.get("next") ?? ""),
+    await getAppBaseUrl(),
+  );
 
   const ip = await getRequestClientIp();
   const user = await getCurrentUser();

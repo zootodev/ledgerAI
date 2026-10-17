@@ -20,12 +20,28 @@ function fieldErrors(
   return {};
 }
 
+/**
+ * Resolve the field-level copy for a server error.
+ *
+ * Form-level messages — anything carrying its own recovery action, such as the
+ * 2FA step-up instruction — are rendered in the alert together with their link,
+ * so they are never repeated under a field as well: the user reads the message
+ * exactly once.
+ */
+export function resetFieldErrors(state: AuthFormState): {
+  password?: string;
+  confirm?: string;
+} {
+  if (state.errorAction) return {};
+  return fieldErrors(state.error);
+}
+
 export function ResetPasswordForm() {
   const [state, formAction, pending] = useActionState(
     updatePasswordAction,
     initialState,
   );
-  const { password, confirm } = fieldErrors(state.error);
+  const { password, confirm } = resetFieldErrors(state);
 
   return (
     <div>
@@ -39,6 +55,14 @@ export function ResetPasswordForm() {
         {state.error && (
           <Alert tone="danger" title="Couldn't update your password">
             {state.error}
+            {state.errorAction && (
+              <Link
+                href={state.errorAction.href}
+                className="mt-2 block font-medium text-brand hover:underline"
+              >
+                {state.errorAction.label}
+              </Link>
+            )}
           </Alert>
         )}
         {state.success && (

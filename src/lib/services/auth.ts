@@ -1,6 +1,7 @@
 import { getSupabaseServer } from "@/lib/auth/supabase";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { getCurrentUser } from "@/lib/auth/server";
+import { isAal2RequiredError } from "@/lib/auth/mfa";
 import { getPrismaClient } from "@/lib/db/client";
 import { redirect } from "next/navigation";
 import { profileUpdateSchema } from "@/lib/validation/index";
@@ -236,10 +237,18 @@ export async function requestPasswordReset(
  * The recovery session is only present after the user follows the emailed
  * link; the /reset-password page guards on it, and this service re-checks so
  * an expired/absent session is never silently accepted.
+ *
+ * `aal2Required` marks GoTrue's refusal on an MFA account whose session is
+ * still `aal1`. It is reported as a flag rather than a message so the caller
+ * decides how to phrase it — the raw provider sentence must never reach the UI.
  */
-export async function updatePassword(
-  password: string,
-): Promise<{ ok: boolean; error?: string }> {
+export interface UpdatePasswordResult {
+  ok: boolean;
+  error?: string;
+  aal2Required?: boolean;
+}
+
+export async function updatePassword(password: string): Promise<UpdatePasswordResult> {
   const user = await getCurrentUser();
   if (!user) {
     return {
@@ -250,7 +259,12 @@ export async function updatePassword(
 
   const supabase = await assertServerClient();
   const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    // Flag the aal2 refusal without altering the shape of ordinary failures.
+    return isAal2RequiredError(error)
+      ? { ok: false, error: error.message, aal2Required: true }
+      : { ok: false, error: error.message };
+  }
 
   // A password change means the old credential material is compromised —
   // revoke the refresh token on every *other* device so a stale stolen

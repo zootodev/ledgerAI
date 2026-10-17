@@ -132,4 +132,33 @@ describe("updatePassword", () => {
     });
     expect(signOutMock).not.toHaveBeenCalled();
   });
+
+  it("flags GoTrue's aal2 refusal so the caller can ask for a 2FA step-up", async () => {
+    updateUserMock.mockResolvedValue({
+      data: { user: null },
+      error: {
+        message:
+          "AAL2 session is required to update email or password when MFA is enabled.",
+        code: "mfa_required",
+      },
+    });
+
+    const result = await updatePassword("brand-new-password");
+
+    expect(result.ok).toBe(false);
+    expect(result.aal2Required).toBe(true);
+    expect(signOutMock).not.toHaveBeenCalled();
+  });
+
+  it("does not flag an ordinary provider error as an aal2 step-up", async () => {
+    updateUserMock.mockResolvedValue({
+      data: { user: null },
+      error: { message: "New password should be different from the old password." },
+    });
+
+    const result = await updatePassword("brand-new-password");
+
+    expect(result.ok).toBe(false);
+    expect(result.aal2Required).toBeUndefined();
+  });
 });

@@ -20,6 +20,7 @@ export type {
   SignUpInput,
   SignInInput,
   AuthResult,
+  UpdatePasswordResult,
 } from "./auth";
 export { getBusinessProfile, updateBusiness } from "./business";
 export type { BusinessServiceData, UpdateBusinessInput } from "./business";

@@ -78,3 +78,41 @@ export function normalizeTotpCode(input: string | null | undefined): string | nu
   const digits = String(input ?? "").replace(/\s+/g, "");
   return /^\d{6}$/.test(digits) ? digits : null;
 }
+
+/** Codes GoTrue reports for "this account change needs an aal2 session". */
+const AAL2_ERROR_CODES = new Set([
+  "mfa_required",
+  "aal2_required",
+  "aal2_verification_required",
+]);
+
+/**
+ * GoTrue's refusal sentence, e.g. "AAL2 session is required to update email or
+ * password when MFA is enabled." GoTrue only ever raises assurance-level
+ * errors for MFA accounts, so the `aal2` token alone is a safe signal and keeps
+ * working if the surrounding sentence is reworded.
+ */
+const AAL2_MESSAGE = /\baal2\b|\bassurance\s+level\s*(?:2|two)\b/i;
+
+/**
+ * True when Supabase rejected an authenticated account change (password or
+ * email update) because the session is only `aal1` on an account with a
+ * verified second factor. The account is fine — the session just is not strong
+ * enough yet — so callers turn this into a step-up instruction instead of
+ * showing the raw provider text.
+ */
+export function isAal2RequiredError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof error === "string") return AAL2_MESSAGE.test(error);
+
+  const candidate = error as {
+    message?: unknown;
+    msg?: unknown;
+    code?: unknown;
+    error_code?: unknown;
+  };
+  const code = String(candidate.error_code ?? candidate.code ?? "").toLowerCase();
+  if (AAL2_ERROR_CODES.has(code)) return true;
+
+  return AAL2_MESSAGE.test(`${candidate.message ?? candidate.msg ?? ""}`);
+}

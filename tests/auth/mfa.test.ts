@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hasVerifiedFactor,
+  isAal2RequiredError,
   needsMfaStepUp,
   normalizeTotpCode,
   readAalFromAccessToken,
@@ -77,5 +78,39 @@ describe("normalizeTotpCode", () => {
     expect(normalizeTotpCode("")).toBeNull();
     expect(normalizeTotpCode(null)).toBeNull();
     expect(normalizeTotpCode(undefined)).toBeNull();
+  });
+});
+
+describe("isAal2RequiredError", () => {
+  it("matches GoTrue's aal2 refusal sentence", () => {
+    expect(
+      isAal2RequiredError({
+        message:
+          "AAL2 session is required to update email or password when MFA is enabled.",
+      }),
+    ).toBe(true);
+    expect(isAal2RequiredError("AAL2 session is required to do that.")).toBe(true);
+    expect(isAal2RequiredError({ message: "Assurance level 2 is required." })).toBe(true);
+  });
+
+  it("matches the error codes GoTrue may send instead of the sentence", () => {
+    expect(isAal2RequiredError({ message: "", code: "mfa_required" })).toBe(true);
+    expect(isAal2RequiredError({ message: "", error_code: "aal2_required" })).toBe(true);
+  });
+
+  it("ignores ordinary provider errors and empty input", () => {
+    expect(isAal2RequiredError(null)).toBe(false);
+    expect(isAal2RequiredError(undefined)).toBe(false);
+    expect(isAal2RequiredError("")).toBe(false);
+    expect(isAal2RequiredError({})).toBe(false);
+    expect(isAal2RequiredError({ message: "Invalid login credentials" })).toBe(false);
+    expect(
+      isAal2RequiredError({
+        message: "New password should be different from the old password.",
+      }),
+    ).toBe(false);
+    expect(isAal2RequiredError({ message: "Password should be at least 8 characters." })).toBe(
+      false,
+    );
   });
 });
