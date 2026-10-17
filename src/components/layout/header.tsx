@@ -56,7 +56,7 @@ export function Header({ title, user, actions, onSignOut, className }: HeaderPro
                 <span className="hidden max-w-36 truncate text-sm font-medium lg:block">
                   {firstName(user.name)}
                 </span>
-                <ChevronDown className="hidden h-4 w-4 text-subtle lg:block" aria-hidden="true" />
+                <ChevronDown className="hidden h-4 w-4 text-muted lg:block" aria-hidden="true" />
               </Button>
             }
           >

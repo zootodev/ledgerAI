@@ -87,7 +87,7 @@ export function Drawer({
               type="button"
               onClick={onClose}
               aria-label="Close panel"
-              className="shrink-0 rounded-md p-1 text-subtle transition-colors hover:bg-surface-subtle hover:text-foreground"
+              className="shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-surface-subtle hover:text-foreground"
             >
               <X className="h-5 w-5" />
             </button>

@@ -40,7 +40,7 @@ export function Tabs({ items, value, onChange, ariaLabel, className }: TabsProps
             disabled={item.disabled}
             onClick={() => onChange(item.value)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-field px-3 py-1.5 text-sm font-medium transition-colors",
+              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-field px-3 py-1.5 text-sm font-medium transition-colors",
               active
                 ? "bg-surface text-foreground shadow-card"
                 : "text-muted hover:text-foreground",

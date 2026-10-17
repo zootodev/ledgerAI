@@ -70,7 +70,7 @@ export function Accordion({
                 {item.title}
                 <ChevronDown
                   className={cn(
-                    "h-4 w-4 shrink-0 text-subtle transition-transform",
+                    "h-4 w-4 shrink-0 text-muted transition-transform",
                     open && "rotate-180",
                   )}
                   aria-hidden="true"

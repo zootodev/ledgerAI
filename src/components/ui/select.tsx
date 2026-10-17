@@ -36,7 +36,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           {children}
         </select>
         <ChevronDown
-          className="pointer-events-none absolute inset-y-0 right-3 my-auto h-4 w-4 text-subtle"
+          className="pointer-events-none absolute inset-y-0 right-3 my-auto h-4 w-4 text-muted"
           aria-hidden="true"
         />
       </div>

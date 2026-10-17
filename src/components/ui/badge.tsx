@@ -21,24 +21,24 @@ const toneClasses: Record<Tone, Record<Variant, string>> = {
     outline: "border border-brand/30 text-brand-strong",
   },
   success: {
-    soft: "bg-success-soft text-success",
+    soft: "bg-success-soft text-success-strong",
     solid: "bg-success text-on-accent",
-    outline: "border border-success/30 text-success",
+    outline: "border border-success/30 text-success-strong",
   },
   warning: {
-    soft: "bg-warning-soft text-warning",
+    soft: "bg-warning-soft text-warning-strong",
     solid: "bg-warning text-on-accent",
-    outline: "border border-warning/30 text-warning",
+    outline: "border border-warning/30 text-warning-strong",
   },
   danger: {
-    soft: "bg-danger-soft text-danger",
+    soft: "bg-danger-soft text-danger-strong",
     solid: "bg-danger text-on-accent",
-    outline: "border border-danger/30 text-danger",
+    outline: "border border-danger/30 text-danger-strong",
   },
   info: {
-    soft: "bg-info-soft text-info",
+    soft: "bg-info-soft text-info-strong",
     solid: "bg-info text-on-accent",
-    outline: "border border-info/30 text-info",
+    outline: "border border-info/30 text-info-strong",
   },
 };
 

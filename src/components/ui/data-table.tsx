@@ -163,7 +163,7 @@ export function DataTable<T>({
         <ChevronDown className="h-3.5 w-3.5 text-brand" aria-hidden="true" />
       );
     }
-    return <ChevronsUpDown className="h-3.5 w-3.5 text-subtle" aria-hidden="true" />;
+    return <ChevronsUpDown className="h-3.5 w-3.5 text-muted" aria-hidden="true" />;
   };
 
   return (

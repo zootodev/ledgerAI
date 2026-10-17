@@ -76,7 +76,7 @@ export function StatCard({
                 {delta.replace("%", "")}%
               </span>
             )}
-            {hint && <span className="text-sm text-subtle">{hint}</span>}
+            {hint && <span className="text-sm text-muted">{hint}</span>}
           </div>
         </div>
         {icon && (

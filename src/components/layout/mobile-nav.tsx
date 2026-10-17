@@ -62,7 +62,7 @@ export function MobileNav({ open, onClose, className }: MobileNavProps) {
                 type="button"
                 onClick={onClose}
                 aria-label="Close navigation"
-                className="rounded-md p-1 text-subtle hover:bg-surface-subtle hover:text-foreground"
+                className="rounded-md p-1 text-muted hover:bg-surface-subtle hover:text-foreground"
               >
                 <X className="h-5 w-5" />
               </button>

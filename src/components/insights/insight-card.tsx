@@ -70,7 +70,7 @@ export function InsightCard({
             <dl className="grid grid-cols-2 gap-2">
               {metaEntries.map(([label, value]) => (
                 <div key={label} className="flex flex-col">
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-subtle">
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-muted">
                     {label}
                   </dt>
                   <dd className="truncate text-sm font-medium tabular-nums text-foreground">

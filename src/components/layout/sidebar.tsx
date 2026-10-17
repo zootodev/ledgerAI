@@ -39,7 +39,7 @@ function SidebarNavLink({
       )}
     >
       <Icon
-        className={cn("h-4.5 w-4.5", active ? "text-brand" : "text-subtle group-hover:text-secondary")}
+        className={cn("h-4.5 w-4.5", active ? "text-brand" : "text-muted group-hover:text-secondary")}
         aria-hidden="true"
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -60,7 +60,7 @@ export function Sidebar({ onNavigate, className }: SidebarProps) {
       {NAV_SECTIONS.map((section) => (
         <div key={section.title} className="flex flex-col">
           {section.items.length > 0 && (
-            <p className="px-3 pb-1.5 text-xs font-medium uppercase tracking-wide text-subtle">
+            <p className="px-3 pb-1.5 text-xs font-medium uppercase tracking-wide text-muted">
               {section.title}
             </p>
           )}

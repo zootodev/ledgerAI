@@ -12,7 +12,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <div className="block w-full min-w-0">
         <div className="relative min-w-0">
           {leftIcon && (
-            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-subtle">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-muted">
               {leftIcon}
             </span>
           )}
@@ -21,7 +21,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             suppressHydrationWarning
             className={cn(
               "block h-9.5 w-full min-w-0 rounded-field border bg-surface px-3 text-sm text-foreground",
-              "placeholder:text-subtle",
+              "placeholder:text-muted",
               "focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand",
               "disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-muted disabled:opacity-70",
               leftIcon && "pl-9",

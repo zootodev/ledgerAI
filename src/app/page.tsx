@@ -160,7 +160,7 @@ function HeroPreview() {
             strokeLinecap="round"
           />
         </svg>
-        <div className="mt-1 flex justify-between text-[10px] text-subtle">
+        <div className="mt-1 flex justify-between text-[10px] text-muted">
           <span>May</span>
           <span>Jun</span>
           <span>Jul</span>
@@ -270,7 +270,7 @@ export default async function Home() {
               <>
                 <Link
                   href="/login"
-                  className="text-sm font-medium text-secondary transition-colors hover:text-foreground"
+                  className="inline-flex h-11 items-center text-sm font-medium text-foreground transition-colors hover:text-brand"
                 >
                   Sign in
                 </Link>

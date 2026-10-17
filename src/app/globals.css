@@ -38,6 +38,13 @@
   --warning-soft: #fffbeb;
   --info: #0284c7;
   --info-soft: #f0f9ff;
+  /* Darker shades for semantic TEXT on soft/white surfaces: the base
+     success/danger/warning/info colours are tuned for fills and icons, and
+     fall below the WCAG AA 4.5:1 contrast ratio at body/label sizes. */
+  --success-strong: #15803d;
+  --danger-strong: #b91c1c;
+  --warning-strong: #b45309;
+  --info-strong: #0369a1;
 
   /* Chart palette (accessible, distinguishable) */
   --chart-1: #2563eb;
@@ -75,12 +82,16 @@
 
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
+  --color-success-strong: var(--success-strong);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-danger-strong: var(--danger-strong);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  --color-warning-strong: var(--warning-strong);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
+  --color-info-strong: var(--info-strong);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -162,6 +173,28 @@ input[type="time"]::-webkit-date-and-time-value {
   select,
   textarea {
     font-size: 1rem;
+    /* WCAG 2.5.8 wants at least 24px; 44px is the comfortable thumb target. */
+    min-height: 2.75rem;
+  }
+}
+
+/* Touch targets for tappable controls on touch devices only, so desktop
+   density is unchanged. Inline prose links are deliberately excluded — only
+   real controls and explicitly opted-in targets (.touch-target) grow. */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="switch"],
+  .touch-target {
+    min-height: 2.75rem;
+  }
+
+  /* Checkboxes and radios keep their look but still clear the 24px minimum. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: 1.5rem;
+    min-height: 1.5rem;
   }
 }
 
