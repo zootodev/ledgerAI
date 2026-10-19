@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   PDF_IMPORT_HEADERS,
+  detectBankFingerprint,
   extractTransactionsFromText,
   parsePdf,
 } from "@/lib/import/parse-pdf";
@@ -453,6 +454,192 @@ describe("extractTransactionsFromText — Nigerian bank layouts", () => {
         Credit: "50,000.00",
       },
     ]);
+  });
+});
+
+describe("bank fingerprints — letterhead seeds the column order", () => {
+  // Each fixture is synthetic text shaped like the real bank's statement.
+  // The header wording is chosen so the plain keyword heuristics would pick
+  // the WRONG layout — only the letterhead fingerprint gets these right.
+
+  it("Kuda: a debit/credit legend doesn't flip a single-amount statement", () => {
+    const kudaText = [
+      "KUDA MICROFINANCE BANK",
+      "Statement of Account",
+      "Debit and credit entries are shown in the statement below.",
+      "Date Details Amount Bal",
+      "05/01/2026 UBER TRIP NG (2,500.00) 47,500.00",
+      "07/01/2026 Salary from ACME Ltd 150,000.00 197,500.00",
+    ].join("\n");
+
+    expect(detectBankFingerprint(kudaText)).toBe("kuda");
+
+    const rows = extractTransactionsFromText(kudaText);
+    expect(rows).toHaveLength(2);
+    // Seeded single-amount layout: sign picks the side, the trailing
+    // "Bal" is never read as a credit column.
+    expect(rows[0].values).toEqual({
+      Date: "2026-01-05",
+      Description: "UBER TRIP NG",
+      Debit: "2,500.00",
+      Credit: "",
+    });
+    expect(rows[1].values.Credit).toBe("150,000.00");
+    // The balances must never leak into either amount column.
+    expect(rows.flatMap((r) => [r.values.Debit, r.values.Credit])).not.toContain(
+      "47,500.00",
+    );
+  });
+
+  it("OPay: per-row Debit/Credit type words pick the side, Bal stays out", () => {
+    const opayText = [
+      "OPAY DIGITAL SERVICES",
+      "Statement of Account",
+      "Debit and credit entries post once they are completed.",
+      "Date Type Narration Amount Bal",
+      "05/01/2026 Debit Transfer to JOHN 5,000.00 95,000.00",
+      "06/01/2026 Credit Wallet funding 50,000.00 145,000.00",
+    ].join("\n");
+
+    expect(detectBankFingerprint(opayText)).toBe("opay");
+
+    const rows = extractTransactionsFromText(opayText);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].values).toEqual({
+      Date: "2026-01-05",
+      Description: "Debit Transfer to JOHN",
+      Debit: "5,000.00",
+      Credit: "",
+    });
+    expect(rows[1].values).toEqual({
+      Date: "2026-01-06",
+      Description: "Credit Wallet funding",
+      Debit: "",
+      Credit: "50,000.00",
+    });
+    expect(rows.flatMap((r) => [r.values.Debit, r.values.Credit])).not.toContain(
+      "145,000.00",
+    );
+  });
+
+  it("Moniepoint: money-in/out layout wins even without those header keywords", () => {
+    const moniepointText = [
+      "Moniepoint MFB",
+      "Statement of Account",
+      "Date/Time Funds Received Funds Spent Category Description Balance",
+      "08/01/26 06:24:32 2,000.00 outward transfer Squad Checkout 20,035.20",
+      "08/01/26 10:14:07 10,000.00 inward transfer Alexander Wallet funding 30,035.20",
+    ].join("\n");
+
+    expect(detectBankFingerprint(moniepointText)).toBe("moniepoint");
+
+    const rows = extractTransactionsFromText(moniepointText);
+    expect(rows).toHaveLength(2);
+    // The outward/inward word picks the side; the last amount is the
+    // running balance and never a transaction.
+    expect(rows[0].values).toEqual({
+      Date: "2026-01-08",
+      Description: "outward transfer Squad Checkout",
+      Debit: "2,000.00",
+      Credit: "",
+    });
+    expect(rows[1].values).toEqual({
+      Date: "2026-01-08",
+      Description: "inward transfer Alexander Wallet funding",
+      Debit: "",
+      Credit: "10,000.00",
+    });
+    expect(rows.flatMap((r) => [r.values.Debit, r.values.Credit])).not.toContain(
+      "30,035.20",
+    );
+  });
+
+  it("GTBank: Dr/Cr column labels still route through balance reconciliation", () => {
+    const gtbankText = [
+      "Guaranty Trust Bank Plc",
+      "STATEMENT OF ACCOUNT",
+      "Account Number 0123456789",
+      "Date Description Dr Cr Balance",
+      "Opening Balance 100,000.00",
+      "05-Jan-2026 POS PURCHASE SHOPRITE 12,500.00 87,500.00",
+      "06-Jan-2026 TRF FROM JOHN DOE 50,000.00 137,500.00",
+    ].join("\n");
+
+    expect(detectBankFingerprint(gtbankText)).toBe("gtbank");
+
+    const rows = extractTransactionsFromText(gtbankText);
+    expect(rows).toHaveLength(2);
+    // The running balance against the opening balance decides the side —
+    // a positive POS amount is still an expense.
+    expect(rows[0].values).toEqual({
+      Date: "2026-01-05",
+      Description: "POS PURCHASE SHOPRITE",
+      Debit: "12,500.00",
+      Credit: "",
+    });
+    expect(rows[1].values).toEqual({
+      Date: "2026-01-06",
+      Description: "TRF FROM JOHN DOE",
+      Debit: "",
+      Credit: "50,000.00",
+    });
+    expect(rows.flatMap((r) => [r.values.Debit, r.values.Credit])).not.toContain(
+      "87,500.00",
+    );
+  });
+
+  it("Access: a money-in/out blurb doesn't flip a debit/credit/balance statement", () => {
+    const accessText = [
+      "ACCESS BANK PLC",
+      "Statement of Account",
+      "Use Monnify to move money in or money out of this account at any time.",
+      "Date Description Debit Credit Balance",
+      "Opening Balance 50,000.00",
+      "05/01/2026 POS PURCHASE SHOPRITE 12,500.00 0.00 37,500.00",
+      "06/01/2026 NIP CREDIT FROM JOHN 0.00 50,000.00 87,500.00",
+    ].join("\n");
+
+    expect(detectBankFingerprint(accessText)).toBe("access");
+
+    const rows = extractTransactionsFromText(accessText);
+    expect(rows).toHaveLength(2);
+    // Column position is authoritative in this layout: debit first.
+    expect(rows[0].values).toEqual({
+      Date: "2026-01-05",
+      Description: "POS PURCHASE SHOPRITE",
+      Debit: "12,500.00",
+      Credit: "0.00",
+    });
+    expect(rows[1].values).toEqual({
+      Date: "2026-01-06",
+      Description: "NIP CREDIT FROM JOHN",
+      Debit: "0.00",
+      Credit: "50,000.00",
+    });
+  });
+
+  it("reads the letterhead only — a row naming another bank never fingerprints", () => {
+    const text = [
+      "ACME BANK — STATEMENT OF ACCOUNT",
+      "Date Description Debit Credit Balance",
+      "05/01/2026 TRF TO ACCESS BANK 5,000.00 45,000.00",
+      "06/01/2026 Kuda savings sweep 2,000.00 43,000.00",
+    ].join("\n");
+
+    expect(detectBankFingerprint(text)).toBeNull();
+  });
+
+  it("returns null for banks it does not know instead of guessing", () => {
+    const zenithText = [
+      "Zenith Bank Plc",
+      "Account Statement",
+      "Date Description Debit Credit Balance",
+      "05/01/2026 POS 1,000.00 9,000.00",
+    ].join("\n");
+
+    expect(detectBankFingerprint(zenithText)).toBeNull();
+    // No fingerprint → heuristics decide, exactly as before.
+    expect(extractTransactionsFromText(zenithText)).toHaveLength(1);
   });
 });
 

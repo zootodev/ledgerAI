@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeText,
   parseAmount,
+  parseBalance,
   parseDate,
   inferTypeFromLabel,
   normalizeImportRow,
   isAbsentAmountCell,
+  isNonTransactionLine,
 } from "@/lib/import/normalize";
+import { NOT_A_TRANSACTION_REASON } from "@/lib/import/types";
 import { parseCsv } from "@/lib/import/parse-csv";
 import { detectColumns } from "@/lib/import/mapping";
 import { buildImportPreview, shouldIncludeByDefault } from "@/lib/import/preview";
@@ -52,6 +55,74 @@ describe("parseAmount", () => {
     [",500"],
   ])("rejects %j", (raw) => {
     expect(parseAmount(raw as string).error).toBeTruthy();
+  });
+});
+
+describe("parseBalance", () => {
+  it.each([
+    ["1250.50", "1250.50"],
+    ["1250.5", "1250.50"],
+    ["1250", "1250.00"],
+    ["1,250.50", "1250.50"],
+    ["₦5,000", "5000.00"],
+    ["  2,500.00  ", "2500.00"],
+    ["0", "0.00"],
+    ["0.00", "0.00"],
+    ["-150.25", "-150.25"],
+    ["(2,000.00)", "-2000.00"],
+  ])("reads %j as %j — zero and negatives are legitimate balances", (raw, expected) => {
+    expect(parseBalance(raw as string).value).toBe(expected);
+  });
+
+  it.each(["", "   ", "abc", "1.250,50", ",500", "12.345", "1,25"])(
+    "reads %j as unreadable (null) so reconciliation skips the row",
+    (raw) => {
+      const result = parseBalance(raw as string);
+      expect(result.value).toBeNull();
+      if ((raw as string).trim() !== "") expect(result.error).toBeTruthy();
+    },
+  );
+
+  it("does not apply parseAmount's greater-than-zero rule", () => {
+    // parseAmount treats zero as an error (a zero transaction is meaningless),
+    // but a zero running balance is a real, valid balance.
+    expect(parseAmount("0.00").error).toBeTruthy();
+    expect(parseBalance("0.00")).toEqual({ value: "0.00" });
+  });
+});
+
+describe("isNonTransactionLine", () => {
+  it.each([
+    "Opening Balance 12,000.00",
+    "Closing balance ₦20,035.20",
+    "Balance b/f 10,000.00",
+    "Balance c/f 20,000.00",
+    "Balance brought forward 10,000.00",
+    "Balance carried forward 20,000.00",
+    "Brought forward 5,000.00",
+    "Carried forward 5,000.00",
+    "Balance",
+    "Subtotal 45,000.00",
+    "Totals 45,000.00",
+    "Grand Total 120,000.00",
+    "Page 2 of 5",
+    "Statement of Account",
+    "Account Number 0123456789",
+    "Date Description Debit Credit Balance",
+  ])("treats %j as a statement artifact", (text) => {
+    expect(isNonTransactionLine(text as string)).toBe(true);
+  });
+
+  it.each([
+    "POS PURCHASE SHOPRITE",
+    // Contains "total" but is an ordinary merchant, not a totals line.
+    "TRANSFER TO TOTAL ENERGIES",
+    // "balance" not at the start of the line.
+    "Balance transfer to savings",
+    "Opening a new account fee",
+    "",
+  ])("keeps %j as an ordinary line", (text) => {
+    expect(isNonTransactionLine(text as string)).toBe(false);
   });
 });
 
@@ -328,6 +399,99 @@ describe("normalizeImportRow", () => {
     );
     expect(row.category).toBe("Food");
     expect(row.reference).toBe("REF-1");
+  });
+});
+
+describe("non-transaction rows are skipped, not rejected as invalid", () => {
+  it("classifies an opening balance line as skipped (not a transaction)", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "", Description: "Opening Balance", Amount: "5,000.00" }),
+      AMOUNT_MAP,
+      0,
+    );
+    // It genuinely fails validation (no date) …
+    expect(row.errors.length).toBeGreaterThan(0);
+    // … but it is a statement artifact, so it is reported as skipped rather
+    // than a row the user has to go and fix.
+    expect(row.skipped).toBe(true);
+    expect(row.skipReason).toBe(NOT_A_TRANSACTION_REASON);
+  });
+
+  it("leaves a genuinely broken transaction invalid, not skipped", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "Coffee", Amount: "not-a-number" }),
+      AMOUNT_MAP,
+      0,
+    );
+    expect(row.errors.length).toBeGreaterThan(0);
+    expect(row.skipped).toBe(false);
+    expect(row.skipReason).toBeNull();
+  });
+
+  it("never marks a valid transaction as skipped", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "Sales", Amount: "2,500.00" }),
+      AMOUNT_MAP,
+      0,
+    );
+    expect(row.errors).toEqual([]);
+    expect(row.skipped).toBe(false);
+    expect(row.skipReason).toBeNull();
+  });
+
+  it("skips a repeated page header that is only column labels", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "", Description: "Date Description Debit Credit Balance", Amount: "" }),
+      AMOUNT_MAP,
+      0,
+    );
+    expect(row.skipped).toBe(true);
+    expect(row.skipReason).toBe(NOT_A_TRANSACTION_REASON);
+  });
+});
+
+describe("Balance column feeds reconciliation", () => {
+  const map: ColumnMapping = { ...AMOUNT_MAP, balance: "Balance" };
+
+  it("parses a signed running balance onto the row", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "POS", Amount: "-1,250.00", Balance: "8,750.00" }),
+      map,
+      0,
+    );
+    expect(row.errors).toEqual([]);
+    expect(row.amount).toBe("1250.00");
+    expect(row.balance).toBe("8750.00");
+  });
+
+  it("keeps a zero balance (it is a real balance, not a missing value)", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "POS", Amount: "1,250.00", Balance: "0" }),
+      map,
+      0,
+    );
+    expect(row.balance).toBe("0.00");
+  });
+
+  it("warns — without failing the row — when the balance cell can't be read", () => {
+    const junk = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "POS", Amount: "1,250.00", Balance: "n/a" }),
+      map,
+      0,
+    );
+    // A junk balance is not a row error: reconciliation just skips this row.
+    expect(junk.errors).toEqual([]);
+    expect(junk.warnings).toContain("balance could not be read");
+    expect(junk.balance).toBeNull();
+  });
+
+  it("leaves balance null when the column is blank", () => {
+    const row = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "POS", Amount: "1,250.00", Balance: "  " }),
+      map,
+      0,
+    );
+    expect(row.balance).toBeNull();
   });
 });
 

@@ -95,6 +95,36 @@ describe("detectColumns pair-header aliases", () => {
   });
 });
 
+describe("Balance column aliases", () => {
+  it.each([
+    "Balance",
+    "Running Balance",
+    "Closing Balance",
+    "Available Balance",
+    "Ledger Balance",
+    "Balance After",
+  ])("maps %j to the balance field, never to amount", (header) => {
+    const mapping = detectColumns(["Date", "Description", "Debit", "Credit", header]);
+    expect(mapping.balance).toBe(header);
+    expect(mapping.amount).toBeUndefined();
+    expect(mapping.debit).toBe("Debit");
+    expect(mapping.credit).toBe("Credit");
+  });
+
+  it("does not invent a balance column for a plain single-amount statement", () => {
+    const mapping = detectColumns(["Date", "Description", "Amount"]);
+    expect(mapping.amount).toBe("Amount");
+    expect(mapping.balance).toBeUndefined();
+  });
+
+  it("does not mistake a Debit/Credit pair for a balance", () => {
+    const mapping = detectColumns(["Date", "Description", "Money In", "Money Out"]);
+    expect(mapping.balance).toBeUndefined();
+    expect(mapping.credit).toBe("Money In");
+    expect(mapping.debit).toBe("Money Out");
+  });
+});
+
 describe("validateMapping", () => {
   const headers = ["Date", "Description", "Amount", "Debit", "Credit"];
 
@@ -121,6 +151,22 @@ describe("validateMapping", () => {
     const fields = issues.map((i) => i.field);
     expect(fields).toContain("date");
     expect(fields).toContain("description");
+  });
+
+  it("accepts a balance column alongside a Debit/Credit pair", () => {
+    const withBalance = ["Date", "Description", "Debit", "Credit", "Balance"];
+    expect(
+      validateMapping(
+        {
+          date: "Date",
+          description: "Description",
+          debit: "Debit",
+          credit: "Credit",
+          balance: "Balance",
+        },
+        withBalance,
+      ),
+    ).toEqual([]);
   });
 
   it("requires an amount source", () => {

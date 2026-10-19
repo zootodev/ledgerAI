@@ -14,6 +14,12 @@
 // full row), credit/debit statements fall back to a flat scan that anchors
 // rows on the transaction date and slices text up to the next date.
 //
+// Bank fingerprints: a recognized letterhead (Kuda, OPay, Moniepoint,
+// GTBank, Access) seeds the column order first, because header wording can
+// mislead the keyword heuristics (a legend mentioning both "Debit" and
+// "Credit", columns spelled "Amount Cr"/"Bal"). No fingerprint, or a guess
+// that extracts nothing, falls back to the heuristics below.
+//
 // Layout modes:
 //  - debit-credit: a header line carrying a debit/credit (or withdrawal/
 //    deposit, paid out/paid in) pair, so the first amount of a row is the
@@ -213,6 +219,69 @@ function detectBalanceColumn(lines: string[]): boolean {
       )
     );
   });
+}
+
+// ------------------------------------------------------------
+// Bank fingerprints
+// ------------------------------------------------------------
+// Letterhead detection: the bank's name in the header tells us the column
+// order before any keyword heuristics run, which matters when the header's
+// wording would mislead them (a legend line mentioning both "Debit" and
+// "Credit", or column labels spelled "Amount Cr"/"Bal"). When no bank is
+// recognised — or the fingerprint's layout yields no rows — the existing
+// heuristics decide as before.
+
+/** Banks we can fingerprint from statement letterhead text. */
+export type BankFingerprint = "kuda" | "opay" | "moniepoint" | "gtbank" | "access";
+
+/** Per-bank column order: the layout its statements print, and whether a
+ * running-balance column is always present (even when the header wording
+ * wouldn't let detectBalanceColumn infer it). */
+interface BankLayout {
+  layout: LayoutKind;
+  hasBalance: boolean;
+}
+
+const BANK_PATTERNS: [BankFingerprint, RegExp][] = [
+  ["moniepoint", /\bmoniepoint\b/i],
+  ["gtbank", /\b(?:gtbank|guaranty trust bank)\b/i],
+  ["access", /\baccess bank\b/i],
+  ["opay", /\bopay\b/i],
+  ["kuda", /\bkuda\b/i],
+];
+
+const BANK_LAYOUTS: Record<BankFingerprint, BankLayout> = {
+  // Money In / Money Out columns, money-in first, trailing running balance.
+  moniepoint: { layout: "credit-debit", hasBalance: false },
+  // Debit / Credit / Balance; a single populated amount cell per row.
+  gtbank: { layout: "debit-credit", hasBalance: true },
+  access: { layout: "debit-credit", hasBalance: true },
+  // One amount column with a per-row Debit/Credit type word.
+  opay: { layout: "single", hasBalance: false },
+  kuda: { layout: "single", hasBalance: false },
+};
+
+/**
+ * Detect which bank produced a statement from its letterhead. Scans the
+ * lines BEFORE the first transaction row (the letterhead always precedes the
+ * table, while a row's narration may name any bank — "TRF TO ACCESS BANK"
+ * inside a Kuda statement must not fingerprint it as Access), capped at 60
+ * lines.
+ */
+export function detectBankFingerprint(text: string): BankFingerprint | null {
+  const lines = text.split(/\r?\n|\f/);
+  const header: string[] = [];
+  for (const line of lines) {
+    if (header.length >= 60) break;
+    const date = findDate(line);
+    if (date && findAmounts(line, date.end).length > 0) break;
+    header.push(line);
+  }
+  const headerText = header.join("\n");
+  for (const [bank, pattern] of BANK_PATTERNS) {
+    if (pattern.test(headerText)) return bank;
+  }
+  return null;
 }
 
 /** Trim a row's leading-narrative fragment of surrounding separators. */
@@ -591,13 +660,42 @@ function extractRow(
  * Extract statement rows from PDF-extracted text. Returns every line that
  * has both a parseable date and at least one well-formed amount; header,
  * narrative and balance-only lines fall out naturally.
+ *
+ * Order of authority: a recognized bank letterhead seeds the layout (column
+ * order + balance column), then the keyword heuristics. If the seeded layout
+ * extracts nothing (a fingerprint can only ever be a guess about an
+ * individual PDF), the heuristic layout gets a full retry before the
+ * fragmented-layout fallbacks.
  */
 export function extractTransactionsFromText(text: string): RawImportRow[] {
   const lines = text.split(/\r?\n|\f/);
-  const layout = detectLayout(lines);
+  const fingerprint = detectBankFingerprint(text);
+  const seeded = fingerprint ? BANK_LAYOUTS[fingerprint] : null;
+  const heuristicLayout = detectLayout(lines);
+  const layout = seeded ? seeded.layout : heuristicLayout;
+  const heuristicHasBalance = detectBalanceColumn(lines);
+  const hasBalance = seeded ? seeded.hasBalance || heuristicHasBalance : heuristicHasBalance;
+
+  const rows = extractWithLayout(lines, layout, hasBalance, text);
+
+  // The letterhead guess produced nothing — fall back to the pure keyword
+  // heuristics before giving up (and before the fragment layouts).
+  if (rows.length === 0 && seeded && (heuristicLayout !== layout || heuristicHasBalance !== hasBalance)) {
+    return extractWithLayout(lines, heuristicLayout, heuristicHasBalance, text);
+  }
+  return rows;
+}
+
+/** One pass of the line-based extraction under a chosen layout. */
+function extractWithLayout(
+  lines: string[],
+  layout: LayoutKind,
+  hasBalance: boolean,
+  text: string,
+): RawImportRow[] {
   const rows: RawImportRow[] = [];
   if (layout === "debit-credit") {
-    rows.push(...extractDebitCreditRows(lines, detectBalanceColumn(lines), text));
+    rows.push(...extractDebitCreditRows(lines, hasBalance, text));
   } else {
     lines.forEach((line, index) => {
       const row = extractRow(line, index + 1, layout);
@@ -668,6 +766,7 @@ export async function parsePdf(
         diag: "v4-fragmented",
         chars: text.length,
         lines: text.split(/\r?\n|\f/).length,
+        bank: detectBankFingerprint(text),
         layout: detectLayout(text.split(/\r?\n|\f/)),
         hasBalance: detectBalanceColumn(text.split(/\r?\n|\f/)),
         dateLines: text
