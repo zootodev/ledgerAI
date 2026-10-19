@@ -112,6 +112,18 @@ describe("transactionListQuerySchema", () => {
       transactionListQuerySchema.safeParse({ search: "x".repeat(101) }).success,
     ).toBe(false);
   });
+
+  it("passes ?status=review through so paging keeps the review alias", () => {
+    const q = transactionListQuerySchema.parse({ status: "review", page: "2" });
+    expect(q.status).toBe("review");
+    expect(q.page).toBe(2);
+  });
+
+  it("never lets a junk ?status= value invalidate the other filters", () => {
+    const q = transactionListQuerySchema.parse({ status: "nonsense", type: "expense" });
+    expect(q.status).toBe("nonsense");
+    expect(q.type).toBe("expense");
+  });
 });
 
 describe("accountInputSchema", () => {

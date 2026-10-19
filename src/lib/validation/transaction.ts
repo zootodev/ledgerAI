@@ -108,6 +108,13 @@ export const transactionListQuerySchema = z.object({
   uncategorized: z.literal("1").optional(),
   /** "1" restricts to low-confidence AI categorizations needing review. */
   lowConfidence: z.literal("1").optional(),
+  /**
+   * Free-form status alias kept in the URL for shareable links; only
+   * "review" is meaningful and it is canonicalized to lowConfidence=1 by
+   * the transactions page. Kept as a plain string so a junk value can never
+   * invalidate (and reset) the rest of the query.
+   */
+  status: z.string().max(20).optional(),
   sortBy: z.enum(TRANSACTION_SORT_KEYS).default("date"),
   sortDir: z.enum(["asc", "desc"]).default("desc"),
 });

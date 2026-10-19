@@ -30,7 +30,12 @@ import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/use-toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TransactionForm, type TransactionFormValues } from "@/components/transactions/transaction-form";
-import { deleteTransactionAction } from "@/lib/actions/transactions";
+import {
+  deleteTransactionAction,
+  confirmTransactionCategoryAction,
+  setTransactionCategoryAction,
+  type TransactionActionState,
+} from "@/lib/actions/transactions";
 import { REVIEW_THRESHOLD } from "@/lib/ai/rules";
 import { formatAmount, majorAmount } from "@/lib/finance/engine";
 import { cn } from "@/lib/utils/cn";
@@ -83,7 +88,7 @@ const typeTone: Record<string, "success" | "danger" | "default"> = {
  */
 const REVIEW_PERCENT = Math.round(REVIEW_THRESHOLD * 100);
 
-const CONFIDENCE_LEGEND = `How confident the AI is in this category. Under ${REVIEW_PERCENT}% goes to Review.`;
+const CONFIDENCE_LEGEND = `The AI · % badge shows how confident the AI is in its category. Anything under ${REVIEW_PERCENT}% lands here.`;
 
 /** AI categorization confidence, e.g. "AI · 92%". Unknown when null. */
 function aiConfidenceBadge(confidence: number): React.ReactNode {
@@ -173,7 +178,8 @@ export function TransactionsView({
       params.dateFrom ||
       params.dateTo ||
       params.uncategorized ||
-      params.lowConfidence,
+      params.lowConfidence ||
+      params.status === "review",
   );
 
   // Whether the business has any accounts to filter or label rows with. When
@@ -289,6 +295,51 @@ export function TransactionsView({
     }
   };
 
+  // Review queue (?lowConfidence=1, aliased from ?status=review): each row
+  // gets an inline Accept (keeps the suggested category, confirms the row)
+  // and a category-only dropdown — correcting a suggestion must not require
+  // opening the full edit dialog.
+  const reviewMode = Boolean(params.lowConfidence);
+  const [reviewPendingId, setReviewPendingId] = React.useState<string | null>(null);
+
+  const runReviewAction = async (
+    tx: TransactionServiceData,
+    successTitle: string,
+    run: (fd: FormData) => Promise<TransactionActionState>,
+  ) => {
+    setReviewPendingId(tx.id);
+    try {
+      const fd = new FormData();
+      fd.set("id", tx.id);
+      const res = await run(fd);
+      if (res.ok) {
+        toast.success({ title: successTitle });
+        router.refresh();
+      } else {
+        toast.error({
+          title: "Couldn't update the category",
+          description: res.error ?? "Please try again.",
+        });
+      }
+    } catch (e) {
+      toast.error({
+        title: "Couldn't update the category",
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    } finally {
+      setReviewPendingId(null);
+    }
+  };
+
+  const handleAcceptSuggestion = (tx: TransactionServiceData) =>
+    runReviewAction(tx, "Suggestion accepted", confirmTransactionCategoryAction);
+
+  const handleSetCategory = (tx: TransactionServiceData, categoryId: string) =>
+    runReviewAction(tx, "Category updated", (fd) => {
+      fd.set("categoryId", categoryId);
+      return setTransactionCategoryAction(fd);
+    });
+
   const renderAmount = (tx: TransactionServiceData) => {
     const value = majorAmount(tx.amount);
     const formatted = formatAmount(value, currency);
@@ -338,10 +389,46 @@ export function TransactionsView({
       headerClassName: "min-w-32",
       cell: (t) => {
         const c = t.categoryId ? categoriesById.get(t.categoryId) : undefined;
-        return c ? (
-          <Badge tone={c.type === "income" ? "brand" : "info"}>{c.name}</Badge>
-        ) : (
-          <span className="text-muted">—</span>
+        if (!reviewMode) {
+          return c ? (
+            <Badge tone={c.type === "income" ? "brand" : "info"}>{c.name}</Badge>
+          ) : (
+            <span className="text-muted">—</span>
+          );
+        }
+        // Review mode: the category is editable inline. Only categories that
+        // can apply to this row's type are offered (transfers have none).
+        const rowCategories = categories.filter((cat) => cat.type === t.type);
+        if (c && !rowCategories.some((cat) => cat.id === c.id)) rowCategories.push(c);
+        const busy = reviewPendingId === t.id;
+        return (
+          <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <Select
+              value={t.categoryId ?? ""}
+              aria-label={`Category for ${t.description}`}
+              className="w-36"
+              disabled={busy}
+              onChange={(e) => handleSetCategory(t, e.target.value)}
+            >
+              <option value="">Uncategorized</option>
+              {rowCategories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </Select>
+            {t.categoryId !== null && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => handleAcceptSuggestion(t)}
+              >
+                Accept
+              </Button>
+            )}
+          </div>
         );
       },
     },
@@ -526,7 +613,7 @@ export function TransactionsView({
                   ? "Showing transactions with no category and low-confidence categorizations."
                   : params.uncategorized
                     ? "Showing non-transfer transactions that have no category yet."
-                    : "Showing transactions whose AI category was low-confidence and may need a second look."}
+                    : "Showing transactions whose AI category was low-confidence. Accept a suggestion to keep it, or pick a category to correct it — either way the row leaves Review."}
                 {" "}
                 {CONFIDENCE_LEGEND}
               </span>
@@ -670,6 +757,7 @@ export function TransactionsView({
                       dateTo: undefined,
                       uncategorized: undefined,
                       lowConfidence: undefined,
+                      status: undefined,
                     });
                   }}
                 >

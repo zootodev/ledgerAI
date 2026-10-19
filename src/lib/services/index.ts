@@ -45,6 +45,8 @@ export {
   createTransaction,
   updateTransaction,
   deleteTransaction,
+  confirmTransactionCategory,
+  setTransactionCategory,
 } from "./transactions";
 export type {
   TransactionServiceData,

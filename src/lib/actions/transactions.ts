@@ -5,6 +5,8 @@ import {
   createTransaction,
   updateTransaction,
   deleteTransaction,
+  confirmTransactionCategory,
+  setTransactionCategory,
 } from "@/lib/services/transactions";
 import type { TransactionInput } from "@/lib/services/transactions";
 
@@ -66,4 +68,36 @@ export async function deleteTransactionAction(formData: FormData): Promise<void>
   const id = String(formData.get("id") ?? "");
   await deleteTransaction(id);
   TRANSACTION_PATHS.forEach((p) => revalidatePath(p));
+}
+
+/** Accept the AI's suggested category for a transaction (keeps it, confirms). */
+export async function confirmTransactionCategoryAction(
+  formData: FormData,
+): Promise<TransactionActionState> {
+  const id = String(formData.get("id") ?? "");
+  try {
+    await confirmTransactionCategory(id);
+    TRANSACTION_PATHS.forEach((p) => revalidatePath(p));
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unable to accept the category." };
+  }
+}
+
+/**
+ * Set a transaction's category directly from the review queue ("" clears it).
+ * The server re-validates the category for the row's type and business.
+ */
+export async function setTransactionCategoryAction(
+  formData: FormData,
+): Promise<TransactionActionState> {
+  const id = String(formData.get("id") ?? "");
+  const raw = String(formData.get("categoryId") ?? "").trim();
+  try {
+    await setTransactionCategory(id, raw === "" ? null : raw);
+    TRANSACTION_PATHS.forEach((p) => revalidatePath(p));
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unable to update the category." };
+  }
 }

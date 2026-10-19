@@ -393,6 +393,84 @@ export async function updateTransaction(
 }
 
 /**
+ * Accept the AI's suggested category for a low-confidence row: the category
+ * stays exactly as suggested, and the confidence is cleared so the row stops
+ * being a review candidate (the review query filters on aiConfidence).
+ */
+export async function confirmTransactionCategory(id: string): Promise<TransactionServiceData> {
+  const idParsed = transactionIdSchema.safeParse(id);
+  if (!idParsed.success) throw new Error(zErrorMessage(idParsed.error));
+
+  const { prisma, business } = await requireAuthContext();
+  const existing = await prisma.transaction.findFirst({
+    where: { id: idParsed.data, businessId: business.id },
+    select: { id: true },
+  });
+  if (!existing) throw new Error("Transaction not found.");
+
+  const updated = await prisma.transaction.update({
+    where: { id: idParsed.data },
+    data: { aiConfidence: null },
+  });
+  return toDto(updated);
+}
+
+/**
+ * Set (or clear, with null) a transaction's category directly from the review
+ * queue — no full edit involved. The row is found scoped by (id, businessId),
+ * the category is re-validated for the row's existing type, and confidence is
+ * cleared because a human choice confirms the row. A change away from the AI
+ * suggestion learns a merchant rule, exactly like a full edit does.
+ */
+export async function setTransactionCategory(
+  id: string,
+  categoryId: string | null,
+): Promise<TransactionServiceData> {
+  const idParsed = transactionIdSchema.safeParse(id);
+  if (!idParsed.success) throw new Error(zErrorMessage(idParsed.error));
+  if (categoryId !== null) {
+    const catParsed = transactionIdSchema.safeParse(categoryId);
+    if (!catParsed.success) throw new Error(zErrorMessage(catParsed.error));
+  }
+
+  const { prisma, business } = await requireAuthContext();
+  const existing = await prisma.transaction.findFirst({
+    where: { id: idParsed.data, businessId: business.id },
+    select: {
+      id: true,
+      accountId: true,
+      categoryId: true,
+      aiCategory: true,
+      description: true,
+      type: true,
+    },
+  });
+  if (!existing) throw new Error("Transaction not found.");
+
+  await assertReferencedEntitiesBelong(
+    prisma,
+    business.id,
+    existing.type as TransactionServiceData["type"],
+    existing.accountId,
+    categoryId,
+  );
+
+  const updated = await prisma.transaction.update({
+    where: { id: idParsed.data },
+    data: { categoryId, aiConfidence: null },
+  });
+
+  await maybeLearnFromEdit(prisma, business.id, {
+    previous: existing,
+    newCategoryId: categoryId,
+    newDescription: existing.description,
+    newType: existing.type,
+  });
+
+  return toDto(updated);
+}
+
+/**
  * Learn a merchant rule from a manual edit, but ONLY when the user actually
  * corrected the categorizer's suggestion:
  *  - the row was AI-categorized (hand-entered rows never learn),

@@ -40,6 +40,8 @@ import {
   createTransactionAction,
   updateTransactionAction,
   deleteTransactionAction,
+  confirmTransactionCategoryAction,
+  setTransactionCategoryAction,
 } from "@/lib/actions/transactions";
 import { GET as exportReport } from "@/app/reports/export/route";
 
@@ -182,6 +184,78 @@ describe("server actions isolate tenants (users A and B)", () => {
     expect(result.ok).toBe(true);
     const updateWhere = mockPrisma.transaction.update.mock.calls[0][0].where;
     expect(updateWhere.id).toBe(UUID_A);
+  });
+
+  it("user B cannot accept A's AI suggestion by id", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(userB);
+
+    const fd = new FormData();
+    fd.set("id", UUID_A);
+    const result = await confirmTransactionCategoryAction(fd);
+
+    expect(result.error).toBe("Transaction not found.");
+    expect(mockPrisma.transaction.update).not.toHaveBeenCalled();
+  });
+
+  it("user B cannot re-categorize A's transaction by id", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(userB);
+
+    const fd = new FormData();
+    fd.set("id", UUID_A);
+    fd.set("categoryId", UUID_B);
+    const result = await setTransactionCategoryAction(fd);
+
+    expect(result.error).toBe("Transaction not found.");
+    expect(mockPrisma.transaction.update).not.toHaveBeenCalled();
+  });
+
+  it("user A can accept their own transaction's suggestion (confidence cleared)", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(userA);
+    mockPrisma.transaction.update.mockResolvedValue(
+      makeTransactionRow(businessA.id, { aiConfidence: makeDecimal(0.42) }),
+    );
+
+    const fd = new FormData();
+    fd.set("id", UUID_A);
+    const result = await confirmTransactionCategoryAction(fd);
+
+    expect(result.ok).toBe(true);
+    // The category is untouched; only the confidence is cleared.
+    expect(mockPrisma.transaction.update.mock.calls[0][0].data).toEqual({ aiConfidence: null });
+  });
+
+  it("user A can set a category on their own transaction, scoped to A", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(userA);
+    mockPrisma.category.findFirst.mockResolvedValue({ id: UUID_A, name: "Sales", type: "income" });
+    mockPrisma.transaction.update.mockResolvedValue(
+      makeTransactionRow(businessA.id, { categoryId: UUID_A }),
+    );
+
+    const fd = new FormData();
+    fd.set("id", UUID_A);
+    fd.set("categoryId", UUID_A);
+    const result = await setTransactionCategoryAction(fd);
+
+    expect(result.ok).toBe(true);
+    // The category lookup was tenant-scoped, never another business's id.
+    expect(mockPrisma.category.findFirst.mock.calls[0][0].where.OR).toEqual([
+      { businessId: null },
+      { businessId: businessA.id },
+    ]);
+  });
+
+  it("user B cannot set a category that only A can see", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(userB);
+    // B's scoped category lookup never finds the id.
+    mockPrisma.category.findFirst.mockResolvedValue(null);
+
+    const fd = new FormData();
+    fd.set("id", UUID_B);
+    fd.set("categoryId", UUID_A);
+    const result = await setTransactionCategoryAction(fd);
+
+    expect(result.error).toBe("Category not found for this business.");
+    expect(mockPrisma.transaction.update).not.toHaveBeenCalled();
   });
 });
 

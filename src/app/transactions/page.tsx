@@ -34,9 +34,15 @@ export default async function TransactionsPage({
   // Malformed query strings must not 500 the page — fall back to a clean
   // default list (page 1, newest first) instead.
   const queryParsed = transactionListQuerySchema.safeParse(raw);
-  const params: TransactionListQuery = queryParsed.success
+  let params: TransactionListQuery = queryParsed.success
     ? queryParsed.data
     : transactionListQuerySchema.parse({});
+
+  // ?status=review is an alias for lowConfidence=1 (AI confidence below the
+  // review threshold). Only canonicalize when a client explicitly asks for it.
+  if (raw.status === "review") {
+    params = { ...params, lowConfidence: "1" };
+  }
 
   // Load every panel independently so one failure still renders an error
   // panel (with retry) instead of a white-screen page error.
