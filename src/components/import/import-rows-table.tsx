@@ -128,7 +128,7 @@ export function ImportRowsTable({
             {row.description}
           </p>
           {row.reference && <p className="text-xs text-muted">Ref: {row.reference}</p>}
-          {row.errors.length > 0 && (
+          {!row.skipped && row.errors.length > 0 && (
             <p className="text-xs text-danger-strong">{row.errors.join(" · ")}</p>
           )}
         </div>
@@ -180,6 +180,8 @@ export function ImportRowsTable({
             value={categoryOverrides[row.rowIndex] ?? ""}
             onChange={(e) => onCategoryChange(row.rowIndex, e.target.value)}
             className="w-44"
+            // A row that cannot be imported has no category worth choosing.
+            disabled={!row.valid}
             aria-label={`Category for row ${row.displayRow}`}
           >
             <option value="">
@@ -226,7 +228,17 @@ export function ImportRowsTable({
                   Review
                 </Badge>
               )}
-              {!row.valid && <Badge tone="danger">Invalid</Badge>}
+              {row.skipped && <Badge tone="default">Not a transaction</Badge>}
+              {row.skipped && row.skipReason && (
+                <span className="max-w-64 text-xs text-muted">{row.skipReason}</span>
+              )}
+              {row.reconciles === false && (
+                <Badge tone="danger">
+                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                  Balance mismatch
+                </Badge>
+              )}
+              {!row.skipped && !row.valid && <Badge tone="danger">Invalid</Badge>}
             </div>
             {existing && (
               <p className="max-w-64 text-xs text-muted">

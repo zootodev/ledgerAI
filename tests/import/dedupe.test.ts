@@ -18,8 +18,11 @@ function row(overrides: Partial<NormalizedImportRow> = {}): NormalizedImportRow 
     type: "income",
     reference: null,
     category: null,
+    balance: null,
     errors: [],
     warnings: [],
+    skipped: false,
+    skipReason: null,
     ...overrides,
   };
 }

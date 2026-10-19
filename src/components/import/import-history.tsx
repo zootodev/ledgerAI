@@ -65,6 +65,9 @@ function summaryParts(item: ImportHistoryItem): SummaryPart[] {
     if (errors.invalidRows > 0) {
       parts.push({ key: "invalid", text: `${errors.invalidRows} invalid`, tone: "text-danger-strong" });
     }
+    if (errors.skipped > 0) {
+      parts.push({ key: "skipped", text: `${errors.skipped} not a transaction` });
+    }
     if (errors.excluded > 0) {
       parts.push({ key: "excluded", text: `${errors.excluded} excluded` });
     }

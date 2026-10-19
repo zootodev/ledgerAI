@@ -7,6 +7,7 @@ const REASON_LABELS: Record<ImportExceptionReason, string> = {
   invalid: "Invalid",
   duplicate_existing: "Already in ledger",
   duplicate_in_file: "Duplicate in file",
+  skipped: "Not a transaction",
   excluded: "Skipped",
 };
 
@@ -17,6 +18,7 @@ const REASON_TONES: Record<
   invalid: "danger",
   duplicate_existing: "info",
   duplicate_in_file: "default",
+  skipped: "default",
   excluded: "warning",
 };
 

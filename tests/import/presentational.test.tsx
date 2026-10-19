@@ -25,6 +25,11 @@ const SUMMARY = {
   needsReview: 2,
   readyToImport: 5,
   toSkip: 7,
+  skipped: 0,
+  reconcileChecked: 0,
+  reconcileMismatches: 0,
+  reconciled: null,
+  hasBalances: false,
 };
 
 describe("ImportSummaryCards", () => {
@@ -62,7 +67,7 @@ describe("ImportHistory", () => {
       status: "committed",
       transactionsFound: 4,
       transactionsImported: 3,
-      errors: { invalidRows: 1, errors: [], existingDuplicates: 2, inFileDuplicates: 1, excluded: 1, exceptions: [] },
+      errors: { invalidRows: 1, errors: [], existingDuplicates: 2, inFileDuplicates: 1, skipped: 0, excluded: 1, exceptions: [] },
       createdAt: "2026-09-01T10:00:00.000Z",
       completedAt: "2026-09-01T10:00:00.000Z",
     },
@@ -126,6 +131,7 @@ describe("ImportSuccessDescription", () => {
     invalid: 1,
     existingDuplicates: 2,
     inFileDuplicates: 1,
+    skipped: 0,
     excluded: 1,
     learnedRuleCount: 0,
     importId: "imp-1",
@@ -134,11 +140,19 @@ describe("ImportSuccessDescription", () => {
 
   it("summarises the import result counts", () => {
     const html = renderToStaticMarkup(<ImportSuccessDescription result={baseResult} />);
-    expect(html).toContain("3 imported");
-    expect(html).toContain("2 already in ledger");
-    expect(html).toContain("1 duplicate in file");
-    expect(html).toContain("1 invalid");
+    expect(html).toContain("3 added");
+    expect(html).toContain("2 already in LedgerAI");
+    expect(html).toContain("1 duplicated in the file");
+    expect(html).toContain("1 couldn&#x27;t be read");
     expect(html).toContain("1 excluded");
+    expect(html).not.toContain("1 imported");
+  });
+
+  it("reports rows set aside as not transactions", () => {
+    const html = renderToStaticMarkup(
+      <ImportSuccessDescription result={{ ...baseResult, skipped: 2 }} />,
+    );
+    expect(html).toContain("2 skipped (not transactions)");
   });
 
   it("links to the rules page when corrections were learned", () => {
@@ -219,6 +233,7 @@ describe("ImportCompletePanel", () => {
     invalid: 1,
     existingDuplicates: 2,
     inFileDuplicates: 1,
+    skipped: 0,
     excluded: 1,
     learnedRuleCount: 0,
     importId: "imp-1",

@@ -1036,8 +1036,11 @@ describe("commitImport", () => {
       type: "income",
       reference: null,
       category: null,
+      balance: null,
       errors: [],
       warnings: [],
+      skipped: false,
+      skipReason: null,
     };
     const preview = await categorizeImportRow(incomeRow, { categoryOptions: options });
     // The engine flags the income MTN as unmatched (built-in Utilities is

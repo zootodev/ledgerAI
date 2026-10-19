@@ -31,6 +31,7 @@ import type {
   NormalizedImportRow,
   RawImportRow,
 } from "./types";
+import { NOT_A_TRANSACTION_REASON } from "./types";
 
 interface AmountResult {
   value: string;
@@ -142,6 +143,77 @@ export function parseAmount(rawValue: string): AmountResult {
   return { value: fromMinorUnits(minorUnits), error: undefined };
 }
 
+interface BalanceResult {
+  value: string | null;
+  error?: string;
+}
+
+/**
+ * Parse a running/closing Balance cell. Same numeric grammar as parseAmount,
+ * but a balance of zero is legitimate and negatives are allowed (an overdrawn
+ * account), so it never applies the "greater than zero" rule. A cell that is
+ * blank — or that cannot be read — yields null, and reconciliation simply
+ * skips that row rather than guessing.
+ */
+export function parseBalance(rawValue: string): BalanceResult {
+  const raw = normalizeText(rawValue);
+  if (raw === "") return { value: null };
+
+  let negative = false;
+  let body = raw;
+  if (body.startsWith("(") && body.endsWith(")")) {
+    negative = true;
+    body = body.slice(1, -1).trim();
+  } else if (body.startsWith("-")) {
+    negative = true;
+    body = body.slice(1).trim();
+  } else if (body.startsWith("+")) {
+    body = body.slice(1).trim();
+  }
+
+  body = body
+    .replace(/[₦$€£]/g, "")
+    .replace(/NGN/gi, "")
+    .replace(/\s+/g, "")
+    .replace(/^\uFEFF/, "")
+    .trim();
+
+  const hasDot = body.includes(".");
+  const hasComma = body.includes(",");
+  let digits: string;
+
+  if (hasDot && hasComma) {
+    if (body.lastIndexOf(".") > body.lastIndexOf(",")) {
+      digits = body.replace(/,/g, "");
+    } else {
+      return { value: null, error: "balance could not be read" };
+    }
+  } else if (hasComma) {
+    const parts = body.split(",");
+    if (parts[0] !== "" && parts.length === 2 && /^\d{3}$/.test(parts[1])) {
+      digits = body.replace(",", "");
+    } else {
+      return { value: null, error: "balance could not be read" };
+    }
+  } else {
+    digits = body;
+  }
+
+  if (!/^\d+(\.\d{1,2})?$/.test(digits)) {
+    return { value: null, error: "balance could not be read" };
+  }
+
+  const [whole, fraction = ""] = digits.split(".");
+  if (whole === "") return { value: null, error: "balance could not be read" };
+
+  const minorUnits = Number(whole) * 100 + fractionToMinor(fraction);
+  if (!Number.isSafeInteger(minorUnits)) {
+    return { value: null, error: "balance could not be read" };
+  }
+
+  return { value: fromMinorUnits(negative ? -minorUnits : minorUnits) };
+}
+
 /** "5" or "05" -> 5 (major-units fraction to minor units). */
 function fractionToMinor(fraction: string): number {
   return Number(fraction.padEnd(2, "0").slice(0, 2)) || 0;
@@ -154,6 +226,39 @@ function fromMinorUnits(minor: number): string {
   const whole = Math.floor(abs / 100);
   const cents = String(abs % 100).padStart(2, "0");
   return `${sign}${whole}.${cents}`;
+}
+
+/**
+ * Statement artifacts — the footers, headers and summary lines a bank prints
+ * around the transactions. Anchored so an ordinary description that merely
+ * contains the word "total" is not mistaken for one.
+ */
+const NON_TRANSACTION_PATTERNS: RegExp[] = [
+  /^(opening|closing)\s+balance\b/i,
+  /^balance\s+(b\/?f|brought forward|c\/?f|carried forward)\b/i,
+  /^(brought|carried)\s+forward\b/i,
+  /^balance\s*$/i,
+  /^(sub)?totals?\b/i,
+  /\bgrand total\b/i,
+  /^page\s*\d+\b/i,
+  /^statement\s+(of\s+)?(account|period)?/i,
+  /^account\s+(name|number|no|type)\b/i,
+  // A row that is nothing but column headers (a repeated page header).
+  /^(date|description|narration|details|particulars|amount|debit|credit|balance|reference|ref|type|category|value|withdrawal|deposit|paid in|paid out)(\s+(date|description|narration|details|particulars|amount|debit|credit|balance|reference|ref|type|category|value|withdrawal|deposit|in|out))+$/i,
+];
+
+/** True when a line of text is a statement artifact, not a transaction. */
+export function isNonTransactionLine(text: string): boolean {
+  const value = normalizeText(text);
+  if (value === "") return false;
+  return NON_TRANSACTION_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+/** The full text of a raw row, for artifact detection. */
+function rawRowText(raw: RawImportRow): string {
+  return Object.values(raw.values)
+    .filter((value) => value.trim() !== "")
+    .join(" ");
 }
 
 export function parseDate(rawValue: string): DateResult {
@@ -262,12 +367,14 @@ export function normalizeImportRow(
   const description = normalizeText(cell("description"));
   const ref = normalizeText(cell("reference"));
   const category = normalizeText(cell("category"));
+  const balanceResult = parseBalance(cell("balance"));
 
   const errors: string[] = [];
   const warnings: string[] = [];
 
   if (dateResult.error) errors.push(dateResult.error);
   if (dateResult.warning) warnings.push(dateResult.warning);
+  if (balanceResult.error) warnings.push(balanceResult.error);
 
   if (description === "") {
     errors.push("missing description");
@@ -302,6 +409,10 @@ export function normalizeImportRow(
     errors.push("cannot determine income or expense type");
   }
 
+  const importable = errors.length === 0;
+  const artifactText = `${description} ${rawRowText(raw)}`;
+  const skipped = !importable && isNonTransactionLine(artifactText);
+
   return {
     rowIndex,
     sourceRow: raw.sourceRow,
@@ -314,8 +425,11 @@ export function normalizeImportRow(
     type,
     reference,
     category: category === "" ? null : category.slice(0, 120),
+    balance: balanceResult.value,
     errors,
     warnings,
+    skipped,
+    skipReason: skipped ? NOT_A_TRANSACTION_REASON : null,
   };
 }
 
@@ -325,6 +439,7 @@ type ImportFieldLike =
   | "amount"
   | "debit"
   | "credit"
+  | "balance"
   | "reference"
   | "type"
   | "category";

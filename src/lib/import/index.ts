@@ -20,10 +20,12 @@ export {
 export {
   normalizeImportRow,
   parseAmount,
+  parseBalance,
   parseDate,
   inferTypeFromLabel,
   normalizeText,
   isAbsentAmountCell,
+  isNonTransactionLine,
 } from "./normalize";
 export {
   tagDuplicates,
@@ -49,7 +51,18 @@ export {
   summarizeStatementPeriod,
   periodsOverlap,
   isDuplicateRow,
+  isUnreconciledRow,
+  isSkippedRow,
   IMPORT_REVIEW_VIEWS,
   IMPORT_REVIEW_VIEW_LABELS,
   type ImportReviewView,
 } from "./review";
+export {
+  reconcileNormalizedRows,
+  findOpeningBalance,
+  RECONCILE_TOLERANCE,
+  SIDE_CORRECTED_WARNING,
+  type ReconciliationSummary,
+  type ReconcileMismatch,
+  type ReconcileResult,
+} from "./reconcile";

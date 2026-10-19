@@ -88,6 +88,17 @@ const FIELD_ALIASES: Record<ImportField, AliasSet> = {
     aliases: ["category", "category name"],
     tokens: ["category"],
   },
+  balance: {
+    aliases: [
+      "balance",
+      "running balance",
+      "closing balance",
+      "available balance",
+      "ledger balance",
+      "balance after",
+    ],
+    tokens: ["balance"],
+  },
 };
 
 function normalizeHeader(value: string): string {
@@ -187,7 +198,7 @@ export function validateMapping(mapping: ColumnMapping, headers: string[]): Mapp
     });
   }
 
-  for (const field of ["amount", "debit", "credit", "reference", "type", "category"] as const) {
+  for (const field of ["amount", "debit", "credit", "balance", "reference", "type", "category"] as const) {
     const value = mapping[field];
     if (value && value.trim() !== "" && !headerSet.has(value)) {
       issues.push({

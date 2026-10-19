@@ -14,6 +14,9 @@ function row(overrides: Partial<ImportPreviewRow> = {}): ImportPreviewRow {
     type: "income",
     reference: null,
     category: null,
+    balance: null,
+    reconciles: null,
+    reconcilesNote: null,
     suggestedCategory: "Other Income",
     confidence: 0.9,
     duplicate: "new",
@@ -21,6 +24,8 @@ function row(overrides: Partial<ImportPreviewRow> = {}): ImportPreviewRow {
     errors: [],
     warnings: [],
     valid: true,
+    skipped: false,
+    skipReason: null,
     needsReview: false,
     ...overrides,
   };

@@ -19,6 +19,7 @@ export type ImportField =
   | "amount"
   | "debit"
   | "credit"
+  | "balance"
   | "reference"
   | "type"
   | "category";
@@ -29,6 +30,7 @@ export const IMPORT_FIELDS: readonly ImportField[] = [
   "amount",
   "debit",
   "credit",
+  "balance",
   "reference",
   "type",
   "category",
@@ -80,8 +82,23 @@ export interface NormalizedImportRow {
   reference: string | null;
   /** Source-file category text, when a category column was mapped. */
   category: string | null;
+  /**
+   * Running/closing balance from a mapped Balance column, as a signed
+   * major-units string ("1250.50", "-40.00"), or null when the column is
+   * absent or unreadable. Used only to VERIFY the row ordering — never to
+   * derive an amount.
+   */
+  balance: string | null;
   errors: string[];
   warnings: string[];
+  /**
+   * True when the row is a statement artifact (an opening/closing balance, a
+   * total, a repeated page header) rather than a transaction. Such rows are
+   * set aside instead of being reported as "could not be read".
+   */
+  skipped: boolean;
+  /** Why the row was set aside, present only when `skipped`. */
+  skipReason: string | null;
 }
 
 /** Category suggestion produced by the deterministic rules engine. */
@@ -114,6 +131,17 @@ export interface ImportPreviewRow {
   type: ImportRowType;
   reference: string | null;
   category: string | null;
+  /** Balance from the source row when a Balance column was mapped. */
+  balance: string | null;
+  /**
+   * Whether the statement math agrees for this row:
+   *  - true  -> previous balance + credit - debit matched the balance,
+   *  - false -> it did not (see `reconcilesNote`),
+   *  - null  -> there was no balance to check against.
+   */
+  reconciles: boolean | null;
+  /** Soft note explaining a reconciled false / a corrected side. */
+  reconcilesNote: string | null;
   suggestedCategory: string;
   confidence: number;
   duplicate: DuplicateStatus;
@@ -125,6 +153,14 @@ export interface ImportPreviewRow {
   /** Soft flags (ambiguous date, low-confidence category). */
   warnings: string[];
   valid: boolean;
+  /**
+   * True when the row is a statement artifact (opening/closing balance, a
+   * total, a page header) rather than a transaction. Set aside — never shown
+   * as "invalid" and never importable.
+   */
+  skipped: boolean;
+  /** Why the row was set aside, present only when `skipped`. */
+  skipReason: string | null;
   needsReview: boolean;
 }
 
@@ -137,6 +173,15 @@ export interface ImportSummary {
   needsReview: number;
   readyToImport: number;
   toSkip: number;
+  /** Statement artifacts set aside as "not a transaction". */
+  skipped: number;
+  /** Reconciliation counts, present only when a Balance column was read. */
+  reconcileChecked: number;
+  reconcileMismatches: number;
+  /** Marks the whole file as reconciled (or not) for the review banner. */
+  reconciled: boolean | null;
+  /** True when this file carried a readable statement balance at all. */
+  hasBalances: boolean;
 }
 
 /** Per-row user decision sent to the server at commit time. */
@@ -163,6 +208,7 @@ export interface ImportCommitResult {
   existingDuplicates: number;
   inFileDuplicates: number;
   invalid: number;
+  skipped: number;
   excluded: number;
 }
 
@@ -178,7 +224,14 @@ export type ImportExceptionReason =
   | "invalid"
   | "duplicate_existing"
   | "duplicate_in_file"
+  | "skipped"
   | "excluded";
+
+/**
+ * Rows that are statement artifacts rather than transactions are set aside
+ * with this reason instead of being reported as "could not be read".
+ */
+export const NOT_A_TRANSACTION_REASON = "not a transaction";
 
 /**
  * One non-committed row, surfaced after a commit so it can be reviewed later.

@@ -19,12 +19,17 @@ function row(overrides: Partial<ImportPreviewRow> = {}): ImportPreviewRow {
     type: "expense",
     reference: null,
     category: null,
+    balance: null,
+    reconciles: null,
+    reconcilesNote: null,
     suggestedCategory: "Transportation",
     confidence: 0.94,
     duplicate: "new",
     errors: [],
     warnings: [],
     valid: true,
+    skipped: false,
+    skipReason: null,
     needsReview: false,
     ...overrides,
   };
@@ -65,7 +70,14 @@ describe("countByView", () => {
       row({ rowIndex: 2, duplicate: "duplicate_existing" }),
       row({ rowIndex: 3, valid: false }),
     ];
-    expect(countByView(rows)).toEqual({ all: 4, review: 1, duplicates: 1, invalid: 1 });
+    expect(countByView(rows)).toEqual({
+      all: 4,
+      review: 1,
+      unreconciled: 0,
+      duplicates: 1,
+      invalid: 1,
+      skipped: 0,
+    });
   });
 });
 

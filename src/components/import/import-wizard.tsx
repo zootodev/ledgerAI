@@ -42,6 +42,8 @@ import {
   detectColumns,
   validateMapping,
   normalizeImportRow,
+  reconcileNormalizedRows,
+  findOpeningBalance,
   tagDuplicates,
   categorizeImportRows,
   buildImportPreview,
@@ -113,6 +115,7 @@ const MAPPING_FIELDS: { field: (typeof IMPORT_FIELDS)[number]; label: string; re
   { field: "amount", label: "Amount (single column)" },
   { field: "debit", label: "Debit / money out" },
   { field: "credit", label: "Credit / money in" },
+  { field: "balance", label: "Balance (for checking)" },
   { field: "reference", label: "Reference" },
   { field: "type", label: "Type column" },
   { field: "category", label: "Category column" },
@@ -187,7 +190,14 @@ export function ImportWizard({
       fps: string[],
       businessRules: CategoryRuleDto[],
     ): Promise<BuiltPreview> => {
-      const rows = p.rows.map((raw, index) => normalizeImportRow(raw, m, index));
+      const normalizedRows = p.rows.map((raw, index) => normalizeImportRow(raw, m, index));
+      // Verify the statement's own math BEFORE categorizing: a corrected
+      // debit/credit side can flip a row's type, and the category follows
+      // the corrected type.
+      const { rows, summary } = reconcileNormalizedRows(
+        normalizedRows,
+        findOpeningBalance(normalizedRows),
+      );
       const tags = tagDuplicates(rows, new Set(fps));
       const categoryOptions: ImportCategoryOption[] = categories.map((c) => ({
         id: c.id,
@@ -198,7 +208,7 @@ export function ImportWizard({
         businessRules,
         categoryOptions,
       });
-      return buildImportPreview(rows, suggestions, tags);
+      return buildImportPreview(rows, suggestions, tags, summary);
     },
     [categories],
   );
@@ -793,6 +803,35 @@ export function ImportWizard({
             <CardContent className="space-y-4">
               <ImportSummaryCards summary={preview.summary} />
 
+              {preview.summary.hasBalances && preview.reconciliation && (
+                preview.summary.reconciled ? (
+                  <Alert tone="success" title="Balances reconcile ✓">
+                    <p>
+                      {preview.summary.reconcileChecked} check
+                      {preview.summary.reconcileChecked === 1 ? "" : "s"} verified — the running
+                      balance matches what LedgerAI read from each row, from{" "}
+                      {preview.reconciliation.openingBalance ?? "—"} to{" "}
+                      {preview.reconciliation.closingBalance ?? "—"}.
+                    </p>
+                  </Alert>
+                ) : (
+                  <Alert
+                    tone="warning"
+                    title={`${preview.summary.reconcileMismatches} row${
+                      preview.summary.reconcileMismatches === 1 ? "" : "s"
+                    } don't reconcile`}
+                  >
+                    <p>
+                      The running balance in this file stops adding up for{" "}
+                      {preview.summary.reconcileMismatches} row
+                      {preview.summary.reconcileMismatches === 1 ? "" : "s"}. The rows and amounts
+                      below are unchanged — use the &quot;Doesn&apos;t reconcile&quot; filter to see
+                      them.
+                    </p>
+                  </Alert>
+                )
+              )}
+
               {preview.summary.needsReview > 0 && (
                 <Alert tone="warning" title="Some categories need a look">
                   {preview.summary.needsReview} row{preview.summary.needsReview === 1 ? "" : "s"} have a
@@ -816,7 +855,12 @@ export function ImportWizard({
                   role="group"
                   aria-label="Filter rows by status"
                 >
-                  {IMPORT_REVIEW_VIEWS.map((option) => (
+                  {IMPORT_REVIEW_VIEWS.filter((option) => {
+                    // Only offer the reconciliation filter when the file
+                    // actually carried balances worth checking.
+                    if (option === "unreconciled" && !preview.summary.hasBalances) return false;
+                    return true;
+                  }).map((option) => (
                     <Button
                       key={option}
                       variant={view === option ? "secondary" : "outline"}
@@ -930,10 +974,19 @@ export function ImportWizard({
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
                 <p className="text-sm text-muted">
-                  {preview.summary.invalid} invalid row{preview.summary.invalid === 1 ? "" : "s"} will be
-                  skipped — they cannot be imported.
+                  {preview.summary.invalid > 0 &&
+                    `${preview.summary.invalid} invalid row${preview.summary.invalid === 1 ? "" : "s"} cannot be imported.`}
+                  {preview.summary.invalid > 0 && preview.summary.skipped > 0 && " "}
+                  {preview.summary.skipped > 0 &&
+                    `${preview.summary.skipped} row${preview.summary.skipped === 1 ? "" : "s"} set aside as not a transaction.`}
+                  {preview.summary.invalid === 0 &&
+                    preview.summary.skipped === 0 &&
+                    "Every row in this file looks like a transaction."}
                 </p>
                 <div className="flex items-center gap-2">
+                  <Button variant="ghost" onClick={reset} disabled={committing}>
+                    Cancel import
+                  </Button>
                   <Button variant="ghost" onClick={() => setStep(2)} leftIcon={<ArrowLeft className="h-4 w-4" />}>
                     Back
                   </Button>
@@ -1059,6 +1112,8 @@ function AliveSample({
   push(mapping.amount, "Amount");
   push(mapping.debit, "Debit");
   push(mapping.credit, "Credit");
+  push(mapping.balance, "Balance");
+  push(mapping.reference, "Ref");
 
   return (
     <p className="text-sm text-muted">
@@ -1074,10 +1129,11 @@ export interface ImportSuccessDescriptionProps {
 
 export function ImportSuccessDescription({ result }: ImportSuccessDescriptionProps) {
   const parts: string[] = [];
-  if (result.imported > 0) parts.push(`${result.imported} imported`);
-  if (result.existingDuplicates > 0) parts.push(`${result.existingDuplicates} already in ledger`);
-  if (result.inFileDuplicates > 0) parts.push(`${result.inFileDuplicates} duplicate in file`);
-  if (result.invalid > 0) parts.push(`${result.invalid} invalid`);
+  if (result.imported > 0) parts.push(`${result.imported} added`);
+  if (result.existingDuplicates > 0) parts.push(`${result.existingDuplicates} already in LedgerAI`);
+  if (result.inFileDuplicates > 0) parts.push(`${result.inFileDuplicates} duplicated in the file`);
+  if (result.invalid > 0) parts.push(`${result.invalid} couldn't be read`);
+  if (result.skipped > 0) parts.push(`${result.skipped} skipped (not transactions)`);
   if (result.excluded > 0) parts.push(`${result.excluded} excluded`);
 
   return (

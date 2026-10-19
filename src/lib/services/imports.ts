@@ -4,6 +4,8 @@ import {
   normalizeImportRow,
   parseCsv,
   parseXlsx,
+  reconcileNormalizedRows,
+  findOpeningBalance,
   tagDuplicates,
   fingerprintOf,
   validateMapping,
@@ -12,7 +14,7 @@ import {
   fallbackCategoryName,
 } from "@/lib/import/index";
 import { extractMerchantKey } from "@/lib/ai/merchant-key";
-import { MAX_IMPORT_EXCEPTIONS } from "@/lib/import/types";
+import { MAX_IMPORT_EXCEPTIONS, NOT_A_TRANSACTION_REASON } from "@/lib/import/types";
 import { parsePdf } from "@/lib/import/parse-pdf";
 import { categoryMatchesRowType } from "@/lib/ai/rules";
 import { persistLearnedRules } from "@/lib/services/rules";
@@ -50,6 +52,7 @@ export interface ImportHistoryItem {
     errors: unknown[];
     existingDuplicates: number;
     inFileDuplicates: number;
+    skipped: number;
     excluded: number;
     /** Bounded post-import exception queue (rows not written). */
     exceptions: ImportException[];
@@ -64,6 +67,7 @@ export interface ImportCommitServiceResult {
   existingDuplicates: number;
   inFileDuplicates: number;
   invalid: number;
+  skipped: number;
   excluded: number;
   importId: string;
   /** How many category rules were remembered from review corrections. */
@@ -184,9 +188,13 @@ export async function commitImport(
   const normalized = parses.rows.map((raw, index) =>
     normalizeImportRow(raw, input.mapping, index),
   );
+  // Verify the statement's own balance math (and correct an obvious
+  // debit/credit mix-up) before categorizing, so preview and commit agree.
+  const reconciled = reconcileNormalizedRows(normalized, findOpeningBalance(normalized));
+  const rows = reconciled.rows;
 
   const existing = new Set<string>(await listExistingFingerprints(prisma, business.id));
-  const tags = tagDuplicates(normalized, existing);
+  const tags = tagDuplicates(rows, existing);
 
   const categoryOptions = await listCategoryOptions(prisma, business.id);
   // Business rules are re-loaded here independently of anything the preview
@@ -201,7 +209,7 @@ export async function commitImport(
 
   const toCreate: Prisma.TransactionCreateManyInput[] = [];
   const errors: { sourceRow: number; message: string }[] = [];
-  const reasons = { invalid: 0, existing: 0, inFile: 0, excluded: 0 };
+  const reasons = { invalid: 0, skipped: 0, existing: 0, inFile: 0, excluded: 0 };
 
   // Bounded post-import exception queue: every row that is NOT written is
   // recorded with a machine-readable reason so the review step and the
@@ -230,10 +238,18 @@ export async function commitImport(
   // categories) and the whole key is skipped.
   const learnCandidates = new Map<string, string | null>();
 
-  for (let index = 0; index < normalized.length; index += 1) {
-    const row = normalized[index];
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
     const tag = tags.get(row.rowIndex);
     const selection = selected.get(row.rowIndex);
+
+    // Statement artifacts (opening/closing balance, totals, page headers) are
+    // set aside as "not a transaction" — never reported as unreadable data.
+    if (row.skipped) {
+      reasons.skipped += 1;
+      pushException(row, index, "skipped", [NOT_A_TRANSACTION_REASON]);
+      continue;
+    }
 
     if (row.errors.length > 0) {
       reasons.invalid += 1;
@@ -326,6 +342,7 @@ export async function commitImport(
     }
     const hasReasons =
       reasons.invalid > 0 ||
+      reasons.skipped > 0 ||
       reasons.existing > 0 ||
       reasons.inFile > 0 ||
       reasons.excluded > 0;
@@ -336,7 +353,7 @@ export async function commitImport(
         filename: input.fileName,
         fileType: input.fileType,
         status: "committed",
-        transactionsFound: normalized.length,
+        transactionsFound: rows.length,
         transactionsImported: toCreate.length,
         errors:
           hasReasons || errors.length > 0
@@ -345,6 +362,7 @@ export async function commitImport(
                 errors: errors.slice(0, 50),
                 existingDuplicates: reasons.existing,
                 inFileDuplicates: reasons.inFile,
+                skipped: reasons.skipped,
                 excluded: reasons.excluded,
                 exceptions,
               } as unknown as Prisma.InputJsonObject)
@@ -368,11 +386,12 @@ export async function commitImport(
   }
 
   return {
-    total: normalized.length,
+    total: rows.length,
     imported: toCreate.length,
     existingDuplicates: reasons.existing,
     inFileDuplicates: reasons.inFile,
     invalid: reasons.invalid,
+    skipped: reasons.skipped,
     excluded: reasons.excluded,
     importId,
     learnedRuleCount,
@@ -593,6 +612,7 @@ function toHistoryDto(m: ImportModel): ImportHistoryItem {
       errors?: unknown[];
       existingDuplicates?: number;
       inFileDuplicates?: number;
+      skipped?: number;
       excluded?: number;
       exceptions?: unknown[];
     };
@@ -604,6 +624,7 @@ function toHistoryDto(m: ImportModel): ImportHistoryItem {
         typeof raw.existingDuplicates === "number" ? raw.existingDuplicates : 0,
       inFileDuplicates:
         typeof raw.inFileDuplicates === "number" ? raw.inFileDuplicates : 0,
+      skipped: typeof raw.skipped === "number" ? raw.skipped : 0,
       excluded: typeof raw.excluded === "number" ? raw.excluded : 0,
       exceptions: parseExceptions(raw.exceptions),
     };
@@ -625,6 +646,7 @@ const EXCEPTION_REASONS: readonly ImportException["reason"][] = [
   "invalid",
   "duplicate_existing",
   "duplicate_in_file",
+  "skipped",
   "excluded",
 ];
 
