@@ -3,7 +3,7 @@ import Link from "next/link";
 import { FileUp, Inbox, Sparkles, Tag } from "lucide-react";
 import { getOverviewActionItems, LOW_CONFIDENCE_THRESHOLD } from "@/lib/services/overview";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 /**
  * Server-rendered "needs your attention" panel for the Overview. Surfaces a
@@ -40,10 +40,12 @@ export async function OverviewActionItems() {
               {uncategorizedCount === 1 ? "s" : ""} a category. Categories power
               your insights and reports.
             </span>
-            <Link href="/transactions?uncategorized=1">
-              <Button variant="outline" size="sm" leftIcon={<Tag className="h-3.5 w-3.5" />}>
-                Review {uncategorizedCount}
-              </Button>
+            <Link
+              href="/transactions?uncategorized=1"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Tag className="h-3.5 w-3.5" aria-hidden="true" />
+              Review {uncategorizedCount}
             </Link>
           </div>
         </Alert>
@@ -59,10 +61,12 @@ export async function OverviewActionItems() {
               category — under {reviewPercent}% goes to Review. Confirm or
               correct them to improve future suggestions.
             </span>
-            <Link href="/transactions?lowConfidence=1">
-              <Button variant="outline" size="sm" leftIcon={<Sparkles className="h-3.5 w-3.5" />}>
-                Review {lowConfidenceCount}
-              </Button>
+            <Link
+              href="/transactions?lowConfidence=1"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              Review {lowConfidenceCount}
             </Link>
           </div>
         </Alert>
@@ -83,10 +87,12 @@ export async function OverviewActionItems() {
                 ? `, ${latestImport.invalidRows} invalid row${latestImport.invalidRows === 1 ? "" : "s"}`
                 : ""}
             </span>
-            <Link href="/import">
-              <Button variant="outline" size="sm" leftIcon={<FileUp className="h-3.5 w-3.5" />}>
-                Import again
-              </Button>
+            <Link
+              href="/import"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <FileUp className="h-3.5 w-3.5" aria-hidden="true" />
+              Import again
             </Link>
           </div>
         </Alert>

@@ -6,7 +6,7 @@ import { formatAmount, percentChange, round } from "@/lib/finance/engine";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 /** Help text for the Cash Balance KPI (ledger-derived, not a bank statement). */
 export const CASH_BALANCE_HELP =
@@ -134,15 +134,16 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
             description="There are no transactions in the selected range. View all time or import a statement to see more."
             action={
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <Link href="/overview?range=all">
-                  <Button variant="outline" leftIcon={<CalendarRange className="h-4 w-4" />}>
-                    View all time
-                  </Button>
+                <Link
+                  href="/overview?range=all"
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  <CalendarRange className="h-4 w-4" aria-hidden="true" />
+                  View all time
                 </Link>
-                <Link href="/import">
-                  <Button leftIcon={<FileUp className="h-4 w-4" />}>
-                    Import a statement
-                  </Button>
+                <Link href="/import" className={buttonVariants()}>
+                  <FileUp className="h-4 w-4" aria-hidden="true" />
+                  Import a statement
                 </Link>
               </div>
             }
@@ -154,15 +155,16 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
             description="Add your first income, expense, or transfer — or import a bank statement — and your overview will update here."
             action={
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <Link href="/transactions">
-                  <Button leftIcon={<Plus className="h-4 w-4" />}>
-                    Add transaction
-                  </Button>
+                <Link href="/transactions" className={buttonVariants()}>
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Add transaction
                 </Link>
-                <Link href="/import">
-                  <Button variant="outline" leftIcon={<FileUp className="h-4 w-4" />}>
-                    Import a statement
-                  </Button>
+                <Link
+                  href="/import"
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  <FileUp className="h-4 w-4" aria-hidden="true" />
+                  Import a statement
                 </Link>
               </div>
             }

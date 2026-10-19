@@ -19,7 +19,7 @@ import {
   type Column,
   type SortState,
 } from "@/components/ui/data-table";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -809,13 +809,12 @@ export function TransactionsView({
                       >
                         Add transaction
                       </Button>
-                      <Link href="/import">
-                        <Button
-                          variant="outline"
-                          leftIcon={<FileUp className="h-4 w-4" />}
-                        >
-                          Import a statement
-                        </Button>
+                      <Link
+                        href="/import"
+                        className={buttonVariants({ variant: "outline" })}
+                      >
+                        <FileUp className="h-4 w-4" aria-hidden="true" />
+                        Import a statement
                       </Link>
                     </div>
                   ) : undefined

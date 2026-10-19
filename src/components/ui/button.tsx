@@ -44,6 +44,39 @@ const sizeClasses: Record<Size, string> = {
   icon: "h-9 w-9",
 };
 
+export interface ButtonVariantOptions {
+  variant?: Variant;
+  size?: Size;
+  fullWidth?: boolean;
+  className?: string;
+}
+
+/**
+ * The exact class list Button renders, for elements that must LOOK like a
+ * button but navigate rather than act — typically a <Link>. Prefer this over
+ * nesting a <Button> inside a <Link>, which puts two interactive elements in
+ * one hit target (screen readers announce a button inside a link, and the
+ * inner button can swallow keyboard activation).
+ */
+export function buttonVariants({
+  variant = "primary",
+  size = "md",
+  fullWidth = false,
+  className,
+}: ButtonVariantOptions = {}): string {
+  return cn(
+    "inline-flex items-center justify-center rounded-button font-medium",
+    "transition-colors duration-150 select-none whitespace-nowrap",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
+    "disabled:cursor-not-allowed",
+    variant === "link" && "px-0",
+    variantClasses[variant],
+    sizeClasses[size],
+    fullWidth && "w-full",
+    className,
+  );
+}
+
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
     {
@@ -60,21 +93,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) {
-    const isLink = variant === "link";
     return (
       <button
         ref={ref}
-        className={cn(
-          "inline-flex items-center justify-center rounded-button font-medium",
-          "transition-colors duration-150 select-none whitespace-nowrap",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
-          "disabled:cursor-not-allowed",
-          isLink && "px-0",
-          variantClasses[variant],
-          sizeClasses[size],
-          fullWidth && "w-full",
-          className,
-        )}
+        className={buttonVariants({ variant, size, fullWidth, className })}
         disabled={disabled || loading}
         {...props}
       >

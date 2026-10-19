@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 export interface OverviewChartsProps {
   /** ISO 4217 code from the session business; drives every axis/tooltip figure. */
@@ -42,10 +42,9 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
         title="No chart data yet"
         description="Add transactions or import a bank statement to see revenue and profit trends here."
         action={
-          <Link href="/import">
-            <Button variant="outline" leftIcon={<FileUp className="h-4 w-4" />}>
-              Import a statement
-            </Button>
+          <Link href="/import" className={buttonVariants({ variant: "outline" })}>
+            <FileUp className="h-4 w-4" aria-hidden="true" />
+            Import a statement
           </Link>
         }
       />
@@ -72,15 +71,16 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
         description="There are no recorded amounts in the selected range. View all time or import a statement to see revenue and profit trends."
         action={
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <Link href="/overview?range=all">
-              <Button variant="outline" leftIcon={<CalendarRange className="h-4 w-4" />}>
-                View all time
-              </Button>
+            <Link
+              href="/overview?range=all"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              <CalendarRange className="h-4 w-4" aria-hidden="true" />
+              View all time
             </Link>
-            <Link href="/import">
-              <Button leftIcon={<FileUp className="h-4 w-4" />}>
-                Import a statement
-              </Button>
+            <Link href="/import" className={buttonVariants()}>
+              <FileUp className="h-4 w-4" aria-hidden="true" />
+              Import a statement
             </Link>
           </div>
         }

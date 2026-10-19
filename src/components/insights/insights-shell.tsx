@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/app-shell";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { InsightCard } from "@/components/insights/insight-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -88,23 +88,19 @@ export function InsightsShell({
               description="There are no transactions in the selected range, so there's nothing to analyse yet. View all time or import a statement to see more."
               action={
                 <div className="flex flex-wrap items-center justify-center gap-3">
-                  <Link href="/insights?range=all">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      leftIcon={<CalendarRange className="h-4 w-4" />}
-                    >
-                      View all time
-                    </Button>
+                  <Link
+                    href="/insights?range=all"
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                  >
+                    <CalendarRange className="h-4 w-4" aria-hidden="true" />
+                    View all time
                   </Link>
-                  <Link href="/import">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      leftIcon={<FileUp className="h-4 w-4" />}
-                    >
-                      Import a statement
-                    </Button>
+                  <Link
+                    href="/import"
+                    className={buttonVariants({ variant: "primary", size: "sm" })}
+                  >
+                    <FileUp className="h-4 w-4" aria-hidden="true" />
+                    Import a statement
                   </Link>
                 </div>
               }
@@ -122,15 +118,19 @@ export function InsightsShell({
               }
               action={
                 <div className="flex flex-wrap items-center justify-center gap-3">
-                  <Link href="/import">
-                    <Button variant="primary" size="sm" leftIcon={<FileUp className="h-4 w-4" />}>
-                      Import a statement
-                    </Button>
+                  <Link
+                    href="/import"
+                    className={buttonVariants({ variant: "primary", size: "sm" })}
+                  >
+                    <FileUp className="h-4 w-4" aria-hidden="true" />
+                    Import a statement
                   </Link>
-                  <Link href="/transactions">
-                    <Button variant="outline" size="sm" leftIcon={<Plus className="h-4 w-4" />}>
-                      Add a transaction
-                    </Button>
+                  <Link
+                    href="/transactions"
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    Add a transaction
                   </Link>
                 </div>
               }
