@@ -29,9 +29,21 @@ export interface KpiGridProps {
   range?: AnalyticsQuery;
 }
 
-/** Signed percent delta string ("+12%", "-3%") or null when there is no baseline. */
-function signedPercent(current: number, prior: number | null | undefined): string | null {
-  if (prior === null || prior === undefined || prior <= 0) return null;
+/**
+ * The change badge shown on a KPI card.
+ *
+ * - `null` when there is no comparison window, or the baseline is negative
+ *   (a percentage against a negative baseline is meaningless).
+ * - "—" when both periods are zero — there is no movement to report, and a
+ *   percentage would be fabricated.
+ * - "New" when only the prior period is zero — there is no baseline to
+ *   compute a percentage from, but the activity is genuinely new.
+ * - otherwise the signed percentage ("+12%", "-3%").
+ */
+function changeBadge(current: number, prior: number | null | undefined): string | null {
+  if (prior === null || prior === undefined) return null;
+  if (prior === 0) return current === 0 ? "—" : "New";
+  if (prior < 0) return null;
   const delta = percentChange(current, prior);
   if (delta === null) return null;
   const rounded = round(delta, 0);
@@ -76,9 +88,9 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
 
   const hasRange = Boolean(range?.dateFrom || range?.dateTo);
   const prior = summary.prior;
-  const revenueDelta = signedPercent(summary.revenue, prior?.revenue);
-  const expensesDelta = signedPercent(summary.expenses, prior?.expenses);
-  const profitDelta = signedPercent(summary.netProfit, prior?.netProfit);
+  const revenueDelta = changeBadge(summary.revenue, prior?.revenue);
+  const expensesDelta = changeBadge(summary.expenses, prior?.expenses);
+  const profitDelta = changeBadge(summary.netProfit, prior?.netProfit);
 
   return (
     <>

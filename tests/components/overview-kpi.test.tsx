@@ -193,6 +193,64 @@ describe("AnalyticsKpiGrid (Overview data integration)", () => {
     expect(html).toContain("/reports?from=2026-02-01&amp;to=2026-02-28");
   });
 
+  it("shows an em dash when both periods are zero, never a fabricated -100%", async () => {
+    mockedGetAnalyticsSummary.mockResolvedValue(
+      makeSummary({
+        revenue: 0,
+        expenses: 0,
+        netProfit: 0,
+        cashBalance: 0,
+        hasAnyTransactions: true,
+        period: { from: "2026-02-01", to: "2026-02-28" },
+        prior: {
+          revenue: 0,
+          expenses: 0,
+          netProfit: 0,
+          cashBalance: 0,
+          period: { from: "2026-01-04", to: "2026-01-31" },
+        },
+      }),
+    );
+
+    const element = await AnalyticsKpiGrid({
+      currency: "NGN",
+      range: { dateFrom: "2026-02-01", dateTo: "2026-02-28" },
+    });
+    const html = renderToStaticMarkup(element as never);
+
+    expect(html).toContain(">—<");
+    expect(html).not.toContain("-100%");
+    expect(html).not.toContain("NaN");
+  });
+
+  it("shows New when only the prior period is zero", async () => {
+    mockedGetAnalyticsSummary.mockResolvedValue(
+      makeSummary({
+        revenue: 1000,
+        expenses: 0,
+        netProfit: 1000,
+        cashBalance: 1000,
+        period: { from: "2026-02-01", to: "2026-02-28" },
+        prior: {
+          revenue: 0,
+          expenses: 0,
+          netProfit: 0,
+          cashBalance: 0,
+          period: { from: "2026-01-04", to: "2026-01-31" },
+        },
+      }),
+    );
+
+    const element = await AnalyticsKpiGrid({
+      currency: "NGN",
+      range: { dateFrom: "2026-02-01", dateTo: "2026-02-28" },
+    });
+    const html = renderToStaticMarkup(element as never);
+
+    expect(html).toContain(">New<");
+    expect(html).not.toContain("-100%");
+  });
+
   it("does not show the empty state when the summary is non-empty", async () => {
     mockedGetAnalyticsSummary.mockResolvedValue(makeSummary({}));
 

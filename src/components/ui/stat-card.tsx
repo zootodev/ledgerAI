@@ -7,7 +7,11 @@ import { cn } from "@/lib/utils/cn";
 export interface StatCardProps {
   label: string;
   value: string;
-  /** Optional delta vs prior period, e.g. "+12.5%" or "-3.2%". */
+  /**
+   * Optional change vs the prior period: a signed percentage ("+12.5%",
+   * "-3.2%") or a literal label where a percentage is not meaningful
+   * ("—" for a flat zero, "New" when there is no prior baseline).
+   */
   delta?: string | null;
   icon?: React.ReactNode;
   hint?: string;
@@ -33,11 +37,16 @@ export function StatCard({
   href,
   invertDelta = false,
 }: StatCardProps) {
-  const positive = delta != null && !delta.startsWith("-");
+  // A delta is either a percentage ("+12%") or a literal label used when a
+  // percentage would be misleading ("—" for a flat zero, "New" when there is
+  // no prior baseline). Literals render neutrally, with no arrow.
+  const isPercent = delta != null && delta.trim().endsWith("%");
+  const isLabel = delta != null && !isPercent;
   const showDelta = !!delta && !loading;
+  const positive = !isLabel && delta != null && !delta.startsWith("-");
   // Exactly zero movement is neither up nor down: show a neutral "0%" with no
   // arrow (and no success/danger tone) instead of implying a direction.
-  const unchanged = delta != null && /^[-+]?0%$/.test(delta.trim());
+  const unchanged = !isLabel && delta != null && /^[-+]?0%$/.test(delta.trim());
   // Tone reflects whether the movement is good, not merely its direction.
   const good = invertDelta ? !positive : positive;
 
@@ -64,16 +73,17 @@ export function StatCard({
               <span
                 className={cn(
                   "inline-flex items-center gap-0.5 text-sm font-medium tabular-nums",
-                  unchanged ? "text-muted" : good ? "text-success" : "text-danger",
+                  unchanged || isLabel ? "text-muted" : good ? "text-success" : "text-danger",
                 )}
               >
-                {!unchanged &&
+                {isPercent &&
+                  !unchanged &&
                   (positive ? (
                     <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
                   ) : (
                     <TrendingDown className="h-3.5 w-3.5" aria-hidden="true" />
                   ))}
-                {delta.replace("%", "")}%
+                {isPercent ? `${delta.replace("%", "")}%` : delta}
               </span>
             )}
             {hint && <span className="text-sm text-muted">{hint}</span>}

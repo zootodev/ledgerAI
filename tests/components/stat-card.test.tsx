@@ -45,4 +45,24 @@ describe("StatCard delta tones", () => {
     expect(html).toContain("text-success");
     expect(html).toContain("lucide-trending-down");
   });
+
+  it("renders an em dash label neutrally, with no arrow and no percent sign", () => {
+    const html = renderToStaticMarkup(<StatCard label="Revenue" value="₦0.00" delta="—" />);
+    expect(html).toContain(">—<");
+    expect(html).toContain("text-muted");
+    expect(html).not.toContain("—%");
+    expect(html).not.toContain("lucide-trending-up");
+    expect(html).not.toContain("lucide-trending-down");
+    expect(html).not.toContain("text-success");
+    expect(html).not.toContain("text-danger");
+  });
+
+  it("renders a New label neutrally, without appending a percent sign", () => {
+    const html = renderToStaticMarkup(<StatCard label="Revenue" value="₦1,000.00" delta="New" />);
+    expect(html).toContain(">New<");
+    expect(html).not.toContain("New%");
+    expect(html).toContain("text-muted");
+    expect(html).not.toContain("lucide-trending-up");
+    expect(html).not.toContain("text-success");
+  });
 });
