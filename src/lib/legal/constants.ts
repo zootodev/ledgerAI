@@ -28,6 +28,10 @@ export const LEGAL_UPDATED = "17 October 2026";
 export const TERMS_VERSION = "2026-10-17";
 export const PRIVACY_VERSION = "2026-10-17";
 
+/** Routes serving the legal documents (linked from the app shell footer). */
+export const PRIVACY_PATH = "/privacy";
+export const TERMS_PATH = "/terms";
+
 /** Third-party processors that may handle data on the controller's behalf. */
 export const SUB_PROCESSORS = [
   { name: "Supabase", purpose: "Postgres database, authentication and file storage" },

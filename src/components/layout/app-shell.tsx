@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header, type HeaderProps } from "@/components/layout/header";
 import { MobileNav, MobileMenuButton } from "@/components/layout/mobile-nav";
+import { DATA_CONTROLLER, PRIVACY_PATH, TERMS_PATH } from "@/lib/legal/constants";
 import { cn } from "@/lib/utils/cn";
 
 export interface AppShellProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -63,6 +64,27 @@ export function AppShell({
         >
           {children}
         </main>
+
+        {/* Legal footer: the privacy notice and terms are always one click
+            away from anywhere in the app (item 6 of the pre-launch pass). */}
+        <footer className="border-t border-border px-4 py-3 sm:px-6 print:hidden">
+          <p className="text-xs text-muted">
+            © {new Date().getFullYear()} {DATA_CONTROLLER} ·{" "}
+            <Link
+              href={PRIVACY_PATH}
+              className="underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Privacy
+            </Link>
+            {" · "}
+            <Link
+              href={TERMS_PATH}
+              className="underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Terms
+            </Link>
+          </p>
+        </footer>
       </div>
     </div>
   );
