@@ -175,6 +175,28 @@ describe("requireAuthContext (session -> tenant resolution)", () => {
     mockPrisma.business.findFirst.mockResolvedValue(null);
     await expect(getAuthContext()).resolves.toBeNull();
   });
+
+  it("retries the business lookup once on a transient connection error", async () => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    mockPrisma.business.findFirst.mockReset();
+    mockPrisma.business.findFirst
+      .mockRejectedValueOnce({ code: "P1017" })
+      .mockResolvedValueOnce(businessA);
+
+    const ctx = await requireAuthContext();
+    expect(ctx.business.id).toBe("biz-a");
+    expect(mockPrisma.business.findFirst).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry (or hide) a non-transient error", async () => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    const error = new Error("Unique constraint failed");
+    mockPrisma.business.findFirst.mockReset();
+    mockPrisma.business.findFirst.mockRejectedValue(error);
+
+    await expect(requireAuthContext()).rejects.toBe(error);
+    expect(mockPrisma.business.findFirst).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("transactions service (tenant-isolated data access)", () => {

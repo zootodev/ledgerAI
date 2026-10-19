@@ -19,32 +19,36 @@
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  ensureOnboarding: vi.fn(),
-  requireAuthContext: vi.fn(),
-  getCurrentUser: vi.fn(),
-  redirect: vi.fn(() => {
-    throw new Error("NEXT_REDIRECT");
-  }),
-  notFound: vi.fn(() => {
-    throw new Error("NEXT_NOT_FOUND");
-  }),
-  listAccounts: vi.fn(),
-  listTransactions: vi.fn(),
-  listCategories: vi.fn(),
-  listImportHistory: vi.fn(),
-  getAnalyticsSummary: vi.fn(),
-  getAnalyticsTrends: vi.fn(),
-  getBusinessProfile: vi.fn(),
-  getReportData: vi.fn(),
-  getAppBaseUrl: vi.fn(),
-  consumeConfiguredLimit: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  class AuthorizationError extends Error {}
+  return {
+    AuthorizationError,
+    ensureOnboarding: vi.fn(),
+    requireAuthContext: vi.fn(),
+    getCurrentUser: vi.fn(),
+    redirect: vi.fn(() => {
+      throw new Error("NEXT_REDIRECT");
+    }),
+    notFound: vi.fn(() => {
+      throw new Error("NEXT_NOT_FOUND");
+    }),
+    listAccounts: vi.fn(),
+    listTransactions: vi.fn(),
+    listCategories: vi.fn(),
+    listImportHistory: vi.fn(),
+    getAnalyticsSummary: vi.fn(),
+    getAnalyticsTrends: vi.fn(),
+    getBusinessProfile: vi.fn(),
+    getReportData: vi.fn(),
+    getAppBaseUrl: vi.fn(),
+    consumeConfiguredLimit: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/services/auth", () => ({ ensureOnboarding: mocks.ensureOnboarding }));
 vi.mock("@/lib/services/auth-context", () => ({
   requireAuthContext: mocks.requireAuthContext,
-  AuthorizationError: class AuthorizationError extends Error {},
+  AuthorizationError: mocks.AuthorizationError,
 }));
 vi.mock("@/lib/auth/server", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/services", () => ({
@@ -176,7 +180,10 @@ describe("journey 1 — protected routes require a session", () => {
 
   for (const [route, run] of protectedRoutes) {
     it(`redirects anonymous visitors of ${route} to /login`, async () => {
-      mocks.requireAuthContext.mockRejectedValue(new Error("You must be signed in."));
+      // Production throws the typed AuthorizationError when there is no session.
+      mocks.requireAuthContext.mockRejectedValue(
+        new mocks.AuthorizationError("You must be signed in."),
+      );
 
       await expect(run()).rejects.toThrow("NEXT_REDIRECT");
       expect(mocks.redirect).toHaveBeenCalledWith("/login");
