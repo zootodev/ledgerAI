@@ -78,9 +78,9 @@ export function CategoriesManager({ categories }: CategoriesManagerProps) {
   return (
     <>
       <Card>
-        <CardHeader className="flex-row items-center justify-between gap-3">
+        <CardHeader className="flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>Categories</CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Button
               size="sm"
               variant="outline"

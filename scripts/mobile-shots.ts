@@ -74,6 +74,15 @@ interface Overflow {
   innerWidth: number;
 }
 
+interface CardOverflow {
+  device: string;
+  route: string;
+  card: string;
+  element: string;
+  cardRight: number;
+  elementRight: number;
+}
+
 interface Failure {
   device: string;
   route: string;
@@ -107,6 +116,78 @@ async function measureOverflow(page: Page): Promise<{ scrollWidth: number; inner
     scrollWidth: document.documentElement.scrollWidth,
     innerWidth: window.innerWidth,
   }));
+}
+
+async function measureCardOverflows(page: Page): Promise<
+  Array<{
+    card: string;
+    element: string;
+    cardRight: number;
+    elementRight: number;
+  }>
+> {
+  return page.evaluate(() => {
+    const describe = (el: Element): string => {
+      const tag = el.tagName.toLowerCase();
+      const cls = typeof el.className === "string" ? el.className : "";
+      const parts = cls.split(/\s+/).filter(Boolean).slice(0, 4);
+      const text = (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
+      return `${tag}${parts.length ? "." + parts.join(".") : ""}${text ? ` "${text}"` : ""}`;
+    };
+
+    const hasScrollableAncestor = (el: Element, boundary: Element): boolean => {
+      let p: Element | null = el.parentElement;
+      while (p && p !== boundary) {
+        const style = window.getComputedStyle(p);
+        if (/(auto|scroll)/.test(style.overflowX)) return true;
+        p = p.parentElement;
+      }
+      return false;
+    };
+
+    const results: Array<{
+      card: string;
+      element: string;
+      cardRight: number;
+      elementRight: number;
+    }> = [];
+    const seen = new Set<string>();
+    const cards = Array.from(document.querySelectorAll('[class*="rounded-card"]'));
+
+    for (const card of cards) {
+      const cardEl = card as HTMLElement;
+      if (cardEl.offsetWidth === 0 || cardEl.offsetHeight === 0) continue;
+      const cardStyle = window.getComputedStyle(cardEl);
+      if (cardStyle.display === "none" || cardStyle.visibility === "hidden") continue;
+
+      const cardRect = cardEl.getBoundingClientRect();
+      const descendants = cardEl.querySelectorAll("*");
+      for (const node of Array.from(descendants)) {
+        if (!(node instanceof HTMLElement)) continue;
+        if (node.offsetWidth === 0 || node.offsetHeight === 0) continue;
+        const style = window.getComputedStyle(node);
+        if (style.display === "none" || style.visibility === "hidden") continue;
+        if (style.position === "fixed") continue;
+
+        const rect = node.getBoundingClientRect();
+        if (rect.right <= cardRect.right + 1) continue;
+        if (hasScrollableAncestor(node, cardEl)) continue;
+
+        const key = `${describe(card)}|${describe(node)}|${Math.round(rect.right)}|${Math.round(cardRect.right)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        results.push({
+          card: describe(cardEl),
+          element: describe(node),
+          cardRight: Math.round(cardRect.right),
+          elementRight: Math.round(rect.right),
+        });
+      }
+    }
+
+    return results;
+  });
 }
 
 async function captureMenu(
@@ -153,6 +234,7 @@ async function captureDevice(
   baseUrl: string,
   authState: string | undefined,
   overflows: Overflow[],
+  cardOverflows: CardOverflow[],
   failures: Failure[],
 ): Promise<void> {
   await mkdir(path.join(SHOTS_DIR, device.dir), { recursive: true });
@@ -188,6 +270,14 @@ async function captureDevice(
           );
         }
 
+        const cardIssues = await measureCardOverflows(page).catch(() => []);
+        for (const issue of cardIssues) {
+          cardOverflows.push({ device: device.label, route, ...issue });
+          console.warn(
+            `[card-overflow] ${device.label} ${route}: ${issue.element} (${issue.elementRight}px) > card ${issue.card} (${issue.cardRight}px)`,
+          );
+        }
+
         const status = response?.status() ?? "no response";
         console.log(`✓ ${device.label} ${route} (${status}) -> ${path.relative(process.cwd(), file)}`);
       } catch (error) {
@@ -214,13 +304,14 @@ async function main(): Promise<void> {
   await mkdir(SHOTS_DIR, { recursive: true });
 
   const overflows: Overflow[] = [];
+  const cardOverflows: CardOverflow[] = [];
   const failures: Failure[] = [];
   const browser = await chromium.launch();
 
   try {
     for (const device of DEVICES) {
       console.log(`\n== ${device.label} ==`);
-      await captureDevice(browser, device, baseUrl, authState, overflows, failures);
+      await captureDevice(browser, device, baseUrl, authState, overflows, cardOverflows, failures);
     }
   } finally {
     await browser.close();
@@ -239,11 +330,25 @@ async function main(): Promise<void> {
     console.log("\nHorizontal overflow: none detected.");
   }
 
+  if (cardOverflows.length > 0) {
+    console.log("\nElements overflowing their card:");
+    for (const item of cardOverflows) {
+      console.log(
+        `- ${item.device} ${item.route}: ${item.element} (${item.elementRight}px) > ${item.card} (${item.cardRight}px)`,
+      );
+    }
+  } else {
+    console.log("\nCard overflow: none detected.");
+  }
+
   if (failures.length > 0) {
     console.error("\nFailed captures:");
     for (const item of failures) {
       console.error(`- ${item.device} ${item.route}: ${item.message}`);
     }
+    process.exitCode = 1;
+  }
+  if (overflows.length > 0 || cardOverflows.length > 0) {
     process.exitCode = 1;
   }
 }

@@ -87,13 +87,7 @@ function summaryParts(item: ImportHistoryItem): SummaryPart[] {
   return parts;
 }
 
-/** Badge tone for the import status, honest about a low-yield commit. */
-function statusTone(item: ImportHistoryItem): "success" | "warning" | "danger" {
-  if (item.status !== "committed") return "warning";
-  const outcome = importOutcome(item);
-  if (outcome === "full") return "success";
-  return outcome === "partial" ? "warning" : "danger";
-}
+
 
 export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
   return (
@@ -134,9 +128,7 @@ export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge tone={statusTone(item)}>
-                      {item.status}
-                    </Badge>
+                    <Badge tone="default">{item.status}</Badge>
                   </div>
                 </div>
                 {item.errors && item.errors.exceptions.length > 0 && (

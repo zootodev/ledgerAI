@@ -74,22 +74,29 @@ export async function OverviewActionItems() {
 
       {latestImport && (
         <Alert tone="success" title="Your latest import">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="flex items-center gap-1.5">
-              <Inbox className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="font-medium text-foreground">{latestImport.filename}</span>
-              {" — "}
-              {latestImport.imported} of {latestImport.found} imported
-              {latestImport.existingDuplicates > 0
-                ? `, ${latestImport.existingDuplicates} duplicate${latestImport.existingDuplicates === 1 ? "" : "s"} skipped`
-                : ""}
-              {latestImport.invalidRows > 0
-                ? `, ${latestImport.invalidRows} invalid row${latestImport.invalidRows === 1 ? "" : "s"}`
-                : ""}
-            </span>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <Inbox className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="break-words font-medium text-foreground">
+                    {latestImport.filename}
+                  </span>
+                </span>
+                <span className="text-sm text-muted">
+                  — {latestImport.imported} of {latestImport.found} imported
+                  {latestImport.existingDuplicates > 0
+                    ? `, ${latestImport.existingDuplicates} duplicate${latestImport.existingDuplicates === 1 ? "" : "s"} skipped`
+                    : ""}
+                  {latestImport.invalidRows > 0
+                    ? `, ${latestImport.invalidRows} invalid row${latestImport.invalidRows === 1 ? "" : "s"}`
+                    : ""}
+                </span>
+              </div>
+            </div>
             <Link
               href="/import"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
+              className={buttonVariants({ variant: "outline", size: "sm", className: "self-start sm:self-auto" })}
             >
               <FileUp className="h-3.5 w-3.5" aria-hidden="true" />
               Import again

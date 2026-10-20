@@ -24,6 +24,8 @@ export interface StatCardProps {
    * a rise is shown in red and a fall in green. The arrow still follows sign.
    */
   invertDelta?: boolean;
+  /** Tighter padding/type and no icon below sm (for two-up mobile grids). */
+  compactOnMobile?: boolean;
 }
 
 export function StatCard({
@@ -36,6 +38,7 @@ export function StatCard({
   className,
   href,
   invertDelta = false,
+  compactOnMobile = false,
 }: StatCardProps) {
   // A delta is either a percentage ("+12%") or a literal label used when a
   // percentage would be misleading ("—" for a flat zero, "New" when there is
@@ -54,17 +57,35 @@ export function StatCard({
     <Card
       className={cn(
         "p-5",
+        compactOnMobile && "p-4 sm:p-5",
         href && "h-full transition-colors hover:border-brand/40",
         className,
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-muted">{label}</p>
+          <p
+            className={cn(
+              "text-sm font-medium text-muted",
+              compactOnMobile && "text-xs sm:text-sm",
+            )}
+          >
+            {label}
+          </p>
           {loading ? (
-            <div className="mt-2 h-8 w-24 animate-pulse rounded bg-surface-subtle" />
+            <div
+              className={cn(
+                "mt-2 h-8 w-24 animate-pulse rounded bg-surface-subtle",
+                compactOnMobile && "h-6 w-16 sm:h-8 sm:w-24",
+              )}
+            />
           ) : (
-            <p className="mt-1.5 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+            <p
+              className={cn(
+                "mt-1.5 text-2xl font-semibold tracking-tight text-foreground tabular-nums",
+                compactOnMobile && "text-lg sm:text-2xl",
+              )}
+            >
               {value}
             </p>
           )}
@@ -74,6 +95,7 @@ export function StatCard({
                 className={cn(
                   "inline-flex items-center gap-0.5 text-sm font-medium tabular-nums",
                   unchanged || isLabel ? "text-muted" : good ? "text-success" : "text-danger",
+                  compactOnMobile && "text-xs sm:text-sm",
                 )}
               >
                 {isPercent &&
@@ -86,11 +108,25 @@ export function StatCard({
                 {isPercent ? `${delta.replace("%", "")}%` : delta}
               </span>
             )}
-            {hint && <span className="text-sm text-muted">{hint}</span>}
+            {hint && (
+              <span
+                className={cn(
+                  "text-sm text-muted",
+                  compactOnMobile && "text-xs sm:text-sm",
+                )}
+              >
+                {hint}
+              </span>
+            )}
           </div>
         </div>
         {icon && (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
+          <div
+            className={cn(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand",
+              compactOnMobile && "hidden sm:flex",
+            )}
+          >
             {icon}
           </div>
         )}

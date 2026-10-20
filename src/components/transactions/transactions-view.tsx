@@ -348,6 +348,40 @@ export function TransactionsView({
     return <span className="font-medium tabular-nums text-secondary">{formatted}</span>;
   };
 
+  // Below md the table becomes stacked card rows: description + signed amount
+  // on the first line, then date · category · AI confidence · ref. Tapping the
+  // row runs the same openEdit action as a table row.
+  const renderMobileRow = (tx: TransactionServiceData) => {
+    const category = tx.categoryId ? categoriesById.get(tx.categoryId) : undefined;
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-start justify-between gap-3">
+          <p className="line-clamp-2 min-w-0 flex-1 break-words text-sm font-medium text-foreground">
+            {tx.description}
+          </p>
+          <div className="shrink-0 pt-0.5 text-sm">{renderAmount(tx)}</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted">
+          <span className="whitespace-nowrap tabular-nums">{formatDate(tx.date)}</span>
+          <span aria-hidden="true">·</span>
+          <span className="min-w-0 break-words">{category?.name ?? "—"}</span>
+          {tx.aiConfidence !== null && (
+            <>
+              <span aria-hidden="true">·</span>
+              {aiConfidenceBadge(tx.aiConfidence)}
+            </>
+          )}
+          {tx.reference && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="min-w-0 break-words">Ref: {tx.reference}</span>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const columns: Column<TransactionServiceData>[] = [
     {
       key: "date",
@@ -782,6 +816,7 @@ export function TransactionsView({
             }}
             loading={isPending}
             onRowClick={openEdit}
+            mobileRow={renderMobileRow}
             error={
               loadError ? (
                 <ErrorState

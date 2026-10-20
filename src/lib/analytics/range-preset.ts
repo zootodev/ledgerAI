@@ -17,6 +17,7 @@ import { format, startOfMonth, startOfQuarter, startOfYear, subDays } from "date
 export const RANGE_PRESET_IDS = [
   "last7",
   "last30",
+  "last90",
   "month",
   "quarter",
   "year",
@@ -41,6 +42,7 @@ export function buildRangePresets(today: Date): RangePreset[] {
   return [
     { id: "last7", label: "Last 7 days", from: iso(subDays(today, 6)), to: iso(today) },
     { id: "last30", label: "Last 30 days", from: iso(subDays(today, 29)), to: iso(today) },
+    { id: "last90", label: "Last 90 days", from: iso(subDays(today, 89)), to: iso(today) },
     { id: "month", label: "This month", from: iso(startOfMonth(today)), to: iso(today) },
     { id: "quarter", label: "This quarter", from: iso(startOfQuarter(today)), to: iso(today) },
     { id: "year", label: "This year", from: iso(startOfYear(today)), to: iso(today) },

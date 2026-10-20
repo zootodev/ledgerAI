@@ -23,13 +23,13 @@ export function WizardStepper({
   return (
     <ol
       aria-label="Import progress"
-      className="flex flex-wrap items-center gap-2"
+      className="flex items-center gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:gap-2 sm:overflow-visible sm:pb-0"
     >
       {steps.map((step, index) => {
         const done = step.id < current;
         const active = step.id === current;
         return (
-          <li key={step.id} className="flex items-center gap-2">
+          <li key={step.id} className="flex shrink-0 items-center gap-1 sm:gap-2">
             {index > 0 && (
               <ChevronRight
                 className="h-4 w-4 text-subtle"
@@ -39,7 +39,7 @@ export function WizardStepper({
             <span
               aria-current={active ? "step" : undefined}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium sm:px-2.5",
                 active && "bg-brand text-on-accent",
                 done && "bg-success-soft text-success-strong",
                 !active && !done && "bg-surface-subtle text-secondary",
@@ -57,7 +57,10 @@ export function WizardStepper({
                   {step.id}
                 </span>
               )}
-              {step.label}
+              <span className={active ? "inline" : "hidden sm:inline"}>
+                {step.label}
+              </span>
+              {!active && <span className="sr-only sm:hidden">{step.label}</span>}
             </span>
           </li>
         );

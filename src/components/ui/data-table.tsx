@@ -52,6 +52,12 @@ export interface DataTableProps<T> {
   empty?: React.ReactNode;
   error?: React.ReactNode;
   onRowClick?: (row: T) => void;
+  /**
+   * Responsive row renderer. When set, the table is replaced by stacked card
+   * rows below `md` (the table itself is unchanged at `md` and up). Pagination,
+   * sorting, loading, empty and error states are shared by both layouts.
+   */
+  mobileRow?: (row: T) => React.ReactNode;
   className?: string;
 }
 
@@ -72,6 +78,7 @@ export function DataTable<T>({
   empty,
   error,
   onRowClick,
+  mobileRow,
   className,
 }: DataTableProps<T>) {
   const isControlled = sort !== undefined;
@@ -168,7 +175,65 @@ export function DataTable<T>({
 
   return (
     <div className={cn("flex flex-col", className)}>
-      <div className="relative overflow-hidden rounded-card border border-border bg-surface">
+      {mobileRow && (
+        <div className="md:hidden">
+          {loading ? (
+            <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={`mobile-loading-${i}`} className="space-y-2 px-4 py-3">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-surface-subtle" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-surface-subtle" />
+                </div>
+              ))}
+            </div>
+          ) : error ? (
+            <div className="rounded-card border border-border bg-surface px-4 py-8">
+              {error}
+            </div>
+          ) : displayedData.length === 0 ? (
+            <div className="rounded-card border border-border bg-surface px-4 py-8">
+              {empty ?? (
+                <p className="text-center text-sm text-muted">No records found.</p>
+              )}
+            </div>
+          ) : (
+            <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface">
+              {displayedData.map((row) => (
+                <div
+                  key={rowKey(row)}
+                  role={onRowClick ? "button" : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onRowClick(row);
+                          }
+                        }
+                      : undefined
+                  }
+                  className={cn(
+                    "px-4 py-3",
+                    onRowClick &&
+                      "cursor-pointer transition-colors hover:bg-surface-subtle/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand",
+                  )}
+                >
+                  {mobileRow(row)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-card border border-border bg-surface",
+          mobileRow && "hidden md:block",
+        )}
+      >
         <div ref={scrollRef} className="overflow-x-auto overscroll-x-contain">
           <table className="w-full min-w-max border-collapse text-sm">
             <thead>
