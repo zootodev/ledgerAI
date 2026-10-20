@@ -13,6 +13,10 @@
 # testing
 /coverage
 
+# local mobile screenshot capture (scripts/mobile-shots.ts) — never commit
+/.auth/
+/mobile-shots/
+
 # next.js
 /.next/
 /out/
