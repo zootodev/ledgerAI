@@ -12,6 +12,7 @@ vi.mock("@/lib/import/draft", () => ({
 }));
 
 import { Header, firstName, initials } from "@/components/layout/header";
+import { DropdownLink } from "@/components/ui/dropdown";
 
 describe("Header identity helpers", () => {
   it("extracts the first name and initials", () => {
@@ -51,5 +52,16 @@ describe("Header render", () => {
     expect(html).not.toContain("ada@example.com");
     // Initials badge present
     expect(html).toContain("AL");
+  });
+
+  it("renders a menu destination as a real anchor, not a button", () => {
+    const html = renderToStaticMarkup(
+      createElement(DropdownLink, { href: "/privacy" }, "Privacy"),
+    );
+
+    expect(html).toContain('href="/privacy"');
+    expect(html).toContain('role="menuitem"');
+    expect(html).toContain(">Privacy</a>");
+    expect(html).not.toContain("<button");
   });
 });

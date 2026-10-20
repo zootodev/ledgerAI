@@ -7,10 +7,12 @@ import { WizardStepper } from "@/components/import/import-stepper";
 import { ImportHistory } from "@/components/import/import-history";
 import { ImportExceptions } from "@/components/import/import-exceptions";
 import {
+  AliveSample,
   ImportSuccessDescription,
   ImportCompletePanel,
 } from "@/components/import/import-wizard";
 import type { ImportHistoryItem } from "@/lib/services/imports";
+import type { ParsedImportFile } from "@/lib/import/types";
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) =>
@@ -55,6 +57,82 @@ describe("WizardStepper", () => {
     expect(html).toContain('aria-current="step"');
     expect(html).toContain("Map columns");
     expect(html).toContain("Upload");
+  });
+});
+
+describe("AliveSample", () => {
+  const file: ParsedImportFile = {
+    fileName: "statement.csv",
+    fileType: "csv",
+    headers: ["Date", "Narration", "Money In", "Money Out", "Balance"],
+    rows: [
+      {
+        sourceRow: 2,
+        values: {
+          Date: "2026-01-05",
+          Narration: "Customer payment",
+          "Money In": "25,000.00",
+          "Money Out": "",
+          Balance: "130,000.00",
+        },
+      },
+    ],
+  };
+
+  it("shows Money In and Money Out beside Balance, using an em dash for the empty side", () => {
+    const html = renderToStaticMarkup(
+      <AliveSample
+        parsed={file}
+        mapping={{
+          date: "Date",
+          description: "Narration",
+          credit: "Money In",
+          debit: "Money Out",
+          balance: "Balance",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Money In: 25,000.00");
+    expect(html).toContain("Money Out: —");
+    expect(html).toContain("Balance: 130,000.00");
+    // The old Debit/Credit wording is gone from the sample row.
+    expect(html).not.toContain("Debit:");
+    expect(html).not.toContain("Credit:");
+  });
+
+  it("still shows the pair when the sample row is a debit", () => {
+    const debitFile: ParsedImportFile = {
+      ...file,
+      rows: [
+        {
+          sourceRow: 2,
+          values: {
+            Date: "2026-01-06",
+            Narration: "Rent",
+            "Money In": "",
+            "Money Out": "18,500.00",
+            Balance: "111,500.00",
+          },
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <AliveSample
+        parsed={debitFile}
+        mapping={{
+          date: "Date",
+          description: "Narration",
+          credit: "Money In",
+          debit: "Money Out",
+          balance: "Balance",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Money In: —");
+    expect(html).toContain("Money Out: 18,500.00");
   });
 });
 

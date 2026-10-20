@@ -1,8 +1,12 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRef, useEffect } from "react";
 import { cn } from "@/lib/utils/cn";
+
+const ITEM_CLASSES =
+  "flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm transition-colors";
 
 export interface DropdownItemProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -22,7 +26,7 @@ export function DropdownItem({
       type="button"
       role="menuitem"
       className={cn(
-        "flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm transition-colors",
+        ITEM_CLASSES,
         destructive
           ? "text-danger hover:bg-danger-soft"
           : "text-foreground hover:bg-surface-subtle",
@@ -34,6 +38,37 @@ export function DropdownItem({
       {icon}
       {children}
     </button>
+  );
+}
+
+export interface DropdownLinkProps
+  extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "href"> {
+  href: string;
+  icon?: React.ReactNode;
+}
+
+/**
+ * A navigation entry in a dropdown menu. Rendered as a real anchor (Next Link)
+ * so menu destinations keep browser affordances: middle-click/open-in-new-tab,
+ * copy-link, and a status-bar URL. Actions such as "Sign out" stay buttons.
+ */
+export function DropdownLink({
+  className,
+  href,
+  icon,
+  children,
+  ...props
+}: DropdownLinkProps) {
+  return (
+    <Link
+      href={href}
+      role="menuitem"
+      className={cn(ITEM_CLASSES, "text-foreground hover:bg-surface-subtle", className)}
+      {...props}
+    >
+      {icon}
+      {children}
+    </Link>
   );
 }
 

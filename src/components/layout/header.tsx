@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dropdown, DropdownItem } from "@/components/ui/dropdown";
+import { Dropdown, DropdownItem, DropdownLink } from "@/components/ui/dropdown";
+import { PRIVACY_PATH, TERMS_PATH } from "@/lib/legal/constants";
 import { purgeImportCaches, localStore, sessionStore } from "@/lib/import/draft";
 import { cn } from "@/lib/utils/cn";
 
@@ -24,7 +24,6 @@ export interface HeaderProps
 }
 
 export function Header({ title, user, actions, onSignOut, className }: HeaderProps) {
-  const router = useRouter();
   // Phase 5: signing out drops every import cache this browser holds, so a
   // later visitor (or another account) never resumes the previous tenant's
   // unfinished review.
@@ -68,8 +67,10 @@ export function Header({ title, user, actions, onSignOut, className }: HeaderPro
                 <p className="truncate text-xs text-muted">{user.email}</p>
               )}
             </div>
-            <DropdownItem onClick={() => router.push("/settings/profile")}>Profile</DropdownItem>
-            <DropdownItem onClick={() => router.push("/settings")}>Settings</DropdownItem>
+            <DropdownLink href="/settings/profile">Profile</DropdownLink>
+            <DropdownLink href="/settings">Settings</DropdownLink>
+            <DropdownLink href={PRIVACY_PATH}>Privacy</DropdownLink>
+            <DropdownLink href={TERMS_PATH}>Terms</DropdownLink>
             <DropdownItem destructive onClick={handleSignOut}>
               Sign out
             </DropdownItem>

@@ -1092,7 +1092,7 @@ export function ImportWizard({
 }
 
 /** Live sample of how the very first data row parses with the current mapping. */
-function AliveSample({
+export function AliveSample({
   parsed,
   mapping,
 }: {
@@ -1101,17 +1101,25 @@ function AliveSample({
 }) {
   const sample = parsed.rows[0].values;
   const parts: string[] = [];
+  const read = (key: string | undefined) => {
+    if (!key || key.trim() === "") return "";
+    return (sample[key] ?? "").trim();
+  };
   const push = (key: string | undefined, label: string) => {
-    if (!key || key.trim() === "") return;
-    const value = (sample[key] ?? "").trim();
+    const value = read(key);
     if (value === "") return;
     parts.push(`${label}: ${value}`);
   };
   push(mapping.date, "Date");
   push(mapping.description, "Description");
   push(mapping.amount, "Amount");
-  push(mapping.debit, "Debit");
-  push(mapping.credit, "Credit");
+  // Keep the debit/credit pair next to Balance, using the same money-in /
+  // money-out language as the mapping fields. Show an em dash for the empty
+  // side so it is obvious which column a bank statement fills.
+  if (mapping.credit || mapping.debit) {
+    parts.push(`Money In: ${read(mapping.credit) || "—"}`);
+    parts.push(`Money Out: ${read(mapping.debit) || "—"}`);
+  }
   push(mapping.balance, "Balance");
   push(mapping.reference, "Ref");
 
