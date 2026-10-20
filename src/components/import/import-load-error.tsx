@@ -34,8 +34,8 @@ export function ImportLoadError({ userName, userEmail, onSignOut }: ImportLoadEr
         </h1>
         <div className="mt-6">
           <ErrorState
-            title="We couldn't load your import data"
-            description="Something went wrong talking to the database. Your data is safe — try again."
+            title="Couldn't load your imports, try again"
+            description="Something went wrong talking to the database. Your data is safe."
             onRetry={() => router.refresh()}
           />
         </div>

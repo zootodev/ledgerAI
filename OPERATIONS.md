@@ -35,10 +35,31 @@ code deliberately logs only messages/digests/ids.
 
 ---
 
-## 2. Postgres backups & restore drills
+## 2. Postgres connections, backups & restore drills
 
-- **Engine:** Supabase-managed Postgres (accessed via the pooled connection
-  in `src/lib/db/client.ts`).
+### Connection strings and pool sizing
+
+| Variable | Used by | Value |
+| --- | --- | --- |
+| `DATABASE_URL` | The app at runtime (`src/lib/db/client.ts`) | Supabase **transaction pooler**, port **6543** |
+| `DIRECT_URL` | `prisma migrate` / `prisma db` (`prisma.config.ts`) and `.github/workflows/db-backup.yml` | Supabase **session pooler**, port **5432**, or the direct connection |
+| `DB_POOL_MAX` | Optional pg pool size per app instance | Default **1** in production, **5** in development |
+
+- The runtime uses the **transaction** pooler because it multiplexes many
+  serverless instances over a small server-side pool. Keep the per-instance
+  pool tiny (`DB_POOL_MAX`, default 1). Pointing the runtime at the session
+  pooler (`:5432`) gives every instance its own session and surfaces as
+  `(EMAXCONNSESSION) max clients reached in session mode`.
+- `DIRECT_URL` is for session-scoped work: migrations, CLI commands, and
+  backups. `prisma.config.ts` falls back to `DATABASE_URL` only when
+  `DIRECT_URL` is unset, so set `DIRECT_URL` in every environment that runs
+  Prisma commands.
+- **`pg_dump` must never use port 6543.** The transaction pooler rejects the
+  session-level features it needs; the backup workflow therefore reads
+  `DIRECT_URL` from GitHub Actions secrets.
+
+- **Engine:** Supabase-managed Postgres (the app accesses it through the
+  transaction pooler in `src/lib/db/client.ts`).
 - **No built-in backups:** the project runs on the Supabase **Free plan**,
   which provides **no automated backups and no Point-in-Time Recovery**. Never
   assume either exists. (Should the project move to a paid plan, enable both

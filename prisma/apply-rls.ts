@@ -13,7 +13,12 @@ const { Client } = pg;
 // CREATE OR REPLACE / separate guards).
 
 async function main() {
-  const c = new Client({ connectionString: process.env.DATABASE_URL });
+  // Admin/DDL work needs a session or direct connection; the runtime
+  // DATABASE_URL is the transaction pooler (port 6543), which cannot run this.
+  // Mirrors prisma.config.ts so CLI scripts share the same precedence.
+  const c = new Client({
+    connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
+  });
   await c.connect();
   try {
     const here = path.dirname(fileURLToPath(import.meta.url));

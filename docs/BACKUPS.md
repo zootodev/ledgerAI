@@ -89,13 +89,15 @@ you can recover it later with
 
 | Secret | Value |
 | --- | --- |
-| `BACKUP_DATABASE_URL` | Supabase **session pooler** connection string, **port 5432** (*Connect → Session pooler*). Append `?sslmode=require` if it is not already there. |
+| `DIRECT_URL` | Supabase **session pooler** connection string, **port 5432** (*Connect → Session pooler*), or the direct database connection. This is the same value the app uses for `prisma migrate`/`db`. Append `?sslmode=require` if it is not already there. |
 | `BACKUP_AGE_RECIPIENT` | The `age1…` public key from step (a). |
 
 Notes:
 
-- Use the **session** pooler, not the transaction pooler (port 6543) —
-  `pg_dump` needs session-level features the transaction pooler rejects.
+- Use the **session** pooler (port 5432) or direct connection, **never** the
+  transaction pooler (port 6543) — `pg_dump` needs session-level features the
+  transaction pooler rejects. The app's runtime `DATABASE_URL` is normally the
+  transaction pooler, so it is not a substitute here.
 - The URL is passed to each step through an environment variable and is never
   echoed, so it does not appear in the logs.
 - Consider a dedicated role for backups. The default `postgres` role works and
@@ -129,9 +131,9 @@ Or *Actions → Database backup → Run workflow* in the browser.
 `PATH`:
 
 ```bash
-export BACKUP_DATABASE_URL='postgresql://...session-pooler...?sslmode=require'
+export DIRECT_URL='postgresql://...session-pooler...?sslmode=require'
 
-pg_dump "$BACKUP_DATABASE_URL" \
+pg_dump "$DIRECT_URL" \
   --format=custom --no-owner --no-privileges \
   --schema=public --schema=auth --file=ledgerai.dump
 
@@ -279,7 +281,7 @@ the application's own configuration.
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `pg_dump: error: server version: 18.x; pg_dump version: 17.x` | Server was upgraded | Bump `PG_CLIENT_MAJOR` in the workflow |
-| `The BACKUP_DATABASE_URL secret is not set` | Secret missing/renamed | Add it per §2b |
+| `The DIRECT_URL secret is not set` | Secret missing/renamed | Add it per §2b |
 | `The BACKUP_AGE_RECIPIENT secret is not set` | Secret missing/renamed | Add the `age1…` public key |
 | `checksum did not match` | Corrupted or substituted age download | Re-run; if it persists, check the pinned values against the age release page |
 | `permission denied for table …` while dumping `auth` | Role cannot read the auth schema | Use a role that can, or drop `--schema=auth` (accepting that auth data is then not backed up) |

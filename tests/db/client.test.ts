@@ -14,7 +14,7 @@ vi.mock("@/generated/prisma/client", () => ({
 }));
 
 import { PrismaPg } from "@prisma/adapter-pg";
-import { getPrismaClient, requirePrisma } from "@/lib/db/client";
+import { getPrismaClient, requirePrisma, resolvePoolMax } from "@/lib/db/client";
 
 const mockedPrismaPg = vi.mocked(PrismaPg);
 
@@ -91,6 +91,26 @@ describe("getPrismaClient", () => {
     const client2 = m2.getPrismaClient();
     expect(client2).toBe(client1);
     expect(mockedPrismaPg.mock.calls.length).toBe(callsBefore);
+  });
+});
+
+describe("resolvePoolMax", () => {
+  it("defaults to 1 in production (transaction pooler) and 5 elsewhere", () => {
+    expect(resolvePoolMax({ NODE_ENV: "production" })).toBe(1);
+    expect(resolvePoolMax({ NODE_ENV: "development" })).toBe(5);
+    expect(resolvePoolMax({ NODE_ENV: "test" })).toBe(5);
+    expect(resolvePoolMax({})).toBe(5);
+  });
+
+  it("honours a positive DB_POOL_MAX override", () => {
+    expect(resolvePoolMax({ DB_POOL_MAX: "3", NODE_ENV: "production" })).toBe(3);
+    expect(resolvePoolMax({ DB_POOL_MAX: " 7 ", NODE_ENV: "development" })).toBe(7);
+  });
+
+  it("ignores an invalid DB_POOL_MAX instead of building a broken pool", () => {
+    for (const value of ["", "0", "-2", "abc", "2.5", "3abc"]) {
+      expect(resolvePoolMax({ DB_POOL_MAX: value, NODE_ENV: "production" })).toBe(1);
+    }
   });
 });
 

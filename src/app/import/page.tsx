@@ -9,6 +9,7 @@ import { signOutAction } from "@/lib/auth/actions";
 import { listAccounts, listCategories, listImportHistory } from "@/lib/services";
 import { ImportWizard } from "@/components/import/import-wizard";
 import { ImportLoadError } from "@/components/import/import-load-error";
+import { retryImportLoad } from "@/lib/import/load-retry";
 import { reportHandledError } from "@/lib/observability/server-report";
 import { isNextControlFlowError } from "@/lib/utils/next-errors";
 
@@ -19,12 +20,15 @@ export const metadata: Metadata = {
 export default async function ImportPage() {
   // Resolve the session + business. A transient DB failure here must NOT be
   // treated as "signed out" (that would sign the user out on a blip) nor crash
-  // to the global error page: catch it, report it as handled, and render an
-  // inline retry. Next.js control-flow (redirect from onboarding) is rethrown.
+  // to the global error page: retry it once after a short delay, then catch it,
+  // report it as handled, and render an inline retry. Next.js control-flow
+  // (redirect from onboarding) is rethrown and never retried.
   let ctx: Awaited<ReturnType<typeof requireAuthContext>>;
   try {
-    await ensureOnboarding();
-    ctx = await requireAuthContext();
+    ctx = await retryImportLoad(async () => {
+      await ensureOnboarding();
+      return requireAuthContext();
+    });
   } catch (error) {
     if (isNextControlFlowError(error)) throw error;
     if (error instanceof AuthorizationError) redirect("/login");
@@ -36,11 +40,9 @@ export default async function ImportPage() {
   let categories: Awaited<ReturnType<typeof listCategories>>;
   let histories: Awaited<ReturnType<typeof listImportHistory>>;
   try {
-    [accounts, categories, histories] = await Promise.all([
-      listAccounts(),
-      listCategories(),
-      listImportHistory(20),
-    ]);
+    [accounts, categories, histories] = await retryImportLoad(() =>
+      Promise.all([listAccounts(), listCategories(), listImportHistory(20)]),
+    );
   } catch (error) {
     if (isNextControlFlowError(error)) throw error;
     reportHandledError("import.load.data", error);

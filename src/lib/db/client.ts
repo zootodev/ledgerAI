@@ -17,22 +17,54 @@ import { PrismaClient } from "@/generated/prisma/client";
 type PrismaGlobal = { prisma?: PrismaClient };
 const globalForPrisma = globalThis as unknown as PrismaGlobal;
 
-// pg Pool settings tuned for the Supabase PgBouncer session-mode pooler the
-// app connects to (pooler.supabase.com:5432). The primary P1017 trigger is the
-// pooler closing an established idle connection: with TCP keepalive enabled,
-// pg detects the dead socket at the transport layer and recycles the client,
-// instead of the first query after an idle gap writing to a reset socket
-// (ECONNRESET -> DriverAdapterError "ConnectionClosed"). maxUses rotates
-// long-lived connections so they are refreshed rather than left to decay.
-// connectionTimeoutMillis fails fast if the pooler is unreachable instead of
-// hanging the request. SSL is intentionally left to pg defaults (the URL has
-// no sslmode params; changing it risks breaking the current working link).
+// The app runtime connects through the Supabase TRANSACTION pooler
+// (pooler.supabase.com:6543). Transaction mode multiplexes many short-lived
+// serverless instances over a small server-side pool, so each instance only
+// needs a tiny client pool: default 1 in production, 5 in development. A
+// larger per-instance pool (as used with the session-mode pooler on :5432) is
+// what exhausted the pooler's session client limit (EMAXCONNSESSION).
+// DB_POOL_MAX overrides the default when an explicit value is needed.
+//
+// The primary P1017 trigger is still the pooler closing an established idle
+// connection: with TCP keepalive enabled, pg detects the dead socket at the
+// transport layer and recycles the client, instead of the first query after an
+// idle gap writing to a reset socket (ECONNRESET -> DriverAdapterError
+// "ConnectionClosed"). maxUses rotates long-lived connections so they are
+// refreshed rather than left to decay. connectionTimeoutMillis fails fast if
+// the pooler is unreachable instead of hanging the request. SSL is
+// intentionally left to pg defaults (the URL carries the sslmode parameters;
+// changing them here risks breaking the working link).
+const DEFAULT_POOL_MAX_PRODUCTION = 1;
+const DEFAULT_POOL_MAX_DEVELOPMENT = 5;
+
+export interface PoolEnv {
+  DB_POOL_MAX?: string;
+  NODE_ENV?: string;
+}
+
+/**
+ * Resolve the per-instance pg pool size. `DB_POOL_MAX` wins when it is a
+ * positive integer; otherwise production defaults to 1 (transaction pooler)
+ * and every other environment to 5. Invalid values are ignored rather than
+ * producing a zero/NaN pool.
+ */
+export function resolvePoolMax(env: PoolEnv = process.env): number {
+  const raw = env.DB_POOL_MAX?.trim();
+  if (raw) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed >= 1) return parsed;
+  }
+  return env.NODE_ENV === "production"
+    ? DEFAULT_POOL_MAX_PRODUCTION
+    : DEFAULT_POOL_MAX_DEVELOPMENT;
+}
+
 const PG_POOL_CONFIG = {
   keepAlive: true,
   keepAliveInitialDelayMillis: 30_000,
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
-  max: 5,
+  max: resolvePoolMax(),
   maxUses: 1_000,
   application_name: "ledgerai",
 } as const;

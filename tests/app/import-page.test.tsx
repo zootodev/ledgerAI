@@ -81,6 +81,21 @@ describe("ImportPage — resilient data loading", () => {
     expect(mocks.reportHandledError).not.toHaveBeenCalled();
   });
 
+  it("retries a transient data-load failure once, then renders the wizard", async () => {
+    mocks.listAccounts
+      .mockRejectedValueOnce({
+        message:
+          "(EMAXCONNSESSION) max clients reached in session mode - max clients are limited to pool_size: 15",
+      })
+      .mockResolvedValueOnce([]);
+
+    const html = renderToStaticMarkup(await ImportPage());
+
+    expect(html).toContain("WIZARD");
+    expect(mocks.listAccounts).toHaveBeenCalledTimes(2);
+    expect(mocks.reportHandledError).not.toHaveBeenCalled();
+  });
+
   it("renders an inline retry (not the global error page) when a lookup fails", async () => {
     const error = new Error("connection pool exhausted");
     mocks.listAccounts.mockRejectedValue(error);

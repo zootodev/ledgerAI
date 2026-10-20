@@ -74,17 +74,21 @@ jobs:
           echo "/usr/lib/postgresql/${PG_CLIENT_MAJOR}/bin" >> "$GITHUB_PATH"
           "/usr/lib/postgresql/${PG_CLIENT_MAJOR}/bin/pg_dump" --version
 
+      # DIRECT_URL is the session pooler (port 5432) or direct connection — the
+      # same value the app uses for `prisma migrate`/`db`. pg_dump must NEVER
+      # use the transaction pooler (port 6543): it rejects the session-level
+      # features pg_dump needs.
       - name: Check the client matches the server
         env:
-          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: |
           set -euo pipefail
-          if [ -z "${BACKUP_DATABASE_URL:-}" ]; then
-            echo "::error::The BACKUP_DATABASE_URL secret is not set. See docs/BACKUPS.md."
+          if [ -z "${DIRECT_URL:-}" ]; then
+            echo "::error::The DIRECT_URL secret is not set. See docs/BACKUPS.md."
             exit 1
           fi
           # The URL is used, never printed.
-          server_version="$(psql --no-password -At -c "select current_setting('server_version')" "$BACKUP_DATABASE_URL")"
+          server_version="$(psql --no-password -At -c "select current_setting('server_version')" "$DIRECT_URL")"
           server_major="${server_version%%.*}"
           client_major="$(pg_dump --version | sed -E 's/^.* ([0-9]+)\..*$/\1/')"
           echo "server PostgreSQL ${server_version}, pg_dump (PostgreSQL) ${client_major}"
@@ -95,14 +99,14 @@ jobs:
 
       - name: Dump the database
         env:
-          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: |
           set -euo pipefail
           # public = the application's Prisma schema and RLS policies,
           # auth = Supabase's user/identity tables. No roles: pg_dump never
           # dumps cluster roles (that is pg_dumpall), and --no-owner
           # --no-privileges keeps ownership/ACL statements out as well.
-          pg_dump "$BACKUP_DATABASE_URL" \
+          pg_dump "$DIRECT_URL" \
             --format=custom \
             --no-owner \
             --no-privileges \
@@ -113,12 +117,12 @@ jobs:
 
       - name: Write a schema-only SQL reference file
         env:
-          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: |
           set -euo pipefail
           # Plain text, roles-free, for eyeballing/review. It is deleted with
           # the dump below and never uploaded.
-          pg_dump "$BACKUP_DATABASE_URL" \
+          pg_dump "$DIRECT_URL" \
             --schema-only \
             --no-owner \
             --no-privileges \

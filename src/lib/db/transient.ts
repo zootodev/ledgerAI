@@ -10,13 +10,14 @@
 // is never masked or retried.
 // ============================================================
 
-/** Prisma error codes that mean "the connection failed", not "the query is wrong". */
-const TRANSIENT_PRISMA_CODES = new Set([
+/** Driver/pooler codes that mean "the connection failed", not "the query is wrong". */
+const TRANSIENT_ERROR_CODES = new Set([
   "P1001", // Can't reach the database server
   "P1002", // Connection timed out
   "P1008", // Operation timed out
   "P1017", // Server has closed the connection
   "P2024", // Timed out fetching a connection from the pool
+  "EMAXCONNSESSION", // Supabase pooler: session-mode client limit reached
 ]);
 
 /** Lower-cased substrings that indicate a dropped connection or a pool timeout. */
@@ -34,6 +35,9 @@ const TRANSIENT_MESSAGE_HINTS = [
   "connection terminated",
   "driveradaptererror",
   "connectionclosed",
+  "emaxconnsession",
+  "max clients reached",
+  "too many clients",
 ];
 
 /** Collect the lower-cased messages from an error and its cause/error chain. */
@@ -54,7 +58,7 @@ export function isTransientPrismaError(error: unknown): boolean {
   if (error === null || typeof error !== "object") return false;
 
   const code = (error as { code?: unknown }).code;
-  if (typeof code === "string" && TRANSIENT_PRISMA_CODES.has(code.toUpperCase())) {
+  if (typeof code === "string" && TRANSIENT_ERROR_CODES.has(code.toUpperCase())) {
     return true;
   }
 

@@ -8,9 +8,11 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    // Use process.env directly (not the env() helper) so commands like
-    // `prisma generate` / typecheck work even before a real DATABASE_URL is
-    // configured. Live DB operations require DATABASE_URL to be set.
-    url: process.env.DATABASE_URL ?? "",
+    // Migrations and CLI commands need a session or direct connection, so
+    // prefer DIRECT_URL. The app runtime uses DATABASE_URL (the transaction
+    // pooler) and never reads this config. Use process.env directly (not the
+    // env() helper) so commands like `prisma generate` / typecheck work even
+    // before the variables are configured; live DB operations require one.
+    url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "",
   },
 });

@@ -18,6 +18,13 @@ describe("isTransientPrismaError", () => {
     expect(isTransientPrismaError(new Error("connect ETIMEDOUT 1.2.3.4:5432"))).toBe(true);
   });
 
+  it("recognises Supabase session-pool exhaustion (EMAXCONNSESSION)", () => {
+    const message =
+      "(EMAXCONNSESSION) max clients reached in session mode - max clients are limited to pool_size: 15";
+    expect(isTransientPrismaError(new Error(message))).toBe(true);
+    expect(isTransientPrismaError({ code: "EMAXCONNSESSION" })).toBe(true);
+  });
+
   it("looks through an error cause chain (driver adapter)", () => {
     const wrapped = { message: "DriverAdapterError", cause: { code: "P1017" } };
     expect(isTransientPrismaError(wrapped)).toBe(true);
