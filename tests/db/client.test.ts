@@ -60,6 +60,10 @@ describe("getPrismaClient", () => {
 
     expect(typeof options.onPoolError).toBe("function");
     expect(typeof options.onConnectionError).toBe("function");
+    // Transaction-pooler requirement: without a statement-name generator the
+    // adapter issues unnamed statements, which PgBouncer transaction mode
+    // supports. Setting one would break on port 6543.
+    expect(options.statementNameGenerator).toBeUndefined();
   });
 
   it("passes the adapter produced by PrismaPg into the PrismaClient", () => {

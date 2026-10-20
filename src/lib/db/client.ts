@@ -59,6 +59,13 @@ export function resolvePoolMax(env: PoolEnv = process.env): number {
     : DEFAULT_POOL_MAX_DEVELOPMENT;
 }
 
+// Transaction-pooler compatibility: PgBouncer's transaction mode cannot keep
+// named prepared statements across queries. @prisma/adapter-pg only names a
+// statement when `statementNameGenerator` is configured, so leaving it unset
+// (as here) makes every query an unnamed statement — exactly what the
+// transaction pooler requires. Do NOT set statementNameGenerator while
+// DATABASE_URL points at :6543. Prisma interactive transactions remain safe:
+// the pooler pins one server connection for the whole BEGIN..COMMIT.
 const PG_POOL_CONFIG = {
   keepAlive: true,
   keepAliveInitialDelayMillis: 30_000,

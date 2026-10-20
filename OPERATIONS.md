@@ -57,6 +57,12 @@ code deliberately logs only messages/digests/ids.
 - **`pg_dump` must never use port 6543.** The transaction pooler rejects the
   session-level features it needs; the backup workflow therefore reads
   `DIRECT_URL` from GitHub Actions secrets.
+- **Prisma + `@prisma/adapter-pg` is transaction-pooler compatible.** The
+  adapter uses unnamed statements unless `statementNameGenerator` is set, so it
+  does not rely on session-level prepared statements. Do not configure a
+  statement-name generator while `DATABASE_URL` is on `:6543`. Interactive
+  `$transaction` blocks are fine: the pooler pins one server connection from
+  `BEGIN` to `COMMIT`.
 
 - **Engine:** Supabase-managed Postgres (the app accesses it through the
   transaction pooler in `src/lib/db/client.ts`).
