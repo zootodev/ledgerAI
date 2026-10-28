@@ -13,11 +13,18 @@
 import { chromium, devices, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const DEFAULT_BASE_URL = "https://ledgerai-zootodev.vercel.app";
 const AUTH_STATE_PATH = path.resolve(process.cwd(), ".auth/state.json");
 const SHOTS_DIR = path.resolve(process.cwd(), "mobile-shots");
+
+// Passed to page.evaluate() as source. It must stay outside the TypeScript
+// bundle: esbuild's keepNames helper (__name) is not available in the page.
+const OVERFLOW_CHECK_SOURCE = readFileSync(
+  path.join(process.cwd(), "scripts", "overflow-check.js"),
+  "utf8",
+);
 
 /** Main public + authenticated pages. There is no admin surface in this app. */
 const ROUTES = [
@@ -77,10 +84,25 @@ interface Overflow {
 interface CardOverflow {
   device: string;
   route: string;
-  card: string;
+  kind?: "viewport" | "container";
   element: string;
-  cardRight: number;
-  elementRight: number;
+  selectorPath?: string;
+  text?: string;
+  overflowPx?: number;
+  container?: string;
+  containerRight?: number;
+  elementRight?: number;
+}
+
+interface OverflowHit {
+  kind: "viewport" | "container";
+  selectorPath: string;
+  element: string;
+  text: string;
+  overflowPx: number;
+  container?: string;
+  containerRight?: number;
+  elementRight?: number;
 }
 
 interface Failure {
@@ -103,12 +125,33 @@ function normalizeBaseUrl(value: string): string {
 }
 
 async function settle(page: Page): Promise<void> {
-  await page.waitForLoadState("load").catch(() => undefined);
+  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() =>
+    page.waitForLoadState("load").catch(() => undefined),
+  );
   await page.evaluate(async () => {
     await document.fonts.ready;
   }).catch(() => undefined);
   // Let client-side charts, skeletons and the range control finish swapping in.
-  await page.waitForTimeout(750);
+  await page.waitForTimeout(1500);
+  // Wait for skeletons/placeholders to disappear if present
+  await page
+    .waitForFunction(
+      () => {
+        const skeletons = document.querySelectorAll(
+          '.animate-pulse, [data-skeleton], .skeleton',
+        );
+        if (skeletons.length === 0) return true;
+        for (const el of Array.from(skeletons)) {
+          const style = window.getComputedStyle(el as Element);
+          if (style.display !== 'none' && style.visibility !== 'hidden') {
+            return false;
+          }
+        }
+        return true;
+      },
+      { timeout: 20_000 },
+    )
+    .catch(() => undefined);
 }
 
 async function measureOverflow(page: Page): Promise<{ scrollWidth: number; innerWidth: number }> {
@@ -118,76 +161,22 @@ async function measureOverflow(page: Page): Promise<{ scrollWidth: number; inner
   }));
 }
 
-async function measureCardOverflows(page: Page): Promise<
-  Array<{
-    card: string;
-    element: string;
-    cardRight: number;
-    elementRight: number;
-  }>
-> {
-  return page.evaluate(() => {
-    const describe = (el: Element): string => {
-      const tag = el.tagName.toLowerCase();
-      const cls = typeof el.className === "string" ? el.className : "";
-      const parts = cls.split(/\s+/).filter(Boolean).slice(0, 4);
-      const text = (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
-      return `${tag}${parts.length ? "." + parts.join(".") : ""}${text ? ` "${text}"` : ""}`;
-    };
+async function measureOverflows(page: Page): Promise<OverflowHit[]> {
+  return (await page.evaluate(OVERFLOW_CHECK_SOURCE)) as OverflowHit[];
+}
 
-    const hasScrollableAncestor = (el: Element, boundary: Element): boolean => {
-      let p: Element | null = el.parentElement;
-      while (p && p !== boundary) {
-        const style = window.getComputedStyle(p);
-        if (/(auto|scroll)/.test(style.overflowX)) return true;
-        p = p.parentElement;
-      }
-      return false;
-    };
-
-    const results: Array<{
-      card: string;
-      element: string;
-      cardRight: number;
-      elementRight: number;
-    }> = [];
-    const seen = new Set<string>();
-    const cards = Array.from(document.querySelectorAll('[class*="rounded-card"]'));
-
-    for (const card of cards) {
-      const cardEl = card as HTMLElement;
-      if (cardEl.offsetWidth === 0 || cardEl.offsetHeight === 0) continue;
-      const cardStyle = window.getComputedStyle(cardEl);
-      if (cardStyle.display === "none" || cardStyle.visibility === "hidden") continue;
-
-      const cardRect = cardEl.getBoundingClientRect();
-      const descendants = cardEl.querySelectorAll("*");
-      for (const node of Array.from(descendants)) {
-        if (!(node instanceof HTMLElement)) continue;
-        if (node.offsetWidth === 0 || node.offsetHeight === 0) continue;
-        const style = window.getComputedStyle(node);
-        if (style.display === "none" || style.visibility === "hidden") continue;
-        if (style.position === "fixed") continue;
-
-        const rect = node.getBoundingClientRect();
-        if (rect.right <= cardRect.right + 1) continue;
-        if (hasScrollableAncestor(node, cardEl)) continue;
-
-        const key = `${describe(card)}|${describe(node)}|${Math.round(rect.right)}|${Math.round(cardRect.right)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        results.push({
-          card: describe(cardEl),
-          element: describe(node),
-          cardRight: Math.round(cardRect.right),
-          elementRight: Math.round(rect.right),
-        });
-      }
-    }
-
-    return results;
-  });
+function recordOverflowHits(
+  device: string,
+  route: string,
+  issues: OverflowHit[],
+  target: CardOverflow[],
+): void {
+  for (const issue of issues) {
+    target.push({ device, route, ...issue });
+    console.warn(
+      `[${issue.kind}-overflow] ${device} ${route}: ${issue.selectorPath} "${issue.text}" | ${issue.element} overflows by ${Math.round(issue.overflowPx)}px (container:${issue.container ?? "?"})`,
+    );
+  }
 }
 
 async function captureMenu(
@@ -225,6 +214,77 @@ async function captureMenu(
     const message = error instanceof Error ? error.message : String(error);
     failures.push({ device: label, route: "mobile nav", message });
     console.error(`[nav] ${label}: failed — ${message}`);
+  }
+}
+
+async function captureSettingsTabs(
+  page: Page,
+  baseUrl: string,
+  deviceDir: string,
+  deviceLabel: string,
+  cardOverflows: CardOverflow[],
+  failures: Failure[],
+): Promise<void> {
+  if (!existsSync(AUTH_STATE_PATH)) return;
+  const tabs = ["profile", "business", "accounts", "categories", "rules", "security", "account"] as const;
+  const tabLabels: Record<(typeof tabs)[number], string> = {
+    profile: "Profile",
+    business: "Business",
+    accounts: "Accounts",
+    categories: "Categories",
+    rules: "Rules",
+    security: "Security",
+    account: "Account",
+  };
+
+  try {
+    await page.goto(`${baseUrl}/settings/profile`, { waitUntil: "load", timeout: 45_000 });
+    await settle(page);
+    if (new URL(page.url()).pathname === "/login") {
+      console.warn(`[auth] ${deviceLabel} settings: session expired; re-run npm run shots:auth`);
+      return;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    failures.push({ device: deviceLabel, route: "settings", message });
+    console.error(`✗ ${deviceLabel} settings: ${message}`);
+    return;
+  }
+
+  for (const tab of tabs) {
+    const route = `settings/${tab}`;
+    try {
+      if (tab !== "profile") {
+        // Click through the real tab row (exercises client navigation and the
+        // active-tab scroll-into-view behavior) instead of only deep-linking.
+        await page.getByRole("tab", { name: tabLabels[tab], exact: true }).click();
+        await page
+          .waitForURL((url) => url.pathname === `/settings/${tab}`, { timeout: 20_000 })
+          .catch(() => undefined);
+        await settle(page);
+      }
+
+      // Fall back to a direct load if client navigation did not land.
+      if (new URL(page.url()).pathname !== `/settings/${tab}`) {
+        await page.goto(`${baseUrl}/settings/${tab}`, {
+          waitUntil: "load",
+          timeout: 45_000,
+        });
+        await settle(page);
+      }
+      if (new URL(page.url()).pathname === "/login") break;
+
+      const file = path.join(SHOTS_DIR, deviceDir, `settings-${tab}.png`);
+      await page.screenshot({ path: file, fullPage: true, animations: "disabled" });
+
+      const overflowIssues = await measureOverflows(page);
+      recordOverflowHits(deviceLabel, route, overflowIssues, cardOverflows);
+      console.log(`✓ ${deviceLabel} ${route} -> ${path.relative(process.cwd(), file)}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push({ device: deviceLabel, route, message });
+      console.error(`✗ ${deviceLabel} ${route}: ${message}`);
+    }
   }
 }
 
@@ -270,13 +330,8 @@ async function captureDevice(
           );
         }
 
-        const cardIssues = await measureCardOverflows(page).catch(() => []);
-        for (const issue of cardIssues) {
-          cardOverflows.push({ device: device.label, route, ...issue });
-          console.warn(
-            `[card-overflow] ${device.label} ${route}: ${issue.element} (${issue.elementRight}px) > card ${issue.card} (${issue.cardRight}px)`,
-          );
-        }
+        const overflowIssues = await measureOverflows(page);
+        recordOverflowHits(device.label, route, overflowIssues, cardOverflows);
 
         const status = response?.status() ?? "no response";
         console.log(`✓ ${device.label} ${route} (${status}) -> ${path.relative(process.cwd(), file)}`);
@@ -288,6 +343,7 @@ async function captureDevice(
     }
 
     await captureMenu(page, baseUrl, device.dir, failures, device.label);
+    await captureSettingsTabs(page, baseUrl, device.dir, device.label, cardOverflows, failures);
   } finally {
     await context.close();
   }
@@ -331,14 +387,17 @@ async function main(): Promise<void> {
   }
 
   if (cardOverflows.length > 0) {
-    console.log("\nElements overflowing their card:");
+    console.log("\nOverflow hits:");
     for (const item of cardOverflows) {
+      const overflowPx =
+        item.overflowPx ??
+        ((item.elementRight ?? 0) - (item.containerRight ?? 0));
       console.log(
-        `- ${item.device} ${item.route}: ${item.element} (${item.elementRight}px) > ${item.card} (${item.cardRight}px)`,
+        `- ${item.device}, ${item.route}, ${item.selectorPath ?? item.element}, "${item.text ?? ""}", ${Math.round(overflowPx)}px (kind=${item.kind ?? "container"}, container=${item.container ?? "?"})`,
       );
     }
   } else {
-    console.log("\nCard overflow: none detected.");
+    console.log("\nContainer overflow: none detected.");
   }
 
   if (failures.length > 0) {
