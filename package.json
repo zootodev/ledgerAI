@@ -21,7 +21,9 @@
   },
   "overrides": {
     "brace-expansion@1.1.18": "1.1.21",
-    "brace-expansion@5.0.9": "5.0.12"
+    "brace-expansion@5.0.9": "5.0.12",
+    "fast-uri": "3.1.9",
+    "vite": "8.3.5"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.11",
@@ -36,14 +38,14 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.38.0",
-    "next": "16.3.8",
+    "next": "16.4.3",
     "papaparse": "^5.7.0",
     "pdf-parse": "^2.4.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "recharts": "^3.10.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-    "zod": "^4.5.4",
+    "zod": "^4.6.7",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -56,7 +58,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "dotenv": "^17.4.2",
     "eslint": "^9",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.3",
     "prisma": "^7.10.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
