@@ -3,6 +3,11 @@ import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { getCurrentUser } from "@/lib/auth/server";
 import { isAal2RequiredError } from "@/lib/auth/mfa";
 import { getPrismaClient } from "@/lib/db/client";
+import {
+  getPrimaryBusiness,
+  seedPrimaryBusiness,
+  type PrimaryBusiness,
+} from "@/lib/services/auth-context";
 import { redirect } from "next/navigation";
 import { profileUpdateSchema } from "@/lib/validation/index";
 import { zErrorMessage } from "@/lib/validation/index";
@@ -342,17 +347,31 @@ export async function createInitialBusiness(input: {
   currency?: string;
   size?: string | null;
 }) {
+  return (await findOrCreateInitialBusiness(input)).id;
+}
+
+/**
+ * Resolve (or create) the user's first business and prime the request cache.
+ * Returned as a full row so onboarding can gate on `type` without a second
+ * read.
+ */
+async function findOrCreateInitialBusiness(input: {
+  userId: string;
+  name: string;
+  type?: string | null;
+  country?: string;
+  currency?: string;
+  size?: string | null;
+}): Promise<PrimaryBusiness> {
+  // Request-scoped: ensureOnboarding and the first auth context in the same
+  // request share this one lookup.
+  const existing = await getPrimaryBusiness(input.userId);
+  if (existing) return existing;
+
   const prisma = getPrismaClient();
   if (!prisma) throw new Error("DATABASE_URL is not configured.");
 
-  const existing = await prisma.business.findFirst({
-    where: { userId: input.userId },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (existing) return existing.id;
-
-  const business = await prisma.business.create({
+  const business: PrimaryBusiness = await prisma.business.create({
     data: {
       userId: input.userId,
       name: input.name,
@@ -361,9 +380,10 @@ export async function createInitialBusiness(input: {
       currency: input.currency ?? "NGN",
       size: input.size ?? null,
     },
-    select: { id: true },
+    select: { id: true, name: true, currency: true, type: true },
   });
-  return business.id;
+  await seedPrimaryBusiness(input.userId, business);
+  return business;
 }
 
 export interface EnsureOnboardingOptions {
@@ -395,11 +415,9 @@ export async function ensureOnboarding(
 
   await syncUserProfile(user.id, user.email, user.name);
   const businessName = user.name?.split(/\s+/).filter(Boolean)[0] || "My business";
-  await createInitialBusiness({ userId: user.id, name: businessName });
+  const business = await findOrCreateInitialBusiness({ userId: user.id, name: businessName });
 
-  if (bounce) {
-    if ((await oldestBusinessType(user.id)) === null) redirect("/onboarding");
-  }
+  if (bounce && business.type === null) redirect("/onboarding");
 
   return { id: user.id, email: user.email };
 }

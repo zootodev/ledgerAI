@@ -54,8 +54,8 @@ const userB = {
   name: "User B",
 };
 
-const businessA = { id: "biz-a", name: "A Ltd", currency: "GBP" };
-const businessB = { id: "biz-b", name: "B Ltd", currency: "USD" };
+const businessA = { id: "biz-a", name: "A Ltd", currency: "GBP", type: "Retail" };
+const businessB = { id: "biz-b", name: "B Ltd", currency: "USD", type: "Retail" };
 
 // Real UUID shapes so id-boundary validation accepts them.
 const UUID_OWNED = "11111111-1111-4111-8111-111111111111";
@@ -155,7 +155,7 @@ describe("requireAuthContext (session -> tenant resolution)", () => {
     expect(mockPrisma.business.findFirst).toHaveBeenCalledWith({
       where: { userId: userA.id },
       orderBy: { createdAt: "asc" },
-      select: { id: true, name: true, currency: true },
+      select: { id: true, name: true, currency: true, type: true },
     });
   });
 

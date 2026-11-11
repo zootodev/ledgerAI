@@ -17,6 +17,13 @@ const prismaMock = {
   business: { findFirst: vi.fn(), create: vi.fn() },
 };
 
+const business = {
+  id: "biz-1",
+  name: "Ada",
+  currency: "NGN",
+  type: "Retail",
+};
+
 function signInUser() {
   vi.mocked(getCurrentUser).mockResolvedValue({
     id: "user-1",
@@ -30,8 +37,8 @@ beforeEach(() => {
   vi.mocked(getPrismaClient).mockReturnValue(prismaMock as never);
   signInUser();
   prismaMock.user.upsert.mockResolvedValue({ id: "user-1" });
-  prismaMock.business.findFirst.mockResolvedValue({ id: "biz-1", type: null });
-  prismaMock.business.create.mockResolvedValue({ id: "biz-1" });
+  prismaMock.business.findFirst.mockResolvedValue({ ...business, type: null });
+  prismaMock.business.create.mockResolvedValue(business);
 });
 
 describe("ensureOnboarding (onboarding gate)", () => {
@@ -49,6 +56,7 @@ describe("ensureOnboarding (onboarding gate)", () => {
     const result = await ensureOnboarding();
 
     expect(prismaMock.user.upsert).toHaveBeenCalledTimes(1);
+    expect(prismaMock.business.findFirst).toHaveBeenCalledTimes(1);
     // First business name comes from the user's first name.
     expect(prismaMock.business.create).not.toHaveBeenCalled(); // existing business → lookup only
     expect(redirectMock).toHaveBeenCalledWith("/onboarding");
@@ -56,13 +64,11 @@ describe("ensureOnboarding (onboarding gate)", () => {
   });
 
   it("creates the first business from the user's first name when none exists", async () => {
-    prismaMock.business.findFirst
-      .mockResolvedValueOnce(null) // createInitialBusiness: no existing business
-      .mockResolvedValueOnce({ id: "biz-1", type: null }); // gate: type still unset
-    prismaMock.business.create.mockResolvedValue({ id: "biz-1" });
+    prismaMock.business.findFirst.mockResolvedValueOnce(null);
 
     await ensureOnboarding();
 
+    expect(prismaMock.business.findFirst).toHaveBeenCalledTimes(1);
     expect(prismaMock.business.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ name: "Ada" }),
