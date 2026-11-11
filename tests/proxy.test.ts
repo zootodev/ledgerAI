@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
   getUser: vi.fn(),
   getSession: vi.fn(),
+  getClaims: vi.fn(),
+  signOut: vi.fn(),
   createServerClient: vi.fn(),
 }));
 
@@ -56,6 +58,7 @@ function requestFor(pathname: string) {
     nextUrl: nextUrlFor(pathname),
     cookies: {
       getAll: () => [] as { name: string; value: string }[],
+      get: () => undefined,
       set: vi.fn(),
     },
   } as never;
@@ -71,6 +74,8 @@ beforeEach(() => {
   }));
   mocks.getUser.mockResolvedValue({ data: { user: null } });
   mocks.getSession.mockResolvedValue({ data: { session: null } });
+  mocks.getClaims.mockResolvedValue({ data: null, error: null });
+  mocks.signOut.mockResolvedValue({ error: null });
   mocks.createServerClient.mockImplementation(
     (
       _url: string,
@@ -78,7 +83,14 @@ beforeEach(() => {
       options: { cookies?: { setAll?: (pairs: CookiePair[]) => void } },
     ) => {
       capturedSetAll = options?.cookies?.setAll;
-      return { auth: { getUser: mocks.getUser, getSession: mocks.getSession } };
+      return {
+        auth: {
+          getUser: mocks.getUser,
+          getSession: mocks.getSession,
+          getClaims: mocks.getClaims,
+          signOut: mocks.signOut,
+        },
+      };
     },
   );
 });
@@ -86,6 +98,9 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_SUPABASE_URL;
   delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  delete process.env.SESSION_MAX_AGE_DAYS;
+  delete process.env.SESSION_IDLE_HOURS;
+  delete process.env.SESSION_COOKIE_SECRET;
   vi.clearAllMocks();
 });
 

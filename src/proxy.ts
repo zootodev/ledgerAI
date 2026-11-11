@@ -6,6 +6,17 @@ import {
   needsMfaStepUp,
   readAalFromAccessToken,
 } from "@/lib/auth/mfa";
+import {
+  earliestAmrTimestampMs,
+  LAST_SEEN_COOKIE,
+  lastSeenCookieOptions,
+  resolveSessionLimits,
+  sessionExpiryReason,
+  shouldRefreshLastSeen,
+  signLastSeen,
+  verifyLastSeen,
+  type SessionExpiryReason,
+} from "@/lib/auth/session-limits";
 
 // Public routes are reachable without a session. Everything else under the
 // app area requires an authenticated user. /auth/callback and /auth/confirm
@@ -152,6 +163,69 @@ function applySecurityHeaders(response: NextResponse, nonce: string): void {
   }
 }
 
+/**
+ * Clear the Supabase session cookies and the last-seen cookie on an expiry
+ * redirect. `signOut()` normally does this through the SSR cookie adapter, but
+ * a redirect response is created separately below, so clear explicitly to be
+ * certain nothing survives the trip to /login.
+ */
+function clearAuthCookies(response: NextResponse, request: NextRequest): void {
+  const secure = process.env.NODE_ENV === "production";
+  const names = new Set<string>([LAST_SEEN_COOKIE]);
+
+  for (const { name } of request.cookies.getAll()) {
+    if (name.startsWith("sb-")) names.add(name);
+  }
+
+  for (const name of names) {
+    response.cookies.set(name, "", {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure,
+      maxAge: 0,
+    });
+  }
+}
+
+/**
+ * Revoke the current Supabase session (not just the browser cookies) and send
+ * the user back to the sign-in screen with an explanatory reason.
+ */
+async function expireSession(
+  supabase: ReturnType<typeof createServerClient>,
+  request: NextRequest,
+  nonce: string,
+  reason: SessionExpiryReason,
+): Promise<NextResponse> {
+  try {
+    // Local scope: an idle/absolute expiry on this device must not revoke the
+    // user's other devices. "Sign out of all devices" uses global scope.
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) {
+      console.error("[proxy] session expiry: revoking session failed", {
+        reason,
+        error: error.message,
+      });
+    }
+  } catch (error) {
+    console.error("[proxy] session expiry: revoking session threw", {
+      reason,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const url = request.nextUrl.clone();
+  url.pathname = "/login";
+  url.search = "";
+  url.searchParams.set("reason", "session_expired");
+
+  const redirect = NextResponse.redirect(url);
+  clearAuthCookies(redirect, request);
+  applySecurityHeaders(redirect, nonce);
+  return redirect;
+}
+
 export async function proxy(request: NextRequest) {
   // Health probe fast-path: answer with security headers and no Supabase auth
   // round-trip, so an uptime monitor gets a truthful signal about *this* app
@@ -197,6 +271,50 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isPublic = isPublicPath(path);
+  const limits = resolveSessionLimits();
+  let lastSeenRefreshAt: number | null = null;
+
+  // Enforce the app-level session lifetime on authenticated app routes. Public
+  // pages are deliberately skipped so they keep working for signed-out and
+  // expired visitors; /login and /signup are checked too, otherwise an expired
+  // session would first be redirected to /overview and only then back here.
+  if (user && (!isPublic || path === "/login" || path === "/signup")) {
+    let signedInAt: number | null = null;
+    try {
+      const { data: claimsData, error } = await supabase.auth.getClaims();
+      if (!error) {
+        signedInAt = earliestAmrTimestampMs(claimsData?.claims ?? null);
+      }
+    } catch {
+      // `getUser()` already authenticated this request. A claims/JWKS hiccup
+      // must not sign everyone out; the idle limit below still applies.
+    }
+
+    const now = Date.now();
+    let lastSeenAt: number | null = null;
+
+    if (limits.secret) {
+      const cookieValue = request.cookies.get(LAST_SEEN_COOKIE)?.value;
+      lastSeenAt = cookieValue
+        ? await verifyLastSeen(limits.secret, user.id, cookieValue)
+        : null;
+
+      if (lastSeenAt === null) {
+        // Missing/tampered cookies count as activity now, once. The freshly
+        // written cookie is enforced from the next request onward.
+        lastSeenAt = now;
+        lastSeenRefreshAt = now;
+      } else if (shouldRefreshLastSeen(lastSeenAt, now)) {
+        // Refresh at most every five minutes, not on every request.
+        lastSeenRefreshAt = now;
+      }
+    }
+
+    const expiry = sessionExpiryReason({ now, signedInAt, lastSeenAt, limits });
+    if (expiry) {
+      return expireSession(supabase, request, nonce, expiry);
+    }
+  }
 
   // 2FA step-up: a session whose account has a verified factor must reach
   // aal2 before it can touch any protected surface. Only sessions that
@@ -241,6 +359,18 @@ export async function proxy(request: NextRequest) {
     const redirect = NextResponse.redirect(url);
     applySecurityHeaders(redirect, nonce);
     return redirect;
+  }
+
+  if (lastSeenRefreshAt !== null && user && limits.secret) {
+    const value = await signLastSeen(limits.secret, user.id, lastSeenRefreshAt);
+    response.cookies.set(
+      LAST_SEEN_COOKIE,
+      value,
+      lastSeenCookieOptions(
+        limits.maxAgeMs,
+        process.env.NODE_ENV === "production",
+      ),
+    );
   }
 
   applySecurityHeaders(response, nonce);

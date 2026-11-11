@@ -99,6 +99,13 @@ describe("login page", () => {
     expect(html).toContain("Email sign-in isn&#x27;t available right now");
   });
 
+  it("explains a session-expired sign-out", async () => {
+    const html = await render(undefined, { reason: "session_expired" });
+
+    expect(html).toContain("Signed out for security");
+    expect(html).toContain("You were signed out for security. Please sign in again.");
+  });
+
   it("never echoes unknown or raw error values", async () => {
     const html = await render("exchange invalid_grant: raw provider text");
 

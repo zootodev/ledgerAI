@@ -14,6 +14,8 @@ export interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   pending?: boolean;
+  /** Extra warning shown in the dialog body. Defaults to the destructive-action copy. */
+  notice?: React.ReactNode;
 }
 
 /** Generic destructive/blocking action confirmation dialog. */
@@ -26,6 +28,7 @@ export function ConfirmDialog({
   confirmLabel = "Delete",
   cancelLabel = "Cancel",
   pending = false,
+  notice,
 }: ConfirmDialogProps) {
   return (
     <Modal
@@ -50,8 +53,12 @@ export function ConfirmDialog({
       }
     >
       <Alert tone="danger">
-        This action cannot be undone. Make sure you&apos;re deleting the right
-        record before continuing.
+        {notice ?? (
+          <>
+            This action cannot be undone. Make sure you&apos;re deleting the
+            right record before continuing.
+          </>
+        )}
       </Alert>
     </Modal>
   );

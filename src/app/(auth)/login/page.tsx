@@ -61,16 +61,22 @@ export default async function LoginPage({
   const user = await getCurrentUser();
   if (user) redirect("/overview");
 
-  const { error, type } = await searchParams;
+  const { error, reason, type } = await searchParams;
   const callbackError =
     typeof error === "string" ? CALLBACK_ERRORS[error] : undefined;
   const action =
     typeof error === "string"
       ? errorAction(error, typeof type === "string" ? type : undefined)
       : undefined;
+  const sessionExpired = reason === "session_expired";
 
   return (
     <>
+      {sessionExpired && (
+        <Alert tone="info" title="Signed out for security" className="mb-6">
+          <p>You were signed out for security. Please sign in again.</p>
+        </Alert>
+      )}
       {callbackError && (
         <Alert tone="danger" title={callbackError.title} className="mb-6">
           <p>{callbackError.message}</p>

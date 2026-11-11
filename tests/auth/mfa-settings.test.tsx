@@ -63,8 +63,13 @@ describe("SecuritySettings", () => {
     expect(out).toMatch(/autocomplete="one-time-code"/i);
   });
 
-  it("offers a sign-out-of-all-devices control", () => {
+  it("offers a sign-out-of-all-devices control behind a confirmation step", () => {
     const out = html(<SecuritySettings mfaEnabled={false} />);
     expect(visible(out)).toContain("Sign out of all devices");
+
+    const control = out.match(
+      /<button[^>]*>[\s\S]*?Sign out of all devices[\s\S]*?<\/button>/,
+    )?.[0];
+    expect(control).toContain('type="button"');
   });
 });

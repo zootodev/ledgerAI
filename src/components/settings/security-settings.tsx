@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   confirmMfaAction,
   disableMfaAction,
@@ -52,8 +53,16 @@ export function SecuritySettings({ mfaEnabled, factorName }: SecuritySettingsPro
     disableMfaAction,
     initialForm,
   );
+  const [confirmSignOutOpen, setConfirmSignOutOpen] = React.useState(false);
+  const [signOutPending, startSignOut] = React.useTransition();
 
   const enrolling = Boolean(enrollState.qrCode);
+
+  const signOutEverywhere = () => {
+    startSignOut(async () => {
+      await signOutEverywhereAction();
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -190,13 +199,28 @@ export function SecuritySettings({ mfaEnabled, factorName }: SecuritySettingsPro
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={signOutEverywhereAction}>
-            <Button type="submit" variant="outline">
-              Sign out of all devices
-            </Button>
-          </form>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setConfirmSignOutOpen(true)}
+          >
+            Sign out of all devices
+          </Button>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmSignOutOpen}
+        onClose={() => {
+          if (!signOutPending) setConfirmSignOutOpen(false);
+        }}
+        onConfirm={signOutEverywhere}
+        pending={signOutPending}
+        title="Sign out of all devices?"
+        description="This revokes every active session for your account."
+        confirmLabel="Sign out everywhere"
+        notice="Every device will be signed out, including this one. You'll need to sign in again."
+      />
     </div>
   );
 }
