@@ -1,4 +1,4 @@
-import { requireAuthContext } from "@/lib/services/auth-context";
+import { requireAuthContext, seedPrimaryBusiness } from "@/lib/services/auth-context";
 import { businessUpdateSchema } from "@/lib/validation/business";
 import { zErrorMessage } from "@/lib/validation/index";
 import type { BusinessModel } from "@/generated/prisma/models/Business";
@@ -49,7 +49,7 @@ export async function updateBusiness(input: UpdateBusinessInput): Promise<Busine
     throw new Error(zErrorMessage(parsed.error));
   }
 
-  const { prisma, business } = await requireAuthContext();
+  const { prisma, user, business } = await requireAuthContext();
   const updated = await prisma.business.update({
     where: { id: business.id },
     data: {
@@ -61,6 +61,11 @@ export async function updateBusiness(input: UpdateBusinessInput): Promise<Busine
       goals: parsed.data.goals,
     },
   });
+
+  // The action's same-response re-render must see the new name/currency/type,
+  // not the value resolved at the start of the request.
+  await seedPrimaryBusiness(user.id, updated);
+
   return toDto(updated);
 }
 

@@ -117,13 +117,20 @@ export async function getPrimaryBusiness(userId: string): Promise<PrimaryBusines
 
   if (!state.promise) {
     state.promise = (async () => {
-      const prisma = getPrismaClient();
-      if (!prisma) throw new Error("DATABASE_URL is not configured.");
+      try {
+        const prisma = getPrismaClient();
+        if (!prisma) throw new Error("DATABASE_URL is not configured.");
 
-      const business = await findPrimaryBusiness(prisma as unknown as PrismaLike, userId);
-      state.value = business;
-      state.loaded = true;
-      return business;
+        const business = await findPrimaryBusiness(prisma as unknown as PrismaLike, userId);
+        state.value = business;
+        state.loaded = true;
+        return business;
+      } catch (error) {
+        // Do not cache a failed lookup: a transient DB/pooler error must not
+        // poison every later call in the same request. The next caller retries.
+        state.promise = null;
+        throw error;
+      }
     })();
   }
 
