@@ -20,6 +20,7 @@
 import { getAIService } from "@/lib/ai/provider";
 import { categoryMatchesRowType } from "@/lib/ai/rules";
 import type { CategoryRuleDto } from "../../types";
+import { matchDictionary } from "./merchant-dictionary";
 import type {
   ImportCategoryOption,
   ImportSuggestion,
@@ -51,7 +52,12 @@ export async function categorizeImportRow(
   options: CategorizeOptions = {},
 ): Promise<ImportSuggestion> {
   if (row.type === "transfer") {
-    return { categoryName: TRANSFER_CATEGORY, confidence: 1, needsReview: false };
+    return {
+      categoryName: TRANSFER_CATEGORY,
+      confidence: 1,
+      needsReview: false,
+      reason: row.transfer?.reason ?? "transfer row",
+    };
   }
 
   if (row.category) {
@@ -59,6 +65,7 @@ export async function categorizeImportRow(
       categoryName: row.category,
       confidence: FILE_CATEGORY_CONFIDENCE,
       needsReview: false,
+      reason: "category from the file",
     };
   }
 
@@ -69,17 +76,43 @@ export async function categorizeImportRow(
   );
   const { categorizer } = getAIService({ categoryRules: resolvedRules });
   const result = await categorizer.categorize(row.description, row.type);
+
+  // A learned correction always wins. If the engine did not use a learned
+  // rule, the Nigerian keyword dictionary is more specific than the built-in
+  // defaults and explains itself.
+  if (result.businessRule) {
+    return {
+      categoryName: result.categoryName,
+      confidence: result.confidence,
+      needsReview: result.needsReview,
+      businessRule: result.businessRule,
+      reason: `learned rule for "${result.businessRule.categoryName}"`,
+    };
+  }
+
+  const dictionary = matchDictionary(row.description, row.type);
+  if (dictionary) {
+    return {
+      categoryName: dictionary.categoryName,
+      confidence: dictionary.confidence,
+      needsReview: dictionary.needsReview,
+      reason: dictionary.reason,
+    };
+  }
+
+  const fallbackName =
+    row.type === "income" && result.categoryName === "Other"
+      ? fallbackCategoryName("income")
+      : result.categoryName;
   return {
-    // The engine only knows the expense "Other". For an income row the
-    // unmatched fallback label is "Other Income" (matches what commit
-    // writes); the categorization itself is unchanged.
-    categoryName:
-      row.type === "income" && result.categoryName === "Other"
-        ? fallbackCategoryName("income")
-        : result.categoryName,
+    categoryName: fallbackName,
     confidence: result.confidence,
     needsReview: result.needsReview,
     businessRule: result.businessRule,
+    reason:
+      result.confidence >= 0.7
+        ? "matched the built-in keyword rules"
+        : "no strong keyword match",
   };
 }
 

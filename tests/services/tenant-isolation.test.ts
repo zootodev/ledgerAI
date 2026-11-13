@@ -593,12 +593,14 @@ describe("categories service (system + custom ownership)", () => {
         makeCategoryRow(), // system category
         makeCategoryRow({ id: UUID_OWNED_2, businessId: businessA.id, name: "Custom", isSystem: false }),
       ]);
-    mockPrisma.category.createMany.mockResolvedValue({ count: 15 });
+    mockPrisma.category.createMany.mockResolvedValue({ count: SYSTEM_CATEGORIES.length });
 
     const categories = await listCategories();
     expect(categories).toHaveLength(2);
     expect(mockPrisma.category.createMany).toHaveBeenCalledTimes(1);
-    expect(mockPrisma.category.createMany.mock.calls[0][0].data).toHaveLength(15);
+    expect(mockPrisma.category.createMany.mock.calls[0][0].data).toHaveLength(
+      SYSTEM_CATEGORIES.length,
+    );
 
     const listWhere = mockPrisma.category.findMany.mock.calls[1][0].where;
     expect(listWhere.OR).toContainEqual({ businessId: null });

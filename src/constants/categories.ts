@@ -12,6 +12,7 @@ export const SYSTEM_CATEGORIES = {
     { name: "Marketing", type: "expense" },
     { name: "Transportation", type: "expense" },
     { name: "Utilities", type: "expense" },
+    { name: "Airtime & Data", type: "expense" },
     { name: "Rent", type: "expense" },
     { name: "Salaries", type: "expense" },
     { name: "Software", type: "expense" },
@@ -19,6 +20,10 @@ export const SYSTEM_CATEGORIES = {
     { name: "Taxes", type: "expense" },
     { name: "Food", type: "expense" },
     { name: "Equipment", type: "expense" },
+    { name: "Cash & POS", type: "expense" },
+    { name: "Online Payments", type: "expense" },
+    { name: "Betting", type: "expense" },
+    { name: "Transfers to People", type: "expense" },
     { name: "Other", type: "expense" },
   ],
 } as const;

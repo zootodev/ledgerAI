@@ -25,6 +25,7 @@ export const SYSTEM_CATEGORIES: ReadonlyArray<{ name: string; type: "income" | "
   { name: "Transportation", type: "expense" },
   { name: "Banking", type: "expense" },
   { name: "Utilities", type: "expense" },
+  { name: "Airtime & Data", type: "expense" },
   { name: "Marketing", type: "expense" },
   { name: "Inventory", type: "expense" },
   { name: "Rent", type: "expense" },
@@ -33,6 +34,10 @@ export const SYSTEM_CATEGORIES: ReadonlyArray<{ name: string; type: "income" | "
   { name: "Taxes", type: "expense" },
   { name: "Food", type: "expense" },
   { name: "Equipment", type: "expense" },
+  { name: "Cash & POS", type: "expense" },
+  { name: "Online Payments", type: "expense" },
+  { name: "Betting", type: "expense" },
+  { name: "Transfers to People", type: "expense" },
   { name: "Other", type: "expense" },
 ];
 
