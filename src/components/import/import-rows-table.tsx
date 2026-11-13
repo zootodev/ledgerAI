@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatAmount, majorAmount } from "@/lib/finance/engine";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/validation/transaction";
-import type { ImportPreviewRow } from "@/lib/import/types";
+import type { ImportPreviewRow, ImportRowType } from "@/lib/import/types";
 import type { CategoryServiceData } from "@/lib/services/categories";
 import { cn } from "@/lib/utils/cn";
 
@@ -21,8 +21,11 @@ export interface ImportRowsTableProps {
   selections: Record<number, boolean>;
   /** Row index -> chosen category id ("" = keep the suggestion). */
   categoryOverrides: Record<number, string>;
+  /** Row index -> explicit transfer/income/expense review override. */
+  typeOverrides?: Record<number, ImportRowType>;
   onToggle: (rowIndex: number, include: boolean) => void;
   onCategoryChange: (rowIndex: number, categoryId: string) => void;
+  onTypeOverride?: (rowIndex: number, type: ImportRowType | null) => void;
 }
 
 const PAGE_SIZE = 20;
@@ -38,8 +41,10 @@ export function ImportRowsTable({
   categories,
   selections,
   categoryOverrides,
+  typeOverrides = {},
   onToggle,
   onCategoryChange,
+  onTypeOverride,
 }: ImportRowsTableProps) {
   const [page, setPage] = React.useState(1);
 
@@ -141,61 +146,111 @@ export function ImportRowsTable({
       sortValue: (row) => Number(row.amount),
       className: "min-w-24",
       headerClassName: "min-w-24",
-      cell: (row) => (
-        <span
-          className={cn(
-            "font-medium tabular-nums",
-            row.type === "income"
-              ? "text-success"
-              : row.type === "expense"
-                ? "text-danger"
-                : "text-secondary",
-          )}
-        >
-          {row.type === "income" ? "+" : row.type === "expense" ? "−" : ""}
-          {formatAmount(majorAmount(row.amount), currency)}
-        </span>
-      ),
+      cell: (row) => {
+        const type = typeOverrides[row.rowIndex] ?? row.type;
+        return (
+          <span
+            className={cn(
+              "font-medium tabular-nums",
+              type === "income"
+                ? "text-success"
+                : type === "expense"
+                  ? "text-danger"
+                  : "text-secondary",
+            )}
+          >
+            {type === "income" ? "+" : type === "expense" ? "−" : ""}
+            {formatAmount(majorAmount(row.amount), currency)}
+          </span>
+        );
+      },
     },
     {
       key: "type",
       header: "Type",
       className: "min-w-20",
       headerClassName: "min-w-20",
-      cell: (row) => (
-        <Badge tone={typeTone[row.type]}>{TRANSACTION_TYPE_LABELS[row.type]}</Badge>
-      ),
+      cell: (row) => {
+        const type = typeOverrides[row.rowIndex] ?? row.type;
+        return <Badge tone={typeTone[type]}>{TRANSACTION_TYPE_LABELS[type]}</Badge>;
+      },
     },
     {
       key: "category",
       header: "Category",
-      className: "min-w-48",
-      headerClassName: "min-w-48",
+      className: "min-w-52",
+      headerClassName: "min-w-52",
       cell: (row) => {
-        if (row.type === "transfer") {
-          return <span className="text-muted">Transfer — none</span>;
+        const type = typeOverrides[row.rowIndex] ?? row.type;
+        if (type === "transfer") {
+          return (
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-muted">Transfer — none</span>
+              {!row.skipped &&
+                onTypeOverride &&
+                (row.transfer?.kind === "self" || row.transfer == null) && (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-brand-strong underline decoration-dotted underline-offset-2"
+                    onClick={() => {
+                      onTypeOverride(row.rowIndex, "income");
+                      onCategoryChange(row.rowIndex, "");
+                    }}
+                  >
+                    Count as income instead
+                  </button>
+                )}
+              {row.transfer?.reason && (
+                <span className="max-w-56 text-xs text-muted">{row.transfer.reason}</span>
+              )}
+            </div>
+          );
         }
         return (
-          <Select
-            value={categoryOverrides[row.rowIndex] ?? ""}
-            onChange={(e) => onCategoryChange(row.rowIndex, e.target.value)}
-            className="w-44"
-            // A row that cannot be imported has no category worth choosing.
-            disabled={!row.valid}
-            aria-label={`Category for row ${row.displayRow}`}
-          >
-            <option value="">
-              Use suggestion · {row.suggestedCategory ?? "Other"}
-            </option>
-            <option disabled>──────────</option>
-            {categories
-              .filter((c) => c.type === row.type)
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.isSystem ? `${c.name} (system)` : c.name}
-                </option>
-              ))}
-          </Select>
+          <div className="min-w-0 max-w-56">
+            <Select
+              value={categoryOverrides[row.rowIndex] ?? ""}
+              onChange={(e) => onCategoryChange(row.rowIndex, e.target.value)}
+              className="w-44"
+              // A row that cannot be imported has no category worth choosing.
+              disabled={!row.valid}
+              aria-label={`Category for row ${row.displayRow}`}
+            >
+              <option value="">
+                Use suggestion · {row.suggestedCategory ?? "Other"}
+              </option>
+              <option disabled>──────────</option>
+              {categories
+                .filter((c) => c.type === type)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.isSystem ? `${c.name} (system)` : c.name}
+                  </option>
+                ))}
+            </Select>
+            <p
+              className={cn(
+                "mt-1 truncate text-xs",
+                row.needsReview ? "text-warning-strong" : "text-muted",
+              )}
+              title={row.suggestionReason ?? "No suggestion reason recorded"}
+            >
+              {Math.round(row.confidence * 100)}% confidence
+              {row.suggestionReason ? ` · ${row.suggestionReason}` : ""}
+            </p>
+            {typeOverrides[row.rowIndex] && onTypeOverride && (
+              <button
+                type="button"
+                className="mt-1 text-xs font-medium text-brand-strong underline decoration-dotted underline-offset-2"
+                onClick={() => {
+                  onTypeOverride(row.rowIndex, null);
+                  onCategoryChange(row.rowIndex, "");
+                }}
+              >
+                Back to transfer
+              </button>
+            )}
+          </div>
         );
       },
     },

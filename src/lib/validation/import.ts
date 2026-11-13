@@ -34,6 +34,8 @@ export const importCommitSelectionRowSchema = z.object({
   // an existing duplicate when this flag is true (re-validated here).
   importAnyway: z.boolean().optional(),
   categoryId: z.uuid().nullable(),
+  // Only a transfer row can be switched between transfer and income/expense.
+  typeOverride: z.enum(["income", "expense"]).nullable().optional(),
 });
 
 export const importCommitInputSchema = z.object({
@@ -41,6 +43,8 @@ export const importCommitInputSchema = z.object({
   fileType: z.enum(["csv", "xlsx", "pdf"]),
   mapping: importMappingSchema,
   accountId: z.uuid().nullable().optional(),
+  sectionId: z.string().trim().min(1).max(80).nullable().optional(),
+  acknowledgeReconciliation: z.boolean().optional(),
   selections: z
     .array(importCommitSelectionRowSchema)
     .max(5000, "Too many rows. Split the file and import in batches.")

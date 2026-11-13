@@ -31,6 +31,8 @@ import {
   MAX_IMPORT_FILE_BYTES,
   IMPORT_FIELDS,
   type ColumnMapping,
+  type ImportRowType,
+  type ImportSection,
   type ParsedImportFile,
   type ImportFileFormat,
   type RawImportRow,
@@ -41,9 +43,7 @@ import {
   parseXlsx,
   detectColumns,
   validateMapping,
-  normalizeImportRow,
-  reconcileNormalizedRows,
-  findOpeningBalance,
+  prepareImport,
   tagDuplicates,
   categorizeImportRows,
   buildImportPreview,
@@ -171,6 +171,10 @@ export function ImportWizard({
   const [parsed, setParsed] = React.useState<ParsedImportFile | null>(null);
   const [mapping, setMapping] = React.useState<ColumnMapping>({});
   const [preview, setPreview] = React.useState<BuiltPreview | null>(null);
+  const [sections, setSections] = React.useState<ImportSection[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = React.useState<string | null>(null);
+  const [acknowledged, setAcknowledged] = React.useState(false);
+  const [typeOverrides, setTypeOverrides] = React.useState<Record<number, ImportRowType>>({});
   const [existing, setExisting] = React.useState<string[]>([]);
   const [rules, setRules] = React.useState<CategoryRuleDto[]>([]);
   const [parseError, setParseError] = React.useState<string | null>(null);
@@ -189,28 +193,33 @@ export function ImportWizard({
       m: ColumnMapping,
       fps: string[],
       businessRules: CategoryRuleDto[],
+      sectionId: string | null,
     ): Promise<BuiltPreview> => {
-      const normalizedRows = p.rows.map((raw, index) => normalizeImportRow(raw, m, index));
-      // Verify the statement's own math BEFORE categorizing: a corrected
-      // debit/credit side can flip a row's type, and the category follows
-      // the corrected type.
-      const { rows, summary } = reconcileNormalizedRows(
-        normalizedRows,
-        findOpeningBalance(normalizedRows),
-      );
-      const tags = tagDuplicates(rows, new Set(fps));
+      // Shared with the server commit: sections, reconciliation, transfer
+      // detection and direction are all derived the same way in both places.
+      const prepared = prepareImport(p, m, {
+        selectedSectionId: sectionId,
+        holderName: userName ?? null,
+        businessName,
+      });
+      const tags = tagDuplicates(prepared.rows, new Set(fps));
       const categoryOptions: ImportCategoryOption[] = categories.map((c) => ({
         id: c.id,
         name: c.name,
         type: c.type,
       }));
-      const suggestions = await categorizeImportRows(rows, {
+      const suggestions = await categorizeImportRows(prepared.rows, {
         businessRules,
         categoryOptions,
       });
-      return buildImportPreview(rows, suggestions, tags, summary);
+      return buildImportPreview(
+        prepared.rows,
+        suggestions,
+        tags,
+        prepared.reconciliation,
+      );
     },
-    [categories],
+    [categories, userName, businessName],
   );
 
   const applyDefaults = React.useCallback((built: BuiltPreview): Record<number, boolean> => {
@@ -313,10 +322,12 @@ export function ImportWizard({
 
         let headers: string[];
         let rows: RawImportRow[];
+        let fileSections: ImportSection[] = [];
+        let statement: ParsedImportFile["statement"];
         if (ext === "pdf") {
-          // pdf-parse is Node-only: the PDF is read by the server action,
-          // while CSV/XLSX stay on-device. Commit re-parses these same
-          // bytes server-side before anything is written.
+          // The positioned PDF extractor is Node-only: the PDF is read by the
+          // server action, while CSV/XLSX stay on-device. Commit re-parses
+          // these same bytes server-side before anything is written.
           const fd = new FormData();
           fd.set("file", next);
           const res = await parsePdfImportAction(fd);
@@ -326,6 +337,8 @@ export function ImportWizard({
           }
           headers = res.headers;
           rows = res.rows;
+          fileSections = res.sections ?? [];
+          statement = res.statement;
         } else {
           const arrayBuffer = await next.arrayBuffer();
           const raw =
@@ -347,6 +360,8 @@ export function ImportWizard({
           fileType: ext as ImportFileFormat,
           headers,
           rows,
+          sections: fileSections,
+          statement,
         };
 
         const detected = detectColumns(file.headers);
@@ -370,13 +385,28 @@ export function ImportWizard({
           nextMapping = resume.mapping;
         }
 
+        const initialSectionId =
+          fileSections.find((section) => section.isDefault)?.id ??
+          fileSections[0]?.id ??
+          null;
+
         setFile(next);
         setParsed(file);
         setMapping(nextMapping);
+        setSections(fileSections);
+        setSelectedSectionId(initialSectionId);
+        setAcknowledged(false);
+        setTypeOverrides({});
         setExisting(fps);
         setRules(businessRules);
 
-        const built = await buildPreviewFor(file, nextMapping, fps, businessRules);
+        const built = await buildPreviewFor(
+          file,
+          nextMapping,
+          fps,
+          businessRules,
+          initialSectionId,
+        );
         setPreview(built);
 
         if (resume) {
@@ -430,15 +460,69 @@ export function ImportWizard({
       setMapping(next);
       setWorking(true);
       try {
-        const built = await buildPreviewFor(parsed, next, existing, rules);
+        const built = await buildPreviewFor(
+          parsed,
+          next,
+          existing,
+          rules,
+          selectedSectionId,
+        );
         setPreview(built);
         setSelections(applyDefaults(built));
         setOverrides({});
+        setTypeOverrides({});
+        setAcknowledged(false);
       } finally {
         setWorking(false);
       }
     },
-    [parsed, mapping, existing, rules, buildPreviewFor, applyDefaults],
+    [
+      parsed,
+      mapping,
+      existing,
+      rules,
+      selectedSectionId,
+      buildPreviewFor,
+      applyDefaults,
+    ],
+  );
+
+  const changeSection = React.useCallback(
+    async (sectionId: string) => {
+      if (!parsed || sectionId === selectedSectionId) return;
+      setWorking(true);
+      setParseError(null);
+      try {
+        const built = await buildPreviewFor(
+          parsed,
+          mapping,
+          existing,
+          rules,
+          sectionId,
+        );
+        setSelectedSectionId(sectionId);
+        setPreview(built);
+        setSelections(applyDefaults(built));
+        setOverrides({});
+        setTypeOverrides({});
+        setAcknowledged(false);
+      } catch (e) {
+        setParseError(
+          e instanceof Error ? e.message : "This section could not be prepared.",
+        );
+      } finally {
+        setWorking(false);
+      }
+    },
+    [
+      parsed,
+      mapping,
+      existing,
+      rules,
+      selectedSectionId,
+      buildPreviewFor,
+      applyDefaults,
+    ],
   );
 
   const reset = React.useCallback(() => {
@@ -447,6 +531,10 @@ export function ImportWizard({
     setParsed(null);
     setMapping({});
     setPreview(null);
+    setSections([]);
+    setSelectedSectionId(null);
+    setAcknowledged(false);
+    setTypeOverrides({});
     setExisting([]);
     setRules([]);
     setParseError(null);
@@ -462,6 +550,15 @@ export function ImportWizard({
 
   const handleCommit = async () => {
     if (!parsed || !preview) return;
+    if (preview.summary.requiresAcknowledgement && !acknowledged) {
+      toast.error({
+        title: "Review before importing",
+        description:
+          preview.summary.acknowledgementMessage ??
+          "The statement totals do not match the parsed rows. Tick the acknowledgement first.",
+      });
+      return;
+    }
     setCommitting(true);
     try {
       const fd = new FormData();
@@ -474,6 +571,8 @@ export function ImportWizard({
       fd.set("fileType", parsed.fileType);
       fd.set("mapping", JSON.stringify(mapping));
       fd.set("accountId", accountId);
+      if (selectedSectionId) fd.set("sectionId", selectedSectionId);
+      if (acknowledged) fd.set("acknowledgeReconciliation", "true");
       fd.set(
         "selections",
         JSON.stringify(
@@ -483,6 +582,8 @@ export function ImportWizard({
             importAnyway:
               !!selections[row.rowIndex] && row.duplicate === "duplicate_existing",
             categoryId: overrides[row.rowIndex] ?? null,
+            typeOverride:
+              row.type === "transfer" ? typeOverrides[row.rowIndex] ?? null : null,
           })),
         ),
       );
@@ -759,6 +860,31 @@ export function ImportWizard({
                 ))}
               </div>
 
+              {sections.length > 1 && (
+                <div className="rounded-field border border-border bg-surface-subtle/40 p-4">
+                  <Field label="Statement section">
+                    <Select
+                      value={selectedSectionId ?? ""}
+                      disabled={working}
+                      onChange={(e) => void changeSection(e.target.value)}
+                      aria-label="Choose the statement section to import"
+                    >
+                      {sections.map((section) => (
+                        <option key={section.id} value={section.id}>
+                          {section.label} · {section.rowCount} row
+                          {section.rowCount === 1 ? "" : "s"}
+                          {section.isDefault ? " (main)" : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <p className="mt-2 text-xs text-muted">
+                    This PDF has more than one account/table. Only the selected section is
+                    imported, so a transfer mirrored in the other section is never duplicated.
+                  </p>
+                </div>
+              )}
+
               {parsed.rows.length > 0 && (
                 <AliveSample parsed={parsed} mapping={mapping} />
               )}
@@ -803,33 +929,68 @@ export function ImportWizard({
             <CardContent className="space-y-4">
               <ImportSummaryCards summary={preview.summary} />
 
-              {preview.summary.hasBalances && preview.reconciliation && (
+              {preview.summary.hasReconciliation && preview.reconciliation && (
                 preview.summary.reconciled ? (
                   <Alert tone="success" title="Balances reconcile ✓">
                     <p>
-                      {preview.summary.reconcileChecked} check
-                      {preview.summary.reconcileChecked === 1 ? "" : "s"} verified — the running
-                      balance matches what LedgerAI read from each row, from{" "}
-                      {preview.reconciliation.openingBalance ?? "—"} to{" "}
-                      {preview.reconciliation.closingBalance ?? "—"}.
+                      {preview.summary.reconcileChecked > 0 &&
+                        `${preview.summary.reconcileChecked} balance check${
+                          preview.summary.reconcileChecked === 1 ? "" : "s"
+                        } verified`}
+                      {preview.summary.reconcileChecked > 0 && " — "}
+                      opening {preview.reconciliation.openingBalance ?? "—"} + credits −
+                      debits = closing {preview.reconciliation.closingBalance ?? "—"}.
+                      {preview.summary.headerMismatches === 0 &&
+                        " The statement header totals and row counts also match."}
                     </p>
                   </Alert>
                 ) : (
                   <Alert
                     tone="warning"
-                    title={`${preview.summary.reconcileMismatches} row${
-                      preview.summary.reconcileMismatches === 1 ? "" : "s"
-                    } don't reconcile`}
+                    title="The statement totals do not match the parsed rows"
                   >
                     <p>
-                      The running balance in this file stops adding up for{" "}
-                      {preview.summary.reconcileMismatches} row
-                      {preview.summary.reconcileMismatches === 1 ? "" : "s"}. The rows and amounts
-                      below are unchanged — use the &quot;Doesn&apos;t reconcile&quot; filter to see
-                      them.
+                      {preview.summary.acknowledgementMessage ??
+                        `Parsed ${preview.reconciliation.parsedTotals.count} rows / totals differ. Review before importing.`}
                     </p>
+                    {preview.summary.reconcileMismatches > 0 && (
+                      <p className="mt-2">
+                        The running balance stops adding up for{" "}
+                        {preview.summary.reconcileMismatches} row
+                        {preview.summary.reconcileMismatches === 1 ? "" : "s"}. The rows and
+                        amounts below are unchanged — use the &quot;Doesn&apos;t reconcile&quot;
+                        filter to see them.
+                      </p>
+                    )}
+                    {(preview.summary.headerMismatches ?? 0) > 0 && (
+                      <p className="mt-2">
+                        Header figures that differ:{" "}
+                        {preview.reconciliation.headerChecks
+                          .filter((check) => !check.ok)
+                          .map((check) => check.label)
+                          .join(", ")}
+                        .
+                      </p>
+                    )}
                   </Alert>
                 )
+              )}
+
+              {preview.summary.requiresAcknowledgement && (
+                <label className="flex items-start gap-2 rounded-field border border-warning/40 bg-warning/5 p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-warning"
+                    checked={acknowledged}
+                    onChange={(e) => setAcknowledged(e.target.checked)}
+                  />
+                  <span>
+                    I reviewed the mismatch and want to import the parsed rows anyway.
+                    <span className="mt-0.5 block text-xs text-muted">
+                      One-click import stays disabled until this is acknowledged.
+                    </span>
+                  </span>
+                </label>
               )}
 
               {preview.summary.needsReview > 0 && (
@@ -963,11 +1124,20 @@ export function ImportWizard({
                   categories={categories}
                   selections={selections}
                   categoryOverrides={overrides}
+                  typeOverrides={typeOverrides}
                   onToggle={(rowIndex, include) =>
                     setSelections((prev) => ({ ...prev, [rowIndex]: include }))
                   }
                   onCategoryChange={(rowIndex, categoryId) =>
                     setOverrides((prev) => ({ ...prev, [rowIndex]: categoryId }))
+                  }
+                  onTypeOverride={(rowIndex, type) =>
+                    setTypeOverrides((prev) => {
+                      const next = { ...prev };
+                      if (type === null) delete next[rowIndex];
+                      else next[rowIndex] = type;
+                      return next;
+                    })
                   }
                 />
               )}
@@ -991,7 +1161,10 @@ export function ImportWizard({
                     Back
                   </Button>
                   <Button
-                    disabled={includeCount === 0}
+                    disabled={
+                      includeCount === 0 ||
+                      (preview.summary.requiresAcknowledgement && !acknowledged)
+                    }
                     onClick={() => setStep(4)}
                     rightIcon={<ArrowRight className="h-4 w-4" />}
                   >
@@ -1072,6 +1245,10 @@ export function ImportWizard({
                   </Button>
                   <Button
                     loading={committing}
+                    disabled={
+                      includeCount === 0 ||
+                      (preview.summary.requiresAcknowledgement && !acknowledged)
+                    }
                     onClick={handleCommit}
                     leftIcon={<Check className="h-4 w-4" />}
                   >

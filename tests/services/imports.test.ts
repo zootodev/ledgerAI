@@ -41,6 +41,7 @@ const SYS_OTHER = "00000000-0000-4000-8000-000000000004";
 const SYS_MARKETING = "00000000-0000-4000-8000-000000000005";
 const SYS_FOOD = "00000000-0000-4000-8000-000000000006";
 const SYS_UTILITIES = "00000000-0000-4000-8000-000000000007";
+const SYS_AIRTIME = "00000000-0000-4000-8000-000000000008";
 
 function makeDecimal(value: number) {
   return { toString: () => value.toFixed(2) };
@@ -532,6 +533,7 @@ describe("commitImport", () => {
     makeCategoryRow({ id: SYS_RENT, name: "Rent" }),
     makeCategoryRow({ id: SYS_MARKETING, name: "Marketing" }),
     makeCategoryRow({ id: SYS_FOOD, name: "Food" }),
+    makeCategoryRow({ id: SYS_AIRTIME, name: "Airtime & Data" }),
     makeCategoryRow({ id: SYS_OTHER, name: "Other" }),
   ];
 
@@ -562,7 +564,7 @@ describe("commitImport", () => {
     expect(created).toMatchObject({
       categoryId: SYS_MARKETING,
       aiCategory: "Marketing",
-      aiConfidence: 0.94,
+      aiConfidence: 0.88,
     });
 
     const upsertCall = mockPrisma.categoryRule.upsert.mock.calls[0][0] as Record<string, unknown>;
@@ -603,7 +605,10 @@ describe("commitImport", () => {
       string,
       unknown
     >;
-    expect(created).toMatchObject({ categoryId: SYS_UTILITIES, aiCategory: "Utilities" });
+    expect(created).toMatchObject({
+      categoryId: SYS_AIRTIME,
+      aiCategory: "Airtime & Data",
+    });
   });
 
   it("never learns from a row that already carried a category in the file", async () => {
@@ -791,7 +796,7 @@ describe("commitImport", () => {
       commitInput({
         fileName: "anyway.csv",
         selections: [
-          { rowIndex: 0, include: true, importAnyway: true, categoryId: SYS_FOOD },
+          { rowIndex: 0, include: true, importAnyway: true, categoryId: SYS_MARKETING },
           { rowIndex: 1, include: true, importAnyway: true, categoryId: null },
           { rowIndex: 2, include: true, importAnyway: true, categoryId: null },
         ],
@@ -812,8 +817,8 @@ describe("commitImport", () => {
     expect(created).toHaveLength(3);
     const shoprite = created.find((t) => t.description === "SHOPRITE MALL");
     expect(shoprite).toMatchObject({
-      categoryId: SYS_FOOD,
-      aiCategory: "Food",
+      categoryId: SYS_MARKETING,
+      aiCategory: "Marketing",
     });
 
     const upsertCall = mockPrisma.categoryRule.upsert.mock.calls[0][0] as Record<string, unknown>;
@@ -828,8 +833,8 @@ describe("commitImport", () => {
       businessId: businessA.id,
       matchType: "merchant",
       pattern: "SHOPRITE",
-      categoryId: SYS_FOOD,
-      categoryName: "Food",
+      categoryId: SYS_MARKETING,
+      categoryName: "Marketing",
     });
   });
 
@@ -924,7 +929,7 @@ describe("commitImport", () => {
     });
   });
 
-  it("suggests Utilities for an EXPENSE MTN row and commits it to Utilities", async () => {
+  it("suggests Airtime & Data for an EXPENSE MTN row and commits it there", async () => {
     const statement = ["Date,Description,Amount", "2026-03-01,PAYMENT - MTN MOBILE MONEY,-5000.00"].join("\n");
     mockPrisma.transaction.findMany.mockResolvedValue([]);
     mockPrisma.category.findMany.mockResolvedValue(COMMON_CATEGORIES);
@@ -946,8 +951,8 @@ describe("commitImport", () => {
     >;
     expect(created).toMatchObject({
       type: "expense",
-      categoryId: SYS_UTILITIES,
-      aiCategory: "Utilities",
+      categoryId: SYS_AIRTIME,
+      aiCategory: "Airtime & Data",
     });
   });
 
@@ -1129,6 +1134,44 @@ describe("commitImport", () => {
     >;
     expect(importData.fileType).toBe("pdf");
     expect(importData.filename).toBe("statement.pdf");
+  });
+
+  it("honours a review override that counts an own-account transfer", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([
+      makeCategoryRow({ id: SYS_RENT, name: "Rent" }),
+      makeCategoryRow({ id: SYS_OTHER, name: "Other" }),
+    ]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-override" });
+
+    const result = await commitImport(
+      csvBytes(
+        ["Date,Description,Amount", "2026-11-01,Transfer to KUDA - USER A,-5000.00"].join("\n"),
+      ),
+      commitInput({
+        fileName: "own-transfer.csv",
+        selections: [
+          {
+            rowIndex: 0,
+            include: true,
+            categoryId: SYS_RENT,
+            typeOverride: "expense",
+          },
+        ],
+      }),
+    );
+
+    expect(result.imported).toBe(1);
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created).toMatchObject({
+      type: "expense",
+      amount: "5000.00",
+      categoryId: SYS_RENT,
+    });
   });
 
   it("aborts the PDF commit with the actionable parser error and writes nothing", async () => {

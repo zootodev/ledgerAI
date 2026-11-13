@@ -9,7 +9,12 @@ import {
   type ImportCommitServiceResult,
 } from "@/lib/services/imports";
 import { importCommitInputSchema } from "@/lib/validation/import";
-import { MAX_IMPORT_FILE_BYTES, type RawImportRow } from "@/lib/import/types";
+import {
+  MAX_IMPORT_FILE_BYTES,
+  type ImportSection,
+  type RawImportRow,
+  type StatementHeaderSummary,
+} from "@/lib/import/types";
 import { parsePdf } from "@/lib/import/parse-pdf";
 import {
   consumeConfiguredLimit,
@@ -28,6 +33,8 @@ export interface PdfParseActionState {
   error?: string;
   headers?: string[];
   rows?: RawImportRow[];
+  sections?: ImportSection[];
+  statement?: StatementHeaderSummary;
   fileName?: string;
 }
 
@@ -131,6 +138,8 @@ export async function parsePdfImportAction(
       ok: true,
       headers: parsed.headers,
       rows: parsed.rows,
+      sections: parsed.sections ?? [],
+      statement: parsed.statement,
       fileName: rawFile.name,
     };
   } catch (e) {
@@ -157,6 +166,9 @@ export async function commitImportAction(
     const rawMapping = String(formData.get("mapping") ?? "");
     const rawSelections = String(formData.get("selections") ?? "");
     const accountId = readOptionalId(String(formData.get("accountId") ?? ""));
+    const sectionId = readOptionalId(String(formData.get("sectionId") ?? ""));
+    const acknowledgeReconciliation =
+      String(formData.get("acknowledgeReconciliation") ?? "") === "true";
 
     if (rawFile.size > MAX_IMPORT_FILE_BYTES) {
       return { error: "This file is larger than 5 MB. Split it and try again." };
@@ -179,6 +191,8 @@ export async function commitImportAction(
       fileType,
       mapping: parsedMapping,
       accountId,
+      sectionId,
+      acknowledgeReconciliation,
       selections: parsedSelections,
     });
     if (!parsed.success) {

@@ -65,4 +65,22 @@ export {
   type ReconciliationSummary,
   type ReconcileMismatch,
   type ReconcileResult,
+  type HeaderCheck,
 } from "./reconcile";
+export {
+  prepareImport,
+  type PrepareImportOptions,
+  type PreparedImport,
+} from "./prepare";
+export {
+  detectInternalTransfers,
+  type TransferDetectionOptions,
+  type TransferDetectionResult,
+  type TransferSummary,
+} from "./transfers";
+export {
+  summarizeRawRows,
+  emptyStatementSummary,
+  hasStatementSummary,
+} from "./statement-summary";
+export { matchDictionary, looksLikePersonTransfer } from "./merchant-dictionary";

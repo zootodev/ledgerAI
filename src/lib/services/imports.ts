@@ -1,17 +1,15 @@
 import { requireAuthContext } from "@/lib/services/auth-context";
 import type { ImportCommitInput } from "@/lib/validation/import";
 import {
-  normalizeImportRow,
   parseCsv,
   parseXlsx,
-  reconcileNormalizedRows,
-  findOpeningBalance,
   tagDuplicates,
   fingerprintOf,
   validateMapping,
   categorizeImportRow,
   matchByName,
   fallbackCategoryName,
+  prepareImport,
 } from "@/lib/import/index";
 import { extractMerchantKey } from "@/lib/ai/merchant-key";
 import { MAX_IMPORT_EXCEPTIONS, NOT_A_TRANSACTION_REASON } from "@/lib/import/types";
@@ -25,6 +23,7 @@ import type {
   ImportException,
   ImportSuggestion,
   NormalizedImportRow,
+  ParsedImportFile,
 } from "@/lib/import/types";
 import type { CategoryRuleDto } from "@/types";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
@@ -166,7 +165,7 @@ export async function commitImport(
   fileBytes: Uint8Array,
   input: ImportCommitInput,
 ): Promise<ImportCommitServiceResult> {
-  const { prisma, business } = await requireAuthContext();
+  const { prisma, business, user } = await requireAuthContext();
 
   // A client-provided account id is never trusted blindly: it is accepted
   // only when the account actually belongs to the session business.
@@ -185,13 +184,30 @@ export async function commitImport(
     throw new Error(`Column mapping problem: ${mappingIssues[0].message}`);
   }
 
-  const normalized = parses.rows.map((raw, index) =>
-    normalizeImportRow(raw, input.mapping, index),
-  );
-  // Verify the statement's own balance math (and correct an obvious
-  // debit/credit mix-up) before categorizing, so preview and commit agree.
-  const reconciled = reconcileNormalizedRows(normalized, findOpeningBalance(normalized));
-  const rows = reconciled.rows;
+  const prepared = prepareImport(parses, input.mapping, {
+    selectedSectionId: input.sectionId ?? null,
+    holderName: user.name ?? null,
+    businessName: business.name,
+  });
+  if (prepared.reconciliation?.requiresAcknowledgement && !input.acknowledgeReconciliation) {
+    throw new Error(
+      prepared.reconciliation.message ??
+        "The statement totals do not match the parsed rows. Review and acknowledge before importing.",
+    );
+  }
+
+  const selected = new Map(input.selections.map((s) => [s.rowIndex, s]));
+  // Apply explicit review overrides (Transfer (own account) -> Income) before
+  // dedupe/categorization. Mirrored rows are already set aside and cannot be
+  // revived by a forged selection.
+  for (const row of prepared.rows) {
+    const selection = selected.get(row.rowIndex);
+    if (!selection?.typeOverride || row.skipped) continue;
+    if (row.type !== "transfer") continue;
+    row.type = selection.typeOverride;
+    row.transfer = null;
+  }
+  const rows = prepared.rows;
 
   const existing = new Set<string>(await listExistingFingerprints(prisma, business.id));
   const tags = tagDuplicates(rows, existing);
@@ -202,9 +218,6 @@ export async function commitImport(
   // a stale or forged client preview can never change what is written.
   const businessRules = await listCategoryRulesForBusiness(prisma, business.id);
 
-  const selected = new Map(
-    input.selections.map((s) => [s.rowIndex, s]),
-  );
   const committedFingerprints = new Set<string>();
 
   const toCreate: Prisma.TransactionCreateManyInput[] = [];
@@ -247,7 +260,7 @@ export async function commitImport(
     // set aside as "not a transaction" — never reported as unreadable data.
     if (row.skipped) {
       reasons.skipped += 1;
-      pushException(row, index, "skipped", [NOT_A_TRANSACTION_REASON]);
+      pushException(row, index, "skipped", [row.skipReason ?? NOT_A_TRANSACTION_REASON]);
       continue;
     }
 
@@ -580,11 +593,12 @@ function collectLearningCandidates(
 async function parseFile(
   bytes: Uint8Array,
   fileType: "csv" | "xlsx" | "pdf",
-): Promise<{ headers: string[]; rows: { sourceRow: number; values: Record<string, string> }[] }> {
+): Promise<ParsedImportFile> {
   if (fileType === "pdf") {
     // Deterministic re-parse of the SAME bytes the preview saw; any parse
     // failure aborts the commit with the actionable extraction error.
-    return await parsePdf(bytes);
+    const parsed = await parsePdf(bytes);
+    return { ...parsed, fileName: "", fileType, sections: parsed.sections };
   }
 
   if (fileType === "csv") {
@@ -593,7 +607,7 @@ async function parseFile(
     if (parsed.headers.length === 0) {
       throw new Error("This CSV file is empty or unreadable.");
     }
-    return parsed;
+    return { fileName: "", fileType, headers: parsed.headers, rows: parsed.rows };
   }
 
   const buffer = bytes.slice().buffer as ArrayBuffer;
@@ -601,7 +615,7 @@ async function parseFile(
   if (parsed.headers.length === 0) {
     throw new Error("This spreadsheet has no headers in the first row.");
   }
-  return parsed;
+  return { fileName: "", fileType, headers: parsed.headers, rows: parsed.rows };
 }
 
 function toHistoryDto(m: ImportModel): ImportHistoryItem {
