@@ -36,10 +36,33 @@
 // PDFs without a text layer are not supported.
 // ============================================================
 
-import type { RawImportRow } from "./types";
+import type {
+  ColumnMapping,
+  ImportSection,
+  RawImportRow,
+  StatementHeaderSummary,
+} from "./types";
+import {
+  extractPdfTables,
+  groupPdfLines,
+  type PdfExtraction,
+  type PdfTextItem,
+} from "./parse-pdf-layout";
+import {
+  findOpeningBalance as findPrintedOpeningBalance,
+  reconcileNormalizedRows,
+} from "./reconcile";
+import { normalizeImportRow } from "./normalize";
 
-/** Synthetic header row — matches the aliases in mapping.ts exactly. */
+/** Synthetic header row for the legacy flat-text fallback. */
 export const PDF_IMPORT_HEADERS = ["Date", "Description", "Debit", "Credit"] as const;
+
+export interface ParsedPdfResult {
+  headers: string[];
+  rows: RawImportRow[];
+  sections?: ImportSection[];
+  statement?: StatementHeaderSummary;
+}
 
 const MONTHS: Record<string, number> = {
   jan: 1,
@@ -718,66 +741,219 @@ function extractWithLayout(
   return rows;
 }
 
+function emptyStatementSummary(): StatementHeaderSummary {
+  return {
+    openingBalance: null,
+    closingBalance: null,
+    totalDebit: null,
+    totalCredit: null,
+    debitCount: null,
+    creditCount: null,
+    transactionCount: null,
+    periodFrom: null,
+    periodTo: null,
+    accountName: null,
+    accountNumber: null,
+  };
+}
+
+const DEFAULT_PDF_MAPPING: ColumnMapping = {
+  date: "Date",
+  description: "Description",
+  debit: "Debit",
+  credit: "Credit",
+  amount: "Amount",
+  balance: "Balance",
+  reference: "Reference",
+  type: "Type",
+};
+
+interface ExtractionScore {
+  validRows: number;
+  checked: number;
+  reconciled: number;
+  mismatches: number;
+  errors: number;
+}
+
+/** Score a candidate extraction by how much of its own balance chain works. */
+function scoreExtraction(rows: RawImportRow[], headers: string[]): ExtractionScore {
+  const mapping: ColumnMapping = {};
+  for (const field of Object.keys(DEFAULT_PDF_MAPPING) as (keyof ColumnMapping)[]) {
+    const header = DEFAULT_PDF_MAPPING[field];
+    if (header && headers.includes(header)) mapping[field] = header;
+  }
+  const normalized = rows.map((row, index) => normalizeImportRow(row, mapping, index));
+  const reconciled = reconcileNormalizedRows(
+    normalized,
+    findPrintedOpeningBalance(normalized),
+  );
+  return {
+    validRows: normalized.filter((row) => row.errors.length === 0 && !row.skipped).length,
+    checked: reconciled.summary.checked,
+    reconciled: reconciled.summary.reconciled,
+    mismatches: reconciled.summary.mismatches.length,
+    errors: normalized.reduce((sum, row) => sum + row.errors.length, 0),
+  };
+}
+
 /**
- * Parse a PDF statement buffer into the canonical import shape. Throws an
- * actionable error when no transaction-like lines are found (scanned PDFs,
- * unsupported layouts) so the wizard can show it verbatim.
+ * Load positioned text items with pdfjs-dist. This is the layout-aware path:
+ * it keeps x/y/width so the table logic can reconstruct columns instead of
+ * trusting reading order.
  */
-export async function parsePdf(
-  bytes: Uint8Array,
-): Promise<{ headers: string[]; rows: RawImportRow[] }> {
-  // pdf-parse wraps pdfjs-dist, which references browser globals (DOMMatrix,
-  // Path2D, ImageData) at module-evaluation time and polyfills them from
-  // @napi-rs/canvas when it is importable. Load the polyfill first so the
-  // evaluation of pdf-parse never throws. Both packages are in
-  // serverExternalPackages, so Node resolves them from node_modules.
+async function loadPdfTextItems(bytes: Uint8Array): Promise<{ items: PdfTextItem[]; text: string }> {
+  // pdfjs references browser globals (DOMMatrix, Path2D, ImageData) at
+  // evaluation time; @napi-rs/canvas supplies them in Node.
+  await import("@napi-rs/canvas");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const document = await pdfjs.getDocument({
+    data: bytes.slice(),
+    useSystemFonts: true,
+    isEvalSupported: false,
+  }).promise;
+  const items: PdfTextItem[] = [];
+  try {
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const content = await page.getTextContent();
+      for (const raw of content.items) {
+        if (!("str" in raw)) continue;
+        const text = raw.str.replace(/\s+/g, " ").trim();
+        if (text === "") continue;
+        const transform = raw.transform;
+        const height = Math.abs(raw.height || Math.hypot(transform[1], transform[3])) || 8;
+        items.push({
+          text,
+          x: transform[4],
+          y: transform[5],
+          width: raw.width,
+          height,
+          page: pageNumber,
+        });
+      }
+      page.cleanup();
+    }
+  } finally {
+    await document.destroy().catch(() => undefined);
+  }
+  const lines = groupPdfLines(items);
+  const text = lines
+    .map((line, index) => {
+      const next = lines[index + 1];
+      return next && next.page !== line.page ? `${line.text}\n\f` : line.text;
+    })
+    .join("\n");
+  return { items, text };
+}
+
+/** Fallback text path: pdf-parse's flat text plus the original heuristics. */
+async function loadFallbackPdfText(bytes: Uint8Array): Promise<string> {
   await import("@napi-rs/canvas");
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: bytes });
-  let text: string;
   try {
-    // lineEnforce inserts a newline when the y position changes (row breaks
-    // from geometry, not from hasEOL markers many bank PDFs omit), and
-    // itemJoiner keeps cells on the same row separated by a space instead of
-    // concatenating them into a space-less blob. Without this, table rows
-    // rendered as separate text items produce no parseable lines.
     const result = await parser.getText({ lineEnforce: true, itemJoiner: " " });
-    text = result.text;
+    return result.text;
   } finally {
     await parser.destroy().catch(() => undefined);
   }
+}
 
-  const rows = extractTransactionsFromText(text);
-  if (rows.length === 0) {
-    const compact = text.replace(/\s+/g, " ").trim();
-    // Scanned/image-only statements have almost no text layer — no parsing
-    // tweak will ever find rows, so say so directly.
-    if (compact.length < 200) {
-      throw new Error(
-        "This PDF has no readable text layer — it is likely a scanned image, which can't be read as a statement. Export a CSV or Excel (.xlsx) version of the statement and import that instead.",
-      );
-    }
-    // Log the first chunk so a failing bank layout can be diagnosed from the
-    // server logs; it never reaches the browser or a database. The excerpt
-    // preserves line breaks so fragment-per-cell layouts stay visible.
-    console.info(
-      "[ledgerai-pdf] zero rows extracted",
-      JSON.stringify({
-        diag: "v4-fragmented",
-        chars: text.length,
-        lines: text.split(/\r?\n|\f/).length,
-        bank: detectBankFingerprint(text),
-        layout: detectLayout(text.split(/\r?\n|\f/)),
-        hasBalance: detectBalanceColumn(text.split(/\r?\n|\f/)),
-        dateLines: text
-          .split(/\r?\n|\f/)
-          .filter((line) => findDate(line) !== null).length,
-        rawExcerpt: text.slice(0, 1500),
-      }),
-    );
-    throw new Error(
-      "We couldn't find any transactions in this PDF. Each transaction row needs a date and an amount together on the same line, for example \"05 Jan 2026  POS transfer  12,500.00\". If this statement is a scanned image, export a CSV or Excel (.xlsx) version instead.",
-    );
+function fallbackExtraction(text: string): ParsedPdfResult {
+  const rows = extractTransactionsFromText(text).map((row) => ({
+    ...row,
+    sectionId: "section-1",
+  }));
+  return {
+    headers: [...PDF_IMPORT_HEADERS],
+    rows,
+    sections: [
+      {
+        id: "section-1",
+        label: "Statement",
+        rowCount: rows.length,
+        header: emptyStatementSummary(),
+        isDefault: true,
+      },
+    ],
+    statement: emptyStatementSummary(),
+  };
+}
+
+/**
+ * Parse a PDF statement buffer into the canonical import shape.
+ *
+ * Both paths run when possible: the positioned pdfjs table extractor and the
+ * legacy flat-text heuristics. The winner is the one that proves the most
+ * rows with the fewest balance disagreements, so a heuristic that invents
+ * rows cannot silently beat the table extractor.
+ */
+export async function parsePdf(bytes: Uint8Array): Promise<ParsedPdfResult> {
+  let layout: PdfExtraction | null = null;
+  let layoutText = "";
+  try {
+    const loaded = await loadPdfTextItems(bytes);
+    layoutText = loaded.text;
+    layout = extractPdfTables(loaded.items);
+  } catch (error) {
+    console.info("[ledgerai-pdf] layout extraction failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
-  return { headers: [...PDF_IMPORT_HEADERS], rows };
+
+  let fallbackText = layoutText;
+  let fallback: ParsedPdfResult | null = null;
+  try {
+    fallbackText = await loadFallbackPdfText(bytes);
+    fallback = fallbackExtraction(fallbackText);
+  } catch (error) {
+    console.info("[ledgerai-pdf] flat-text fallback failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  let chosen: ParsedPdfResult | null = null;
+  if (layout && layout.rows.length > 0) {
+    chosen = layout;
+    if (fallback && fallback.rows.length > 0) {
+      const layoutScore = scoreExtraction(layout.rows, layout.headers);
+      const fallbackScore = scoreExtraction(fallback.rows, fallback.headers);
+      const fallbackClearlyBetter =
+        fallbackScore.validRows > layoutScore.validRows &&
+        fallbackScore.mismatches <= layoutScore.mismatches &&
+        fallbackScore.checked >= layoutScore.checked;
+      if (fallbackClearlyBetter) chosen = fallback;
+    }
+  } else if (fallback && fallback.rows.length > 0) {
+    chosen = fallback;
+  }
+
+  if (chosen && chosen.rows.length > 0) return chosen;
+
+  const text = fallbackText || layoutText;
+  const compact = text.replace(/\s+/g, " ").trim();
+  // Scanned/image-only statements have almost no text layer — no parsing
+  // tweak will ever find rows, so say so directly.
+  if (compact.length < 200) {
+    throw new Error("This PDF is a scan; export a text PDF or CSV from your bank app");
+  }
+  console.info(
+    "[ledgerai-pdf] zero rows extracted",
+    JSON.stringify({
+      diag: "v5-layout",
+      chars: text.length,
+      lines: text.split(/\r?\n|\f/).length,
+      bank: detectBankFingerprint(text),
+      layout: detectLayout(text.split(/\r?\n|\f/)),
+      hasBalance: detectBalanceColumn(text.split(/\r?\n|\f/)),
+      dateLines: text
+        .split(/\r?\n|\f/)
+        .filter((line) => findDate(line) !== null).length,
+      rawExcerpt: text.slice(0, 1500),
+    }),
+  );
+  throw new Error(
+    "We couldn't find any transactions in this PDF. Export a text PDF or CSV from your bank app, or choose a different statement.",
+  );
 }

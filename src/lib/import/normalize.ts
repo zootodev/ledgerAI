@@ -363,14 +363,15 @@ export function normalizeImportRow(
 ): NormalizedImportRow {
   const cell = (field: ImportFieldLike) => raw.values[mapping[field] ?? ""] ?? "";
 
-  const dateResult = parseDate(cell("date"));
+  const rawDate = cell("date");
+  const dateResult = parseDate(rawDate);
   const description = normalizeText(cell("description"));
   const ref = normalizeText(cell("reference"));
   const category = normalizeText(cell("category"));
   const balanceResult = parseBalance(cell("balance"));
 
-  const errors: string[] = [];
-  const warnings: string[] = [];
+  const errors: string[] = [...(raw.errors ?? [])];
+  const warnings: string[] = [...(raw.warnings ?? [])];
 
   if (dateResult.error) errors.push(dateResult.error);
   if (dateResult.warning) warnings.push(dateResult.warning);
@@ -419,7 +420,7 @@ export function normalizeImportRow(
     date: errors.some((e) => e === "missing date" || e === "invalid date" || e === "invalid date format")
       ? ""
       : dateResult.value,
-    rawDate: cell("date"),
+    rawDate,
     description,
     amount: amountContext.errors.length > 0 ? "" : amountContext.amount,
     type,
@@ -430,7 +431,37 @@ export function normalizeImportRow(
     warnings,
     skipped,
     skipReason: skipped ? NOT_A_TRANSACTION_REASON : null,
+    sectionId: raw.sectionId ?? null,
+    time: extractRowTime(raw, rawDate),
   };
+}
+
+/**
+ * Time is not a user-mappable field (banks disagree on the name and it is not
+ * needed for accounting), but it is useful evidence for internal-transfer
+ * matching. Read it from a synthetic/CSV "Time" column or from a Date/Time
+ * cell, keeping only a valid 24-hour HH:MM[:SS].
+ */
+function extractRowTime(raw: RawImportRow, rawDate: string): string | null {
+  const candidates = [
+    ...Object.entries(raw.values)
+      .filter(([key]) => /(^|\b)(time|value time|transaction time|posting time)(\b|$)/i.test(key))
+      .map(([, value]) => value),
+    rawDate,
+  ];
+  for (const candidate of candidates) {
+    const match = /\b(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?\b/i.exec(candidate);
+    if (!match) continue;
+    let hour = Number(match[1]);
+    const minute = Number(match[2]);
+    const second = Number(match[3] ?? 0);
+    const meridiem = match[4]?.toLowerCase();
+    if (meridiem === "pm" && hour < 12) hour += 12;
+    if (meridiem === "am" && hour === 12) hour = 0;
+    if (hour > 23 || minute > 59 || second > 59) continue;
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
+  }
+  return null;
 }
 
 type ImportFieldLike =

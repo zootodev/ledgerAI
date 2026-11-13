@@ -683,7 +683,7 @@ describe("parsePdf", () => {
   it("tells the user the PDF is a scanned image when there is no text layer", async () => {
     pdfMock.text = "   ";
     await expect(parsePdf(new Uint8Array([1, 2]))).rejects.toThrow(
-      /no readable text layer/,
+      /This PDF is a scan; export a text PDF or CSV from your bank app/,
     );
   });
 });

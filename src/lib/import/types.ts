@@ -42,6 +42,36 @@ export const REQUIRED_IMPORT_FIELDS: readonly ImportField[] = [
   "description",
 ];
 
+/**
+ * Statement-level figures printed by the bank. Every field is optional: a CSV
+ * export usually has none, a PDF often has most of them. They are evidence for
+ * reconciliation, never a source of transaction amounts.
+ */
+export interface StatementHeaderSummary {
+  openingBalance: string | null;
+  closingBalance: string | null;
+  totalDebit: string | null;
+  totalCredit: string | null;
+  debitCount: number | null;
+  creditCount: number | null;
+  transactionCount: number | null;
+  periodFrom: string | null;
+  periodTo: string | null;
+  accountName: string | null;
+  accountNumber: string | null;
+}
+
+/** One independently importable table/account inside a PDF statement. */
+export interface ImportSection {
+  /** Stable, order-based id. Preview and commit re-parse the same bytes. */
+  id: string;
+  label: string;
+  rowCount: number;
+  header: StatementHeaderSummary;
+  /** The first/main section is selected by default. */
+  isDefault: boolean;
+}
+
 /** A source file read into its raw cells (header row + data rows). */
 export interface ParsedImportFile {
   fileName: string;
@@ -49,6 +79,10 @@ export interface ParsedImportFile {
   /** Header row cells, de-duplicated so each name is unique. */
   headers: string[];
   rows: RawImportRow[];
+  /** PDFs with more than one account/table expose one section per table. */
+  sections?: ImportSection[];
+  /** Statement-level identity/figures (PDF header, CSV summary rows). */
+  statement?: StatementHeaderSummary;
 }
 
 /** One raw source row (values keyed by resolved header name). */
@@ -56,6 +90,12 @@ export interface RawImportRow {
   /** 1-based source line/row number in the original file. */
   sourceRow: number;
   values: Record<string, string>;
+  /** Set for PDF rows that belong to one statement section. */
+  sectionId?: string;
+  /** Parser-level hard errors (e.g. direction could not be determined). */
+  errors?: string[];
+  /** Parser-level soft flags. */
+  warnings?: string[];
 }
 
 /** User-chosen column mapping: header name -> LedgerAI field. */
@@ -99,6 +139,19 @@ export interface NormalizedImportRow {
   skipped: boolean;
   /** Why the row was set aside, present only when `skipped`. */
   skipReason: string | null;
+  /** Section this row belongs to (PDF multi-section statements only). */
+  sectionId?: string | null;
+  /** Statement time when the source carried one (used for mirror matching). */
+  time?: string | null;
+  /** Why a row was classified as an internal transfer. */
+  transfer?: ImportTransferInfo | null;
+}
+
+export type ImportTransferKind = "mirrored" | "self" | "reversal" | "interest";
+
+export interface ImportTransferInfo {
+  kind: ImportTransferKind;
+  reason: string;
 }
 
 /** Category suggestion produced by the deterministic rules engine. */
@@ -106,6 +159,8 @@ export interface ImportSuggestion {
   categoryName: string;
   confidence: number;
   needsReview: boolean;
+  /** Human-readable evidence for the suggestion, shown on hover. */
+  reason?: string;
   /** Set when the suggestion came from a learned business rule. */
   businessRule?: {
     categoryId: string | null;
@@ -144,6 +199,12 @@ export interface ImportPreviewRow {
   reconcilesNote: string | null;
   suggestedCategory: string;
   confidence: number;
+  /** Why the suggestion was made (shown on hover). */
+  suggestionReason?: string | null;
+  /** Internal-transfer explanation when applicable. */
+  transfer?: ImportTransferInfo | null;
+  time?: string | null;
+  sectionId?: string | null;
   duplicate: DuplicateStatus;
   /** rowIndex (0-based data index) of the first in-file occurrence this
    *  row duplicates. Display numbering is derived (+1) at render time. */
@@ -182,6 +243,16 @@ export interface ImportSummary {
   reconciled: boolean | null;
   /** True when this file carried a readable statement balance at all. */
   hasBalances: boolean;
+  /** True when a balance chain or header totals gave us something to check. */
+  hasReconciliation?: boolean;
+  /** Header totals/counts that disagree with the parsed rows. */
+  headerMismatches?: number;
+  /** Requires an explicit acknowledgement before one-click import is enabled. */
+  requiresAcknowledgement?: boolean;
+  /** Human-readable "Parsed X of Y rows / totals differ by ₦Z" message. */
+  acknowledgementMessage?: string | null;
+  /** Internal moves set aside by mirror/self-transfer detection. */
+  internalTransfers?: number;
 }
 
 /** Per-row user decision sent to the server at commit time. */
@@ -191,6 +262,8 @@ export interface ImportCommitSelectionRow {
   /** Explicit opt-in to commit a row that already exists in the ledger. */
   importAnyway?: boolean;
   categoryId: string | null;
+  /** Review override for "Transfer (own account)" -> income/expense. */
+  typeOverride?: "income" | "expense" | null;
 }
 
 /** Parsed + validated commit payload (server re-derives every row). */
@@ -199,6 +272,8 @@ export interface ImportCommitInput {
   fileType: ImportFileFormat;
   mapping: ColumnMapping;
   accountId: string | null;
+  sectionId?: string | null;
+  acknowledgeReconciliation?: boolean;
   selections: ImportCommitSelectionRow[];
 }
 
