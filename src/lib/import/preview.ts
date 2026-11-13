@@ -45,13 +45,18 @@ export function buildImportPreview(
       categoryName: "Other",
       confidence: 0,
       needsReview: true,
+      reason: "no keyword match",
     };
     const tag = duplicateTags.get(row.rowIndex) ?? { duplicate: "new" as DuplicateStatus };
 
     const valid = row.errors.length === 0 && !row.skipped;
-    const needsReview = valid && suggestion.needsReview;
     const reconciles =
       row.balance === null ? null : !mismatchRowIndexes.has(row.rowIndex);
+    const needsReview =
+      valid &&
+      (suggestion.needsReview ||
+        reconciles === false ||
+        (reconciliation?.requiresAcknowledgement ?? false));
 
     return {
       rowIndex: row.rowIndex,
@@ -69,6 +74,10 @@ export function buildImportPreview(
       reconcilesNote: reconciles === false ? "balance does not match the running total" : null,
       suggestedCategory: suggestion.categoryName,
       confidence: suggestion.confidence,
+      suggestionReason: suggestion.reason ?? null,
+      transfer: row.transfer ?? null,
+      time: row.time ?? null,
+      sectionId: row.sectionId ?? null,
       duplicate: tag.duplicate,
       duplicateOfRow: tag.duplicateOfRow,
       errors: [...row.errors],
@@ -112,6 +121,12 @@ function summarize(
 
   const invalid = rows.length - valid - skipped;
   const hasBalances = reconciliation !== null && reconciliation.checked > 0;
+  const hasReconciliation =
+    reconciliation !== null &&
+    (reconciliation.checked > 0 || reconciliation.headerChecks.length > 0);
+  const internalTransfers = rows.filter(
+    (row) => row.transfer?.kind === "mirrored" || row.skipReason === "internal transfer",
+  ).length;
   return {
     total: rows.length,
     valid,
@@ -123,7 +138,14 @@ function summarize(
     skipped,
     reconcileChecked: reconciliation?.checked ?? 0,
     reconcileMismatches: reconciliation?.mismatches.length ?? 0,
-    reconciled: hasBalances ? reconciliation.mismatches.length === 0 : null,
+    reconciled: hasReconciliation
+      ? reconciliation.mismatches.length === 0 && reconciliation.headerMismatches.length === 0
+      : null,
     hasBalances,
+    hasReconciliation,
+    headerMismatches: reconciliation?.headerMismatches.length ?? 0,
+    requiresAcknowledgement: reconciliation?.requiresAcknowledgement ?? false,
+    acknowledgementMessage: reconciliation?.message ?? null,
+    internalTransfers,
   };
 }

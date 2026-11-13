@@ -17,7 +17,7 @@
 // balance), is left alone and simply not counted.
 // ============================================================
 
-import type { NormalizedImportRow } from "./types";
+import type { NormalizedImportRow, StatementHeaderSummary } from "./types";
 import { normalizeText } from "./normalize";
 
 /** Absolute tolerance when comparing money, in major units (one kobo/cent). */
@@ -38,6 +38,23 @@ export interface ReconcileMismatch {
   difference: string;
 }
 
+export interface HeaderCheck {
+  kind: "debitTotal" | "creditTotal" | "transactionCount" | "debitCount" | "creditCount" | "opening" | "closing";
+  label: string;
+  expected: string;
+  actual: string;
+  ok: boolean;
+  difference: string | null;
+}
+
+export interface ParsedTotals {
+  debit: string;
+  credit: string;
+  count: number;
+  debitCount: number;
+  creditCount: number;
+}
+
 export interface ReconciliationSummary {
   /** Number of consecutive balance-to-balance checks performed. */
   checked: number;
@@ -52,6 +69,18 @@ export interface ReconciliationSummary {
   openingBalance: string | null;
   /** The last balance seen, when the statement carried one. */
   closingBalance: string | null;
+  /** Header figures the file printed (PDF or CSV/XLSX summary rows). */
+  header: StatementHeaderSummary | null;
+  /** Parsed transaction totals used for the header comparison. */
+  parsedTotals: ParsedTotals;
+  /** Every header check, passed or failed. */
+  headerChecks: HeaderCheck[];
+  /** Only the failed header checks. */
+  headerMismatches: HeaderCheck[];
+  /** True when the statement's own totals/counts disagree with the rows. */
+  requiresAcknowledgement: boolean;
+  /** Human-readable warning shown in review. */
+  message: string | null;
 }
 
 export interface ReconcileResult {
@@ -109,6 +138,7 @@ function checkpoint(row: NormalizedImportRow): number | null {
 export function reconcileNormalizedRows(
   rows: NormalizedImportRow[],
   openingBalance: string | null = null,
+  header: StatementHeaderSummary | null = null,
 ): ReconcileResult {
   const working = rows.map((row) => ({ ...row }));
   const summary: ReconciliationSummary = {
@@ -119,6 +149,12 @@ export function reconcileNormalizedRows(
     corrected: 0,
     openingBalance: null,
     closingBalance: null,
+    header,
+    parsedTotals: { debit: "0.00", credit: "0.00", count: 0, debitCount: 0, creditCount: 0 },
+    headerChecks: [],
+    headerMismatches: [],
+    requiresAcknowledgement: false,
+    message: null,
   };
 
   const explicitOpening = toNumber(openingBalance);
@@ -186,7 +222,121 @@ export function reconcileNormalizedRows(
     anchorBalance = balance;
   }
 
+  summary.parsedTotals = parsedTotals(working);
+  if (header) {
+    summary.headerChecks = headerChecks(summary, header);
+    summary.headerMismatches = summary.headerChecks.filter((check) => !check.ok);
+    summary.requiresAcknowledgement = summary.headerMismatches.length > 0;
+    summary.message = acknowledgementMessage(summary);
+  }
+
   return { rows: working, summary };
+}
+
+function parsedTotals(rows: NormalizedImportRow[]): ParsedTotals {
+  let debit = 0;
+  let credit = 0;
+  let count = 0;
+  let debitCount = 0;
+  let creditCount = 0;
+  for (const row of rows) {
+    if (row.skipped || row.errors.length > 0) continue;
+    const amount = toNumber(row.amount);
+    if (amount === null || amount === 0) continue;
+    count += 1;
+    if (row.type === "expense") {
+      debit += amount;
+      debitCount += 1;
+    } else if (row.type === "income") {
+      credit += amount;
+      creditCount += 1;
+    }
+  }
+  return {
+    debit: fromNumber(debit),
+    credit: fromNumber(credit),
+    count,
+    debitCount,
+    creditCount,
+  };
+}
+
+function headerChecks(
+  summary: ReconciliationSummary,
+  header: StatementHeaderSummary,
+): HeaderCheck[] {
+  const checks: HeaderCheck[] = [];
+  const compareMoney = (
+    kind: HeaderCheck["kind"],
+    label: string,
+    expected: string | null,
+    actual: string | null,
+  ) => {
+    if (expected === null) return;
+    const expectedNumber = toNumber(expected);
+    const actualNumber = toNumber(actual);
+    if (expectedNumber === null) return;
+    const difference =
+      actualNumber === null ? expectedNumber : Math.abs(expectedNumber - actualNumber);
+    checks.push({
+      kind,
+      label,
+      expected: fromNumber(expectedNumber),
+      actual: actualNumber === null ? "unknown" : fromNumber(actualNumber),
+      ok: actualNumber !== null && Math.abs(expectedNumber - actualNumber) <= RECONCILE_TOLERANCE,
+      difference: fromNumber(difference),
+    });
+  };
+  const compareCount = (
+    kind: HeaderCheck["kind"],
+    label: string,
+    expected: number | null,
+    actual: number,
+  ) => {
+    if (expected === null) return;
+    checks.push({
+      kind,
+      label,
+      expected: String(expected),
+      actual: String(actual),
+      ok: expected === actual,
+      difference: expected === actual ? null : String(Math.abs(expected - actual)),
+    });
+  };
+
+  compareMoney("debitTotal", "Total debits", header.totalDebit, summary.parsedTotals.debit);
+  compareMoney("creditTotal", "Total credits", header.totalCredit, summary.parsedTotals.credit);
+  compareCount(
+    "transactionCount",
+    "Transactions",
+    header.transactionCount,
+    summary.parsedTotals.count,
+  );
+  compareCount("debitCount", "Debit rows", header.debitCount, summary.parsedTotals.debitCount);
+  compareCount("creditCount", "Credit rows", header.creditCount, summary.parsedTotals.creditCount);
+  compareMoney("opening", "Opening balance", header.openingBalance, summary.openingBalance);
+  compareMoney("closing", "Closing balance", header.closingBalance, summary.closingBalance);
+  return checks;
+}
+
+function acknowledgementMessage(summary: ReconciliationSummary): string | null {
+  if (summary.headerMismatches.length === 0) return null;
+  const countCheck = summary.headerMismatches.find(
+    (check) => check.kind === "transactionCount",
+  );
+  const expectedCount = summary.header?.transactionCount;
+  const moneyMismatches = summary.headerMismatches.filter((check) =>
+    ["debitTotal", "creditTotal", "opening", "closing"].includes(check.kind),
+  );
+  const largestDifference = moneyMismatches.reduce((largest, check) => {
+    const numeric = Number(check.difference ?? 0);
+    return Number.isFinite(numeric) && numeric > largest ? numeric : largest;
+  }, 0);
+  const parsedCount = summary.parsedTotals.count;
+  if (countCheck && expectedCount !== null) {
+    return `Parsed ${parsedCount} of ${expectedCount} rows / totals differ by ₦${largestDifference.toFixed(2)}. Review before importing`;
+  }
+  return `Parsed ${parsedCount} rows / totals differ by ₦${largestDifference.toFixed(2)}. Review before importing`;
 }
 
 function recordMismatch(
