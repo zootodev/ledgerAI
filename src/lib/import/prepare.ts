@@ -15,7 +15,12 @@ import type {
   StatementHeaderSummary,
 } from "./types";
 import { normalizeImportRow } from "./normalize";
-import { findOpeningBalance, reconcileNormalizedRows, type ReconciliationSummary } from "./reconcile";
+import {
+  findOpeningBalance,
+  orderRowsByBalanceChain,
+  reconcileNormalizedRows,
+  type ReconciliationSummary,
+} from "./reconcile";
 import { detectInternalTransfers, type TransferSummary } from "./transfers";
 import { hasStatementSummary, summarizeRawRows } from "./statement-summary";
 
@@ -46,6 +51,36 @@ function sectionForRawRow(
   return sections.find((section) => section.id === rawSectionId) ?? sections[0];
 }
 
+/**
+ * Reconcile, and if the printed row order does not form a balance chain, try
+ * to reconstruct the ledger order from the balances themselves. The reordered
+ * result is used only when it fully reconciles and checks at least as many
+ * rows, so ordinary statements keep their printed order.
+ */
+function reconcileRows(
+  rows: NormalizedImportRow[],
+  opening: string | null,
+  header: StatementHeaderSummary | null,
+): ReturnType<typeof reconcileNormalizedRows> {
+  const first = reconcileNormalizedRows(rows, opening, header);
+  if (first.summary.mismatches.length === 0) return first;
+
+  const reordered = orderRowsByBalanceChain(
+    first.rows,
+    first.summary.openingBalance ?? opening,
+  );
+  if (!reordered) return first;
+
+  const retry = reconcileNormalizedRows(reordered, opening, header);
+  if (
+    retry.summary.mismatches.length === 0 &&
+    retry.summary.checked >= first.summary.checked
+  ) {
+    return retry;
+  }
+  return first;
+}
+
 /** Prepare one file for preview or commit. */
 export function prepareImport(
   parsed: ParsedImportFile,
@@ -60,7 +95,7 @@ export function prepareImport(
     const normalized = parsed.rows.map((raw, index) =>
       normalizeImportRow(raw, mapping, index),
     );
-    const reconciled = reconcileNormalizedRows(
+    const reconciled = reconcileRows(
       normalized,
       header.openingBalance ?? findOpeningBalance(normalized),
       hasStatementSummary(header) ? header : null,
@@ -90,7 +125,7 @@ export function prepareImport(
       .map((raw, index) => ({ raw, index }))
       .filter(({ raw }) => sectionForRawRow(raw.sectionId, sections)?.id === section.id)
       .map(({ raw, index }) => normalizeImportRow(raw, mapping, index));
-    const reconciled = reconcileNormalizedRows(
+    const reconciled = reconcileRows(
       normalized,
       section.header.openingBalance ?? findOpeningBalance(normalized),
       hasStatementSummary(section.header) ? section.header : null,

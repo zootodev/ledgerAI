@@ -108,6 +108,14 @@ export interface SyntheticLayout {
   rowsPerPage?: number;
   /** A scanned PDF has no text layer and must produce the scan message. */
   scanned?: boolean;
+  /** Extra cover/letterhead pages shown before the tables. */
+  introPage?: string[];
+  /** Print identity labels and values on separate baselines. */
+  splitIdentity?: boolean;
+  /** Print summary labels and values on separate baselines. */
+  splitSummary?: boolean;
+  /** Put the summary block before the first table header, as OPay does. */
+  summaryBeforeTable?: boolean;
 }
 
 function roundMoney(value: number): number {
@@ -285,120 +293,166 @@ function layout(
   };
 }
 
-export const SYNTHETIC_LAYOUTS: SyntheticLayout[] = [
-  layout(
-    "opay-two-section",
-    "OPay-style wallet + savings (two sections)",
+function opayRealisticLayout(): SyntheticLayout {
+  const walletRows: SyntheticRowInput[] = [];
+  const savingsRows: SyntheticRowInput[] = [];
+
+  const internalCredits = [
+    900, 700, 9000, 1000, 500, 1500, 1020, 800, 1500, 700, 700, 200, 1000,
+    700, 1000, 13300, 50, 2000,
+  ];
+  internalCredits.forEach((amount, index) => {
+    const day = String((index % 9) + 1).padStart(2, "0");
+    const time = `${String(8 + Math.floor(index / 6)).padStart(2, "0")}:${String((index % 6) * 7).padStart(2, "0")}:00`;
+    const reference = `SWP-C-${index + 1}`;
+    walletRows.push({
+      date: `${day} Nov 2026`,
+      time,
+      description: "Transfer from savings wallet",
+      reference,
+      credit: amount,
+      tag: "internal",
+    });
+    savingsRows.push({
+      date: `${day} Nov 2026`,
+      time,
+      description: "Transfer to wallet",
+      reference,
+      debit: amount,
+      tag: "internal",
+    });
+  });
+
+  const internalDebits = [10000, 6737, 14950, 1950, 1000, 1000];
+  internalDebits.forEach((amount, index) => {
+    const day = String((index % 5) + 2).padStart(2, "0");
+    const time = `${String(10 + index).padStart(2, "0")}:15:00`;
+    const reference = `SWP-D-${index + 1}`;
+    walletRows.push({
+      date: `${day} Nov 2026`,
+      time,
+      description: "Transfer to savings wallet",
+      reference,
+      debit: amount,
+      tag: "internal",
+    });
+    savingsRows.push({
+      date: `${day} Nov 2026`,
+      time,
+      description: "Transfer from wallet",
+      reference,
+      credit: amount,
+      tag: "internal",
+    });
+  });
+
+  const realDebits: Array<[number, string, string, string]> = [
+    [1500, "10 Nov 2026", "12:00:00", "REV-1500"],
+    [900, "01 Nov 2026", "09:13:00", "RD-01"],
+    [700, "01 Nov 2026", "10:17:00", "RD-02"],
+    [10000, "08 Nov 2026", "11:19:00", "RD-03"],
+    [1000, "02 Nov 2026", "12:23:00", "RD-04"],
+    [500, "02 Nov 2026", "13:29:00", "RD-05"],
+    [500, "03 Nov 2026", "14:31:00", "RD-06"],
+    [1020, "03 Nov 2026", "15:37:00", "RD-07"],
+    [800, "04 Nov 2026", "16:41:00", "RD-08"],
+    [700, "04 Nov 2026", "17:43:00", "RD-09"],
+    [700, "05 Nov 2026", "08:47:00", "RD-10"],
+    [200, "05 Nov 2026", "09:53:00", "RD-11"],
+    [1000, "06 Nov 2026", "10:59:00", "RD-12"],
+    [700, "06 Nov 2026", "11:01:00", "RD-13"],
+    [1000, "07 Nov 2026", "12:07:00", "RD-14"],
+    [500, "07 Nov 2026", "13:11:00", "RD-15"],
+    [13300, "08 Nov 2026", "14:13:00", "RD-16"],
+    [50, "09 Nov 2026", "15:17:00", "RD-17"],
+    [10000, "08 Nov 2026", "16:19:00", "RD-18"],
+    [50, "09 Nov 2026", "17:23:00", "RD-19"],
+    [2000, "09 Nov 2026", "18:29:00", "RD-20"],
+  ];
+  for (const [amount, date, time, reference] of realDebits) {
+    const reversal = reference === "REV-1500";
+    walletRows.push({
+      date,
+      time,
+      description: reversal ? "POS purchase pending" : "POS purchase at market",
+      reference,
+      debit: amount,
+      tag: reversal ? "reversal" : undefined,
+    });
+  }
+
+  const realCredits: Array<[number, string, string, string, string, boolean]> = [
+    [1500, "10 Nov 2026", "12:03:00", "REV-1500", "Reversal of POS purchase", true],
+    [10000, "09 Nov 2026", "09:00:00", "RC-01", "Incoming transfer from customer", false],
+    [14950, "05 Nov 2026", "10:00:00", "RC-02", "Transfer from KUDA MFB - ADA OKAFOR", false],
+    [12000, "07 Nov 2026", "11:00:00", "RC-03", "Loan disbursement", false],
+    [6737, "06 Nov 2026", "12:00:00", "RC-04", "Transfer from GTBank - ADA OKAFOR", false],
+  ];
+  for (const [amount, date, time, reference, description, reversal] of realCredits) {
+    walletRows.push({
+      date,
+      time,
+      description,
+      reference,
+      credit: amount,
+      tag: reversal ? "reversal" : /ADA OKAFOR/.test(description) ? "self" : undefined,
+    });
+  }
+
+  const interestAmounts = [0.51, 0.51, 0.12, 0.12, 0.24, 0.09, 0.09, 0.2, 0.2, 0.18];
+  interestAmounts.forEach((amount, index) => {
+    savingsRows.push({
+      date: `${String(index + 1).padStart(2, "0")} Nov 2026`,
+      time: "23:00:00",
+      description: "Savings interest",
+      reference: `INT-${index + 1}`,
+      credit: amount,
+      tag: "interest",
+    });
+  });
+
+  const order = (a: SyntheticRowInput, b: SyntheticRowInput) =>
+    new Date(`${a.date} ${a.time ?? "00:00:00"}`).getTime() -
+    new Date(`${b.date} ${b.time ?? "00:00:00"}`).getTime();
+  walletRows.sort(order);
+  savingsRows.sort(order);
+
+  return layout(
+    "opay-realistic",
+    "OPay-style realistic wallet + savings (cover page, split headers, 50 + 34 rows)",
     OPWALLET_COLUMNS,
     [
       {
         title: "Wallet Account",
-        accountName: "ADA OKAFOR",
+        accountName: "ADA CHINWE OKAFOR",
         accountNumber: "1234567890",
-        openingBalance: 20000,
-        rows: [
-          {
-            date: "01 Nov 2026",
-            time: "08:10",
-            description: "POS purchase SHOPRITE MALL",
-            reference: "POS-1001",
-            debit: 1200,
-          },
-          {
-            date: "02 Nov 2026",
-            time: "09:15",
-            description: "Transfer from KUDA - ADA OKAFOR",
-            reference: "NIP-2001",
-            credit: 5000,
-            tag: "self",
-          },
-          {
-            date: "03 Nov 2026",
-            time: "10:00",
-            description: "Airtel data bundle",
-            reference: "AIR-3001",
-            debit: 2500,
-          },
-          {
-            date: "04 Nov 2026",
-            time: "11:30",
-            description: "Transfer to OWealth Savings",
-            reference: "SWP-4001",
-            debit: 8000,
-            tag: "internal",
-          },
-          {
-            date: "05 Nov 2026",
-            time: "12:00",
-            description: "POS purchase failed",
-            reference: "REV-5001",
-            debit: 700,
-            tag: "reversal",
-          },
-          {
-            date: "05 Nov 2026",
-            time: "12:01",
-            description: "Reversal POS purchase failed",
-            reference: "REV-5001",
-            credit: 700,
-            tag: "reversal",
-          },
-          {
-            date: "06 Nov 2026",
-            time: "13:20",
-            description: "Monthly interest",
-            reference: "INT-6001",
-            credit: 2.26,
-            tag: "interest",
-          },
-          {
-            date: "07 Nov 2026",
-            time: "14:00",
-            description: "Transfer to Kuda - ADA OKAFOR",
-            reference: "NIP-7001",
-            debit: 3000,
-            tag: "self",
-          },
-        ],
+        openingBalance: 1000,
+        rows: walletRows,
       },
       {
         title: "Savings Account",
-        accountName: "ADA OKAFOR",
+        accountName: "ADA CHINWE OKAFOR",
         accountNumber: "1234567890",
-        openingBalance: 1000,
-        rows: [
-          {
-            date: "04 Nov 2026",
-            time: "11:30",
-            description: "Transfer from wallet",
-            reference: "SWP-4001",
-            credit: 8000,
-            tag: "internal",
-          },
-          {
-            date: "06 Nov 2026",
-            time: "13:20",
-            description: "Monthly interest",
-            reference: "INT-6002",
-            credit: 2.26,
-            tag: "interest",
-          },
-          {
-            date: "08 Nov 2026",
-            description: "Sweep to target savings",
-            reference: "SWP-8001",
-            debit: 500,
-          },
-          {
-            date: "09 Nov 2026",
-            description: "Top up from wallet",
-            reference: "TOP-9001",
-            credit: 1500,
-          },
-        ],
+        openingBalance: 1490.05,
+        rows: savingsRows,
       },
     ],
-  ),
+    {
+      rowsPerPage: 12,
+      introPage: [
+        "OPay Statement",
+        "Statement Period: 01 Nov 2026 to 10 Nov 2026",
+        "This cover page intentionally contains no transactions.",
+      ],
+      splitIdentity: true,
+      splitSummary: true,
+      summaryBeforeTable: true,
+    },
+  );
+}
+
+export const SYNTHETIC_LAYOUTS: SyntheticLayout[] = [
+  opayRealisticLayout(),
   layout(
     "kuda",
     "Kuda",
@@ -890,11 +944,22 @@ function metadataRuns(
   layout: SyntheticLayout,
   y: number,
 ): { runs: PdfTextRun[]; nextY: number } {
-  const runs: PdfTextRun[] = [
+  const runs: PdfTextRun[] = [];
+  if (layout.splitIdentity) {
+    runs.push(
+      { text: "Account Name", x: 30, y },
+      { text: "Account Number", x: 230, y },
+      { text: section.accountName, x: 30, y: y + 10 },
+      { text: section.accountNumber, x: 230, y: y + 10 },
+      { text: `Statement period: ${layout.statementPeriod}`, x: 30, y: y + 24 },
+    );
+    return { runs, nextY: y + 36 };
+  }
+  runs.push(
     { text: `Account name: ${section.accountName}`, x: 30, y },
     { text: `Account number: ${section.accountNumber}`, x: 30, y: y + 12 },
     { text: `Statement period: ${layout.statementPeriod}`, x: 30, y: y + 24 },
-  ];
+  );
   return { runs, nextY: y + 36 };
 }
 
@@ -944,25 +1009,39 @@ function rowRuns(row: SyntheticRow, layout: SyntheticLayout, y: number): PdfText
   return runs;
 }
 
-function summaryRuns(section: SyntheticSection, y: number): PdfTextRun[] {
+function summaryRuns(
+  section: SyntheticSection,
+  layout: SyntheticLayout,
+  y: number,
+): PdfTextRun[] {
   const totals = section.headerTotalsOverride ?? {};
+  const totalDebit = money(totals.totalDebit ?? section.totalDebit);
+  const totalCredit = money(totals.totalCredit ?? section.totalCredit);
+  const transactionCount = totals.transactionCount ?? section.rows.length;
+
+  if (layout.splitSummary) {
+    return [
+      { text: "Opening Balance", x: 30, y },
+      { text: "Total Debit", x: 220, y },
+      { text: "Debit Count", x: 400, y },
+      { text: `NGN ${money(section.openingBalance)}`, x: 30, y: y + 10 },
+      { text: `NGN ${totalDebit}`, x: 220, y: y + 10 },
+      { text: String(section.debitCount), x: 400, y: y + 10 },
+      { text: "Closing Balance", x: 30, y: y + 24 },
+      { text: "Total Credit", x: 220, y: y + 24 },
+      { text: "Credit Count", x: 400, y: y + 24 },
+      { text: `NGN ${money(section.closingBalance)}`, x: 30, y: y + 34 },
+      { text: `NGN ${totalCredit}`, x: 220, y: y + 34 },
+      { text: String(section.creditCount), x: 400, y: y + 34 },
+      { text: `Total transactions: ${transactionCount}`, x: 30, y: y + 48 },
+    ];
+  }
+
   return [
     { text: `Closing balance: ${money(section.closingBalance)}`, x: 30, y },
-    {
-      text: `Total debits: ${money(totals.totalDebit ?? section.totalDebit)}`,
-      x: 30,
-      y: y + 12,
-    },
-    {
-      text: `Total credits: ${money(totals.totalCredit ?? section.totalCredit)}`,
-      x: 30,
-      y: y + 24,
-    },
-    {
-      text: `Total transactions: ${totals.transactionCount ?? section.rows.length}`,
-      x: 30,
-      y: y + 36,
-    },
+    { text: `Total debits: ${totalDebit}`, x: 30, y: y + 12 },
+    { text: `Total credits: ${totalCredit}`, x: 30, y: y + 24 },
+    { text: `Total transactions: ${transactionCount}`, x: 30, y: y + 36 },
   ];
 }
 
@@ -988,6 +1067,10 @@ function paginateSection(section: SyntheticSection, layout: SyntheticLayout): Pd
     }
   };
 
+  if (layout.summaryBeforeTable) {
+    page.push(...summaryRuns(section, layout, y));
+    y += layout.splitSummary ? 60 : 48;
+  }
   if (section.title) {
     page.push({ text: section.title, x: 30, y, size: 12 });
     y += 20;
@@ -997,8 +1080,10 @@ function paginateSection(section: SyntheticSection, layout: SyntheticLayout): Pd
   y = meta.nextY;
   page.push(...headerRuns(layout, y));
   y += 14;
-  page.push({ text: `Opening balance: ${money(section.openingBalance)}`, x: 30, y });
-  y += 14;
+  if (!layout.summaryBeforeTable) {
+    page.push({ text: `Opening balance: ${money(section.openingBalance)}`, x: 30, y });
+    y += 14;
+  }
 
   let rowsOnPage = 0;
   for (const row of section.rows) {
@@ -1028,7 +1113,9 @@ function paginateSection(section: SyntheticSection, layout: SyntheticLayout): Pd
     }
   }
 
-  page.push(...summaryRuns(section, y));
+  if (!layout.summaryBeforeTable) {
+    page.push(...summaryRuns(section, layout, y));
+  }
   flush();
   return pages;
 }
@@ -1040,6 +1127,16 @@ export function statementPdf(layout: SyntheticLayout): Uint8Array {
     return buildSyntheticPdf([[]]);
   }
   const pages: PdfTextRun[][] = [];
+  if (layout.introPage && layout.introPage.length > 0) {
+    pages.push(
+      layout.introPage.map((text, index) => ({
+        text,
+        x: 40,
+        y: 90 + index * 22,
+        size: index === 0 ? 16 : 10,
+      })),
+    );
+  }
   for (const section of layout.sections) {
     const sectionPages = paginateSection(section, layout);
     pages.push(...sectionPages);

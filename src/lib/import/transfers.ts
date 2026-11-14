@@ -83,8 +83,8 @@ function canonicalNameTokens(name: string): string[] {
     .filter((token) => token.length >= 2 && !NAME_STOPWORDS.has(token));
 }
 
-function descriptionHasName(description: string, tokens: string[]): boolean {
-  if (tokens.length < 2) return false;
+function descriptionNameMatches(description: string, tokens: string[]): number {
+  if (tokens.length < 2) return 0;
   const words = new Set(
     description
       .toLowerCase()
@@ -92,7 +92,7 @@ function descriptionHasName(description: string, tokens: string[]): boolean {
       .split(/\s+/)
       .filter(Boolean),
   );
-  return tokens.every((token) => words.has(token));
+  return tokens.filter((token) => words.has(token)).length;
 }
 
 function amountNumber(row: NormalizedImportRow): number | null {
@@ -194,10 +194,19 @@ export function detectInternalTransfers(
     const ownWording =
       /\bown\s+account\b|\bself\s+transfer\b|\btransfer\s+from\s+(?:my|own)\b/.test(description);
     const transferWording = /\btransfer|\btrf\b|\bremittance\b/.test(description);
-    const matchesHolder = holderNames.some((tokens) =>
-      descriptionHasName(row.description, tokens),
+    const nameMatches = holderNames.map((tokens) => ({
+      tokens,
+      matched: descriptionNameMatches(row.description, tokens),
+    }));
+    const exactHolder = nameMatches.some(({ tokens, matched }) => matched >= tokens.length);
+    // Statements often omit a middle name or print only the first/last name.
+    // Accept one missing word when a bank/own-account cue is present.
+    const bankCue = /bank\b|\bmfb\b|microfinance|\bpsb\b|fintech/i.test(row.description);
+    const partialHolder = nameMatches.some(
+      ({ tokens, matched }) =>
+        tokens.length >= 3 && matched >= Math.max(2, tokens.length - 1),
     );
-    if (ownWording || (transferWording && matchesHolder)) {
+    if (ownWording || (transferWording && (exactHolder || (partialHolder && bankCue)))) {
       markTransfer(row, { kind: "self", reason: "Transfer (own account)" }, false);
       selfRows.add(row.rowIndex);
       summary.selfTransfers += 1;
@@ -246,39 +255,80 @@ export function detectInternalTransfers(
   }
 
   // Mirror pairs: same amount, opposite direction, close in time. A
-  // reversal/refund pair is deliberately excluded.
+  // reversal/refund pair is deliberately excluded. When the statement has
+  // multiple sections, a pair that crosses sections is much stronger evidence
+  // than two unrelated rows inside one account.
   const candidates = rows.filter(
     (row) => isCandidate(row) && !selfRows.has(row.rowIndex) && !reversalUsed.has(row.rowIndex),
   );
-  const used = new Set<number>();
+
+  interface MirrorPair {
+    first: NormalizedImportRow;
+    second: NormalizedImportRow;
+    score: number;
+  }
+  const pairs: MirrorPair[] = [];
   for (let i = 0; i < candidates.length; i += 1) {
     const first = candidates[i];
-    if (used.has(first.rowIndex)) continue;
     const firstAmount = amountNumber(first);
     if (firstAmount === null) continue;
     for (let j = i + 1; j < candidates.length; j += 1) {
       const second = candidates[j];
-      if (used.has(second.rowIndex)) continue;
       if (first.type === second.type) continue;
       if (amountNumber(second) !== firstAmount) continue;
       if (!isCloseInTime(first, second)) continue;
 
-      used.add(first.rowIndex);
-      used.add(second.rowIndex);
-      markTransfer(
-        first,
-        { kind: "mirrored", reason: "internal transfer (mirrored entry)" },
-        true,
-      );
-      markTransfer(
-        second,
-        { kind: "mirrored", reason: "internal transfer (mirrored entry)" },
-        true,
-      );
-      summary.mirrored += 2;
-      summary.skipped += 2;
-      break;
+      let score = 0;
+      if (
+        first.sectionId &&
+        second.sectionId &&
+        first.sectionId !== second.sectionId
+      ) {
+        score += 100;
+      }
+      if (
+        SWEEP_WORDS.test(first.description) ||
+        SWEEP_WORDS.test(second.description)
+      ) {
+        score += 20;
+      }
+      if (first.reference && first.reference === second.reference) score += 10;
+      const firstSeconds = timeSeconds(first.time);
+      const secondSeconds = timeSeconds(second.time);
+      if (firstSeconds !== null && secondSeconds !== null) {
+        score -= Math.abs(firstSeconds - secondSeconds) / 60;
+      }
+      pairs.push({ first, second, score });
     }
+  }
+
+  // Best evidence first: cross-section matches, then sweep wording, then the
+  // closest timestamps. This prevents an earlier same-section coincidence from
+  // consuming a row that should mirror the other section.
+  pairs.sort(
+    (a, b) =>
+      b.score - a.score ||
+      a.first.rowIndex - b.first.rowIndex ||
+      a.second.rowIndex - b.second.rowIndex,
+  );
+
+  const used = new Set<number>();
+  for (const pair of pairs) {
+    if (used.has(pair.first.rowIndex) || used.has(pair.second.rowIndex)) continue;
+    used.add(pair.first.rowIndex);
+    used.add(pair.second.rowIndex);
+    markTransfer(
+      pair.first,
+      { kind: "mirrored", reason: "internal transfer (mirrored entry)" },
+      true,
+    );
+    markTransfer(
+      pair.second,
+      { kind: "mirrored", reason: "internal transfer (mirrored entry)" },
+      true,
+    );
+    summary.mirrored += 2;
+    summary.skipped += 2;
   }
 
   return { rows, summary };

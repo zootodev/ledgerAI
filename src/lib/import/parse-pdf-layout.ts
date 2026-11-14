@@ -561,6 +561,82 @@ function emptySummary(): StatementHeaderSummary {
   };
 }
 
+const SUMMARY_LABEL =
+  /\b(opening\s*balance|closing\s*balance|total\s*(?:debit|credit|transactions?|txns?)|(?:debit|credit)\s*count)\b/i;
+
+const IDENTITY_LINE =
+  /\b(account\s*name|account\s*(?:number|no)|statement\s*period)\b/i;
+
+/** Copy any figures the target does not already have. */
+function mergeSummary(target: StatementHeaderSummary, source: StatementHeaderSummary): void {
+  for (const key of Object.keys(target) as (keyof StatementHeaderSummary)[]) {
+    if (target[key] === null && source[key] !== null) {
+      Object.assign(target, { [key]: source[key] });
+    }
+  }
+}
+
+/**
+ * Header figure labels and their right-aligned numbers are often printed on
+ * adjacent lines (same table row, different baselines). Rebuild each label's
+ * value from the next line by matching the label's horizontal column, so
+ * "Opening Balance", "Total Debit" and "Debit Count" do not steal each other's
+ * numbers.
+ */
+function summarySegmentsAt(
+  lines: PdfLine[],
+  index: number,
+): { segments: string[]; skipNext: boolean } {
+  const line = lines[index];
+  const text = line.text.replace(/\s+/g, " ").trim();
+  if (/\d/.test(text) || !SUMMARY_LABEL.test(text)) {
+    return { segments: [text], skipNext: false };
+  }
+
+  const next = lines[index + 1];
+  if (
+    !next ||
+    next.page !== line.page ||
+    Math.abs(line.y - next.y) > 18 ||
+    findDateInText(next.text) ||
+    !/\d/.test(next.text)
+  ) {
+    return { segments: [text], skipNext: false };
+  }
+
+  const labels = line.items
+    .filter((item) => SUMMARY_LABEL.test(item.text))
+    .sort((a, b) => a.x - b.x);
+  if (labels.length === 0) {
+    return { segments: [text], skipNext: false };
+  }
+
+  const boundaries = labels.map((label, position) => {
+    const previous = labels[position - 1]?.x;
+    const nextLabel = labels[position + 1]?.x;
+    return {
+      low: previous === undefined ? Number.NEGATIVE_INFINITY : (previous + label.x) / 2,
+      high: nextLabel === undefined ? Number.POSITIVE_INFINITY : (label.x + nextLabel) / 2,
+    };
+  });
+
+  const segments = labels.map((label, position) => {
+    const values = next.items
+      .filter(
+        (item) =>
+          item.x >= boundaries[position].low &&
+          item.x < boundaries[position].high &&
+          /\d/.test(item.text),
+      )
+      .sort((a, b) => a.x - b.x)
+      .map((item) => item.text.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    return values.length > 0 ? `${label.text} ${values.join(" ")}` : label.text;
+  });
+
+  return { segments, skipNext: segments.some((segment) => /\d/.test(segment)) };
+}
+
 function updateSummary(summary: StatementHeaderSummary, text: string): void {
   const line = text.replace(/\s+/g, " ").trim();
   if (line === "" || findDateInText(line)) return;
@@ -593,9 +669,13 @@ function updateSummary(summary: StatementHeaderSummary, text: string): void {
   if (count && summary.transactionCount === null) {
     summary.transactionCount = Number(count[1]);
   }
-  const debitCount = /(\d+)\s*(?:debits?|withdrawals?|money\s*out|outflows?)\b/i.exec(line);
+  const debitCount =
+    /(?:debit|withdrawals?|money\s*out|outflows?)\s*count\s*[:\-]?\s*(\d+)/i.exec(line) ??
+    /(\d+)\s*(?:debits?|withdrawals?|money\s*out|outflows?)\b/i.exec(line);
   if (debitCount && summary.debitCount === null) summary.debitCount = Number(debitCount[1]);
-  const creditCount = /(\d+)\s*(?:credits?|deposits?|money\s*in|inflows?)\b/i.exec(line);
+  const creditCount =
+    /(?:credit|deposits?|money\s*in|inflows?)\s*count\s*[:\-]?\s*(\d+)/i.exec(line) ??
+    /(\d+)\s*(?:credits?|deposits?|money\s*in|inflows?)\b/i.exec(line);
   if (creditCount && summary.creditCount === null) summary.creditCount = Number(creditCount[1]);
 
   const accountName = /account\s*name\s*[:#-]\s*(.+)$/i.exec(line);
@@ -618,6 +698,46 @@ function updateSummary(summary: StatementHeaderSummary, text: string): void {
 
 const SECTION_TITLE = /\b(wallet|savings?|owealth|target\s+savings|spend\s+and\s+save|current\s+account|domiciliary|loan|card|piggy|vault)\b/i;
 
+/**
+ * Some PDFs print identity labels on one line and their values on the next,
+ * aligned by column (the same geometry as header totals). Resolve the value
+ * under a label by horizontal proximity.
+ */
+function labelValueBelow(
+  lines: PdfLine[],
+  index: number,
+  labelPattern: RegExp,
+): string | null {
+  const line = lines[index];
+  const label = line.items.find((item) => labelPattern.test(item.text));
+  if (!label) return null;
+  const next = lines[index + 1];
+  if (
+    !next ||
+    next.page !== line.page ||
+    Math.abs(line.y - next.y) > 18 ||
+    findDateInText(next.text)
+  ) {
+    return null;
+  }
+  const labels = line.items
+    .filter((item) => /account|holder|customer|name|number|acct/i.test(item.text))
+    .sort((a, b) => a.x - b.x);
+  const position = labels.findIndex((item) => item === label);
+  if (position === -1) return null;
+  const previous = labels[position - 1]?.x;
+  const following = labels[position + 1]?.x;
+  const low = previous === undefined ? Number.NEGATIVE_INFINITY : (previous + label.x) / 2;
+  const high = following === undefined ? Number.POSITIVE_INFINITY : (label.x + following) / 2;
+  const value = next.items
+    .filter((item) => item.x >= low && item.x < high)
+    .sort((a, b) => a.x - b.x)
+    .map((item) => item.text.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join(" ");
+  return value === "" ? null : cleanText(value).slice(0, 120);
+}
+
 function sectionIdentity(
   lines: PdfLine[],
   headerIndex: number,
@@ -633,8 +753,18 @@ function sectionIdentity(
     if (text === "") continue;
     const account = /account\s*name\s*[:#-]\s*(.+)$/i.exec(text);
     if (account && accountName === null) accountName = cleanText(account[1]).slice(0, 120);
+    if (accountName === null) {
+      const below = labelValueBelow(lines, index, /account\s*name/i);
+      if (below) accountName = below;
+    }
     const number = /(?:account|acct)\s*(?:number|no|#)?\s*[:#-]?\s*(\d{6,})\b/i.exec(text);
     if (number && accountNumber === null) accountNumber = number[1];
+    if (accountNumber === null) {
+      const below = labelValueBelow(lines, index, /account\s*(?:number|no)|acct/i);
+      if (below && /^\d{6,}$/.test(below.replace(/\s+/g, ""))) {
+        accountNumber = below.replace(/\s+/g, "");
+      }
+    }
     if (title === null && text.length <= 80 && SECTION_TITLE.test(text)) {
       // Avoid taking a transaction description / a totals sentence as title.
       if (!/\b(total|balance|transaction|debit|credit|date|amount)\b/i.test(text)) {
@@ -835,9 +965,12 @@ export function extractPdfTables(items: PdfTextItem[]): PdfExtraction {
   const sections: SectionBuild[] = [];
   let current: SectionBuild | null = null;
   let currentHeader: PdfTableHeader | null = null;
-  const preamble = emptySummary();
+  let pendingSummary = emptySummary();
+  let pendingSummaryActive = false;
+  let skipIndex = -1;
 
   for (let index = 0; index < lines.length; index += 1) {
+    if (index === skipIndex) continue;
     const line = lines[index];
     // A line carrying a real transaction date is data, not a header, even if
     // its narration happens to contain words like "balance" or "amount".
@@ -855,13 +988,20 @@ export function extractPdfTables(items: PdfTextItem[]): PdfExtraction {
         current = makeSection(
           sectionIndex,
           identity,
-          sectionIndex === 0 ? { ...preamble } : emptySummary(),
+          pendingSummaryActive ? { ...pendingSummary } : emptySummary(),
         );
         if (identity.title) current.header.accountName = identity.accountName;
         sections.push(current);
+        pendingSummary = emptySummary();
+        pendingSummaryActive = false;
         updateSummary(current.header, line.text);
       } else if (current) {
         // Repeated header on a new page: same section, refresh the bands.
+        if (pendingSummaryActive) {
+          mergeSummary(current.header, pendingSummary);
+          pendingSummary = emptySummary();
+          pendingSummaryActive = false;
+        }
         updateSummary(current.header, line.text);
       }
       currentHeader = header;
@@ -869,10 +1009,51 @@ export function extractPdfTables(items: PdfTextItem[]): PdfExtraction {
       continue;
     }
 
+    const summaryText = summarySegmentsAt(lines, index);
+    const summaryLabel =
+      !findDateInText(line.text) && SUMMARY_LABEL.test(line.text);
+
     if (!current) {
       // Preamble before the first table may carry the account identity and
       // opening balance. It is copied into the first section when it appears.
-      updateSummary(preamble, line.text);
+      pendingSummaryActive = true;
+      for (const segment of summaryText.segments) updateSummary(pendingSummary, segment);
+      if (summaryText.skipNext) skipIndex = index + 1;
+      continue;
+    }
+
+    if (summaryLabel) {
+      // A totals/opening block after the previous table belongs to the next
+      // section (or, if none follows, to the current one at finalize time).
+      finalizeDraft(current);
+      pendingSummaryActive = true;
+      for (const segment of summaryText.segments) updateSummary(pendingSummary, segment);
+      if (summaryText.skipNext) skipIndex = index + 1;
+      continue;
+    }
+
+    if (pendingSummaryActive) {
+      if (findDateInText(line.text) && !IDENTITY_LINE.test(line.text)) {
+        // A transaction follows the summary: it belongs to the current table.
+        mergeSummary(current.header, pendingSummary);
+        pendingSummary = emptySummary();
+        pendingSummaryActive = false;
+      } else {
+        for (const segment of summaryText.segments) updateSummary(pendingSummary, segment);
+        if (summaryText.skipNext) skipIndex = index + 1;
+        continue;
+      }
+    }
+
+    // Repeated page metadata (account name/number, period) sits between the
+    // previous page's last row and the repeated table header. It is not a
+    // wrapped transaction description.
+    if (IDENTITY_LINE.test(line.text)) {
+      const labelOnly =
+        line.items.length > 0 &&
+        !/[:#\d]/.test(line.text) &&
+        line.items.every((item) => IDENTITY_LINE.test(item.text));
+      if (labelOnly) skipIndex = index + 1;
       continue;
     }
 
@@ -895,7 +1076,10 @@ export function extractPdfTables(items: PdfTextItem[]): PdfExtraction {
     }
   }
 
-  if (current) finalizeDraft(current);
+  if (current) {
+    if (pendingSummaryActive) mergeSummary(current.header, pendingSummary);
+    finalizeDraft(current);
+  }
   if (sections.length === 0) {
     return { headers: [...PDF_HEADERS], rows: [], sections: [], statement: emptySummary() };
   }

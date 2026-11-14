@@ -1174,6 +1174,44 @@ describe("commitImport", () => {
     });
   });
 
+  it("commits an incoming own-account transfer overridden to Income as income", async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
+    mockPrisma.category.findMany.mockResolvedValue([
+      makeCategoryRow({ id: SYS_OTHER_INCOME, name: "Other Income", type: "income" }),
+      makeCategoryRow({ id: SYS_OTHER, name: "Other" }),
+    ]);
+    mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-override-income" });
+
+    const result = await commitImport(
+      csvBytes(
+        ["Date,Description,Amount", "2026-11-01,Transfer from KUDA - USER A,+5000.00"].join("\n"),
+      ),
+      commitInput({
+        fileName: "own-transfer-income.csv",
+        selections: [
+          {
+            rowIndex: 0,
+            include: true,
+            categoryId: SYS_OTHER_INCOME,
+            typeOverride: "income",
+          },
+        ],
+      }),
+    );
+
+    expect(result.imported).toBe(1);
+    const created = mockPrisma.transaction.createMany.mock.calls[0][0].data[0] as Record<
+      string,
+      unknown
+    >;
+    expect(created).toMatchObject({
+      type: "income",
+      amount: "5000.00",
+      categoryId: SYS_OTHER_INCOME,
+    });
+  });
+
   it("aborts the PDF commit with the actionable parser error and writes nothing", async () => {
     vi.mocked(parsePdf).mockRejectedValue(
       new Error("We couldn't find any transactions in this PDF."),

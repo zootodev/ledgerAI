@@ -62,6 +62,8 @@ export interface ParsedPdfResult {
   rows: RawImportRow[];
   sections?: ImportSection[];
   statement?: StatementHeaderSummary;
+  /** Which extraction path produced this result (acceptance diagnostics). */
+  extractor?: "pdfjs" | "fallback";
 }
 
 const MONTHS: Record<string, number> = {
@@ -808,7 +810,9 @@ async function loadPdfTextItems(bytes: Uint8Array): Promise<{ items: PdfTextItem
   await import("@napi-rs/canvas");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const document = await pdfjs.getDocument({
-    data: bytes.slice(),
+    // pdfjs rejects Node Buffer instances; copy into a plain Uint8Array so
+    // CLI/acceptance callers behave exactly like the upload path.
+    data: new Uint8Array(bytes),
     useSystemFonts: true,
     isEvalSupported: false,
   }).promise;
@@ -878,7 +882,17 @@ function fallbackExtraction(text: string): ParsedPdfResult {
       },
     ],
     statement: emptyStatementSummary(),
+    extractor: "fallback",
   };
+}
+
+/**
+ * Run only the legacy pdf-parse flat-text heuristics. Acceptance tooling uses
+ * this to compare the old path with the positioned-text extractor; the normal
+ * import flow always prefers the reconciling winner in `parsePdf`.
+ */
+export async function parsePdfLegacy(bytes: Uint8Array): Promise<ParsedPdfResult> {
+  return fallbackExtraction(await loadFallbackPdfText(bytes));
 }
 
 /**
@@ -915,7 +929,7 @@ export async function parsePdf(bytes: Uint8Array): Promise<ParsedPdfResult> {
 
   let chosen: ParsedPdfResult | null = null;
   if (layout && layout.rows.length > 0) {
-    chosen = layout;
+    chosen = { ...layout, extractor: "pdfjs" };
     if (fallback && fallback.rows.length > 0) {
       const layoutScore = scoreExtraction(layout.rows, layout.headers);
       const fallbackScore = scoreExtraction(fallback.rows, fallback.headers);

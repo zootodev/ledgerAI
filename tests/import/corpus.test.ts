@@ -108,20 +108,25 @@ describe("synthetic statement corpus — PDF layouts", () => {
   }, 60000);
 
   it("sets aside mirrored internal transfers and keeps own-account transfers visible", async () => {
-    const layout = findLayout("opay-two-section");
+    const layout = findLayout("opay-realistic");
     const parsed = await parsePdf(statementPdf(layout));
+    expect(parsed.sections ?? []).toHaveLength(2);
+    expect(parsed.rows).toHaveLength(84);
 
     const wallet = prepareSection(parsed, layout, 0);
-    expect(wallet.transfers.mirrored).toBe(2);
+    expect(wallet.rows).toHaveLength(50);
+    expect(wallet.transfers.mirrored).toBe(48);
     expect(wallet.transfers.selfTransfers).toBe(2);
     expect(wallet.transfers.reversals).toBe(2);
-    expect(wallet.transfers.interest).toBe(2);
-    expect(wallet.rows.filter((row) => row.skipReason === "internal transfer")).toHaveLength(1);
+    expect(wallet.transfers.interest).toBe(10);
+    expect(wallet.rows.filter((row) => row.skipReason === "internal transfer")).toHaveLength(24);
     expect(wallet.rows.filter((row) => row.transfer?.kind === "self")).toHaveLength(2);
     expect(wallet.rows.filter((row) => row.transfer?.kind === "reversal")).toHaveLength(2);
 
     const savings = prepareSection(parsed, layout, 1);
-    expect(savings.rows.filter((row) => row.skipReason === "internal transfer")).toHaveLength(1);
+    expect(savings.rows).toHaveLength(34);
+    expect(savings.rows.filter((row) => row.skipReason === "internal transfer")).toHaveLength(24);
+    expect(savings.rows.filter((row) => row.transfer?.kind === "interest")).toHaveLength(10);
   }, 60000);
 
   it("shows the exact scan message for an image-only PDF", async () => {

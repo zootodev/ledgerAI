@@ -131,6 +131,47 @@ function checkpoint(row: NormalizedImportRow): number | null {
 }
 
 /**
+ * Reconstruct statement order from the running-balance chain.
+ *
+ * Some banks print rows grouped by type/date rather than in ledger order while
+ * still printing the correct balance after each row. When the printed order
+ * does not reconcile, each row's implied balance-before can be used to sort it.
+ * Returns null unless every row is placeable and the chain is complete.
+ */
+export function orderRowsByBalanceChain(
+  rows: NormalizedImportRow[],
+  openingBalance: string | null,
+): NormalizedImportRow[] | null {
+  const opening = toNumber(openingBalance);
+  if (opening === null || rows.length === 0) return null;
+
+  const remaining = [...rows];
+  const ordered: NormalizedImportRow[] = [];
+  let current = opening;
+
+  while (remaining.length > 0) {
+    let match = -1;
+    for (let index = 0; index < remaining.length; index += 1) {
+      const movement = signedMovement(remaining[index]);
+      const after = checkpoint(remaining[index]);
+      if (movement === null || after === null) return null;
+      if (Math.abs(after - movement - current) <= RECONCILE_TOLERANCE) {
+        match = index;
+        break;
+      }
+    }
+    if (match === -1) return null;
+    const [row] = remaining.splice(match, 1);
+    const after = checkpoint(row);
+    if (after === null) return null;
+    ordered.push(row);
+    current = after;
+  }
+
+  return ordered;
+}
+
+/**
  * Verify (and, where unambiguous, correct) the balances in a normalized
  * statement. Rows are expected in statement order. The input array is not
  * mutated; a shallow-copied array is returned with any corrections applied.
