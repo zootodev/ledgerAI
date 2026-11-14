@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# local real-statement acceptance files (never commit)
+/tmp/
+
 # local mobile screenshot capture (scripts/mobile-shots.ts) — never commit
 /.auth/
 /mobile-shots/
