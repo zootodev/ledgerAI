@@ -114,6 +114,13 @@ export function compactCurrency(value: number, currency?: string, format?: "curr
   return formatted.replace(/([KMBT])$/, (m) => m.toLowerCase());
 }
 
+/**
+ * Shape-preserving curve for every money line/area chart. A spline can pass
+ * above or below the observations and imply amounts that never happened, so
+ * money series must use this curve rather than a smoothing curve.
+ */
+export const MONEY_CURVE = "monotone" as const;
+
 /** Shared axis tick style. */
 export const tickStyle = { fill: "var(--text-muted)", fontSize: 12 };
 /** Shared axis line style. */

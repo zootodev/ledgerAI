@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { ChartTooltip, ChartLegend, chartColor, tickStyle, type ChartValueFormatter, compactCurrency } from "@/components/charts/shared";
+import { ChartTooltip, ChartLegend, chartColor, tickStyle, MONEY_CURVE, type ChartValueFormatter, compactCurrency } from "@/components/charts/shared";
 import { cn } from "@/lib/utils/cn";
 
 export interface Series {
@@ -70,7 +70,7 @@ export function LineChart({
           {series.map((s, i) => (
             <Line
               key={s.key}
-              type="monotone"
+              type={MONEY_CURVE}
               dataKey={s.key}
               name={s.name}
               stroke={s.color ?? chartColor(i)}

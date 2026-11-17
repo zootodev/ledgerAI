@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { ChartTooltip, ChartLegend, chartColor, tickStyle } from "@/components/charts/shared";
+import { ChartTooltip, ChartLegend, chartColor, tickStyle, MONEY_CURVE } from "@/components/charts/shared";
 import { cn } from "@/lib/utils/cn";
 
 export interface AreaSeries {
@@ -73,7 +73,7 @@ export function AreaChart({
           {series.map((s, i) => (
             <Area
               key={s.key}
-              type="monotone"
+              type={MONEY_CURVE}
               dataKey={s.key}
               name={s.name}
               stroke={s.color ?? chartColor(i)}
