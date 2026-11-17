@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function InsightsLoading() {
   return (
-    <PageLoading title="AI Insights">
+    <PageLoading title="Reading the books">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <Card key={i} className="p-5">

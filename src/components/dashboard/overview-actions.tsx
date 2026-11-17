@@ -2,6 +2,7 @@ import * as React from "react";
 import Link from "next/link";
 import { FileUp, Inbox, Tag } from "lucide-react";
 import { getOverviewActionItems, LOW_CONFIDENCE_THRESHOLD } from "@/lib/services/overview";
+import { countPhrase } from "@/lib/utils/pluralise";
 import { Alert } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -35,9 +36,8 @@ export async function OverviewActionItems() {
         <Alert tone="warning" title="Some rows still need a category">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
-              {uncategorizedCount} transaction
-              {uncategorizedCount === 1 ? "" : "s"} have no category yet.
-              Reports group spending by category.
+              {countPhrase(uncategorizedCount, "transaction", { verb: ["has", "have"] })} no
+              category yet. Reports group spending by category.
             </span>
             <Link
               href="/transactions?uncategorized=1"
@@ -54,10 +54,9 @@ export async function OverviewActionItems() {
         <Alert tone="info" title="Some categories need a second look">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
-              {lowConfidenceCount} transaction
-              {lowConfidenceCount === 1 ? "" : "s"} were tagged automatically,
-              but the match was weak. Under {reviewPercent}% goes to Review.
-              Confirm or correct them so the next import learns the pattern.
+              {countPhrase(lowConfidenceCount, "transaction", { verb: ["was", "were"] })}
+              tagged automatically, but the match was weak. Under {reviewPercent}% goes to
+              Review. Confirm or correct them so the next import learns the pattern.
             </span>
             <Link
               href="/transactions?lowConfidence=1"
@@ -82,12 +81,12 @@ export async function OverviewActionItems() {
                   </span>
                 </span>
                 <span className="text-sm text-muted">
-                  {latestImport.imported} of {latestImport.found} rows imported
+                  {latestImport.imported} of {countPhrase(latestImport.found, "row")} imported
                   {latestImport.existingDuplicates > 0
-                    ? `, ${latestImport.existingDuplicates} duplicate${latestImport.existingDuplicates === 1 ? "" : "s"} skipped`
+                    ? `, ${countPhrase(latestImport.existingDuplicates, "duplicate")} skipped`
                     : ""}
                   {latestImport.invalidRows > 0
-                    ? `, ${latestImport.invalidRows} invalid row${latestImport.invalidRows === 1 ? "" : "s"}`
+                    ? `, ${countPhrase(latestImport.invalidRows, "invalid row")}`
                     : ""}
                 </span>
               </div>

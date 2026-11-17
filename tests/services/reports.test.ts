@@ -231,8 +231,8 @@ describe("CSV report serializers", () => {
     expect(buildSummaryCsv(summary)).toBe(
       [
         "Metric,Value",
-        "Report period from,2026-01-01",
-        "Report period to,2026-01-31",
+        "Report period from,1 Jan 2026",
+        "Report period to,31 Jan 2026",
         "Revenue,12000.50",
         "Expenses,8000.00",
         "Transfers,0.00",
@@ -243,7 +243,7 @@ describe("CSV report serializers", () => {
     );
   });
 
-  it("serializes the monthly trend using YYYY-MM keys and blanks the null margin", () => {
+  it("serializes the monthly trend using readable month labels and blanks the null margin", () => {
     const trends: AnalyticsTrends = {
       points: [
         {
@@ -270,8 +270,8 @@ describe("CSV report serializers", () => {
     expect(buildMonthlyCsv(trends)).toBe(
       [
         "Month,Revenue,Expenses,Transfers,Net profit,Profit margin (%)",
-        "2026-01,12000.00,7000.00,0.00,5000.00,41.67",
-        "2026-02,0.00,500.00,0.00,-500.00,",
+        "Jan 2026,12000.00,7000.00,0.00,5000.00,41.67",
+        "Feb 2026,0.00,500.00,0.00,-500.00,",
       ].join("\r\n") + "\r\n",
     );
   });
@@ -374,8 +374,8 @@ describe("CSV report serializers", () => {
     expect(buildProfitCsv(report)).toBe(
       [
         "Metric,Value",
-        "Report period from,2026-01-01",
-        "Report period to,2026-01-31",
+        "Report period from,1 Jan 2026",
+        "Report period to,31 Jan 2026",
         "Revenue,12000.50",
         "Expenses,8000.00",
         "Net profit,4000.50",
@@ -400,7 +400,7 @@ describe("CSV report serializers", () => {
       period: { from: "2026-03-01", to: "2026-03-31" },
     };
     expect(buildMonthlyCsv(trends)).toContain(
-      "2026-03,0.00,2500.00,0.00,-2500.00,",
+      "Mar 2026,0.00,2500.00,0.00,-2500.00,",
     );
   });
 });

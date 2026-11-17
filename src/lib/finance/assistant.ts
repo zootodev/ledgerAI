@@ -31,6 +31,7 @@ import type {
   SemanticPeriod,
   SemanticQuestion,
 } from "@/lib/ask/semantics";
+import { countPhrase } from "@/lib/utils/pluralise";
 
 export type AssistantIntent =
   | "balance"
@@ -131,7 +132,7 @@ export const INSUFFICIENT_ANSWER =
   "I don't have enough data to answer that accurately.";
 /** Shown when the question isn't a supported finance question. */
 export const UNSUPPORTED_ANSWER =
-  "I’m focused on your business finances, so I can’t help with that. I can analyze your income, expenses, profit, balance, transactions, and spending by category.";
+  "I’m focused on your business finances, so I can’t help with that. I can analyse your income, expenses, profit, balance, transactions, and spending by category.";
 /** Shown when the question is financial but too vague to answer without guidance. */
 export const CLARIFICATION_ANSWER =
   "Could you clarify what you'd like to know: your revenue, expenses, profit, or balance?";
@@ -663,9 +664,10 @@ export function answerFromMetrics(
     case "transactionCount": {
       if (!metrics.count || noActivity(metrics.summary)) return insufficient();
       const n = metrics.count.income + metrics.count.expenses + metrics.count.transfers;
+      const counted = countPhrase(n, "transaction", { verb: ["was", "were"] });
       return {
         kind: "answer",
-        text: `There were ${n} transactions in ${period.label}: ${metrics.count.income} income, ${metrics.count.expenses} expenses, ${metrics.count.transfers} transfer${metrics.count.transfers === 1 ? "" : "s"}.`,
+        text: `${counted.charAt(0).toUpperCase()}${counted.slice(1)} in ${period.label}: ${metrics.count.income} income, ${metrics.count.expenses} expenses, ${countPhrase(metrics.count.transfers, "transfer")}.`,
         data: { ...metrics.count, total: n, period: period.label },
       };
     }

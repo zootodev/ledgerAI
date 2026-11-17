@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/data-table";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -38,6 +39,7 @@ import {
 import { REVIEW_THRESHOLD } from "@/lib/ai/rules";
 import { formatAmount, majorAmount } from "@/lib/finance/engine";
 import { cn } from "@/lib/utils/cn";
+import { formatIsoDate } from "@/lib/utils/dates";
 import { TRANSACTION_TYPE_LABELS, TRANSACTION_TYPES } from "@/lib/validation/transaction";
 import type { ListTransactionsResult, TransactionServiceData } from "@/lib/services/transactions";
 import type { AccountServiceData } from "@/lib/services/accounts";
@@ -63,15 +65,6 @@ export interface TransactionsViewProps {
   userEmail: string;
   businessName: string;
   onSignOut?: () => void;
-}
-
-function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${iso}T00:00:00.000Z`));
 }
 
 const typeTone: Record<string, "success" | "danger" | "default"> = {
@@ -361,7 +354,7 @@ export function TransactionsView({
           <div className="shrink-0 pt-0.5 text-sm">{renderAmount(tx)}</div>
         </div>
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted">
-          <span className="whitespace-nowrap tabular-nums">{formatDate(tx.date)}</span>
+          <span className="whitespace-nowrap tabular-nums">{formatIsoDate(tx.date)}</span>
           <span aria-hidden="true">·</span>
           <span className="min-w-0 break-words">{category?.name ?? "Uncategorised"}</span>
           {tx.aiConfidence !== null && (
@@ -389,7 +382,7 @@ export function TransactionsView({
       className: "min-w-32",
       headerClassName: "min-w-32",
       cell: (t) => (
-        <span className="whitespace-nowrap tabular-nums">{formatDate(t.date)}</span>
+        <span className="whitespace-nowrap tabular-nums">{formatIsoDate(t.date)}</span>
       ),
     },
     {
@@ -755,10 +748,9 @@ export function TransactionsView({
                   <span className="text-xs text-muted">
                     From
                   </span>
-                  <Input
-                    type="date"
-                    value={params.dateFrom ?? ""}
-                    onChange={(e) => push({ dateFrom: e.target.value || undefined })}
+                  <DateField
+                    value={params.dateFrom}
+                    onIsoChange={(iso) => push({ dateFrom: iso || undefined })}
                     className="sm:w-40"
                   />
                 </label>
@@ -766,10 +758,9 @@ export function TransactionsView({
                   <span className="text-xs text-muted">
                     To
                   </span>
-                  <Input
-                    type="date"
-                    value={params.dateTo ?? ""}
-                    onChange={(e) => push({ dateTo: e.target.value || undefined })}
+                  <DateField
+                    value={params.dateTo}
+                    onIsoChange={(iso) => push({ dateTo: iso || undefined })}
                     className="sm:w-40"
                   />
                 </label>
@@ -895,7 +886,7 @@ export function TransactionsView({
           deleteTarget ? (
             <>
               &ldquo;{deleteTarget.description}&rdquo; on{" "}
-              {formatDate(deleteTarget.date)} will be permanently removed.
+              {formatIsoDate(deleteTarget.date)} will be permanently removed.
             </>
           ) : undefined
         }

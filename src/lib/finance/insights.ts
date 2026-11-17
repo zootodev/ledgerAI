@@ -12,6 +12,7 @@
 // ============================================================
 
 import { percentChange, round, type PeriodSummary } from "./engine";
+import { countPhrase } from "@/lib/utils/pluralise";
 
 export type InsightKind =
   | "key"
@@ -198,7 +199,7 @@ function deriveSpendingInsight(input: InsightsInput): DerivedInsight | null {
   return {
     kind: "spending",
     title: `${displayCategory(best.categoryName)} ${up ? "increased" : "decreased"} ${formatPercent(Math.abs(delta))}`,
-    description: `Spending on ${displayCategory(best.categoryName)} moved from ${money(best.priorAmount)} to ${money(best.amount)} (${formatPercent(delta)}) between the two periods${best.transactions > 0 ? ` across ${best.transactions} transaction${best.transactions === 1 ? "" : "s"}` : ""}.`,
+    description: `Spending on ${displayCategory(best.categoryName)} moved from ${money(best.priorAmount)} to ${money(best.amount)} (${formatPercent(delta)}) between the two periods${best.transactions > 0 ? ` across ${countPhrase(best.transactions, "transaction")}` : ""}.`,
     metadata: {
       categoryName: best.categoryName,
       priorAmount: best.priorAmount,

@@ -19,6 +19,7 @@
 
 import type { NormalizedImportRow, StatementHeaderSummary } from "./types";
 import { normalizeText } from "./normalize";
+import { countPhrase } from "@/lib/utils/pluralise";
 
 /** Absolute tolerance when comparing money, in major units (one kobo/cent). */
 export const RECONCILE_TOLERANCE = 0.01;
@@ -374,10 +375,10 @@ function acknowledgementMessage(summary: ReconciliationSummary): string | null {
     return Number.isFinite(numeric) && numeric > largest ? numeric : largest;
   }, 0);
   const parsedCount = summary.parsedTotals.count;
-  if (countCheck && expectedCount !== null) {
-    return `Parsed ${parsedCount} of ${expectedCount} rows / totals differ by ₦${largestDifference.toFixed(2)}. Review before importing`;
+  if (countCheck && expectedCount !== null && expectedCount !== undefined) {
+    return `Parsed ${parsedCount} of ${countPhrase(expectedCount, "row")} / totals differ by ₦${largestDifference.toFixed(2)}. Review before importing`;
   }
-  return `Parsed ${parsedCount} rows / totals differ by ₦${largestDifference.toFixed(2)}. Review before importing`;
+  return `Parsed ${countPhrase(parsedCount, "row")} / totals differ by ₦${largestDifference.toFixed(2)}. Review before importing`;
 }
 
 function recordMismatch(

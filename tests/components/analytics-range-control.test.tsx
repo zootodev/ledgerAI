@@ -25,16 +25,17 @@ describe("AnalyticsRangeControl — all-time state", () => {
   it("shows an explicit all-time label instead of blank date inputs", () => {
     const html = renderToStaticMarkup(createElement(AnalyticsRangeControl, {}));
     expect(html).toContain("All recorded transactions");
-    expect(html).not.toContain('type="date"');
+    expect(html).not.toContain('placeholder="DD/MM/YYYY"');
   });
 
   it("shows From/To inputs when a range is applied", () => {
     const html = renderToStaticMarkup(
       createElement(AnalyticsRangeControl, { from: "2026-09-01", to: "2026-09-30" }),
     );
-    expect(html).toContain('type="date"');
-    expect(html).toContain("2026-09-01");
-    expect(html).toContain("2026-09-30");
+    expect(html).toContain('placeholder="DD/MM/YYYY"');
+    expect(html).toContain('value="01/09/2026"');
+    expect(html).toContain('value="30/09/2026"');
+    expect(html).not.toContain('value="2026-09-01"');
     expect(html).not.toContain("All recorded transactions");
   });
 
@@ -43,7 +44,7 @@ describe("AnalyticsRangeControl — all-time state", () => {
       createElement(AnalyticsRangeControl, { params: { range: "all" } }),
     );
     expect(html).toContain("All recorded transactions");
-    expect(html).not.toContain('type="date"');
+    expect(html).not.toContain('placeholder="DD/MM/YYYY"');
   });
 
   it("prefers explicit bounds when both bounds and range=all are present", () => {
@@ -51,7 +52,7 @@ describe("AnalyticsRangeControl — all-time state", () => {
       createElement(AnalyticsRangeControl, { from: "2026-09-01", to: "2026-09-30", params: { range: "all" } }),
     );
     // Explicit bounds take precedence: show inputs.
-    expect(html).toContain('type="date"');
+    expect(html).toContain('placeholder="DD/MM/YYYY"');
     expect(html).not.toContain("All recorded transactions");
   });
 });

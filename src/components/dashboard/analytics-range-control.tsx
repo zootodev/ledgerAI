@@ -4,7 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { CalendarRange } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import {
   buildRangePresets,
@@ -91,10 +91,9 @@ export function AnalyticsRangeControl({
             <span className="text-xs font-medium text-muted">
               From
             </span>
-            <Input
-              type="date"
-              value={from ?? ""}
-              onChange={(e) => apply(e.target.value, to ?? "")}
+            <DateField
+              value={from}
+              onIsoChange={(iso) => apply(iso, to ?? "")}
               className="w-full"
             />
           </label>
@@ -102,10 +101,9 @@ export function AnalyticsRangeControl({
             <span className="text-xs font-medium text-muted">
               To
             </span>
-            <Input
-              type="date"
-              value={to ?? ""}
-              onChange={(e) => apply(from ?? "", e.target.value)}
+            <DateField
+              value={to}
+              onIsoChange={(iso) => apply(from ?? "", iso)}
               className="w-full"
             />
           </label>

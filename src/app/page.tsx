@@ -94,11 +94,14 @@ export default async function HomePage() {
 
             <figure className="min-w-0">
               <div className="overflow-hidden rounded-card border border-border-strong bg-surface">
-                <div className="flex items-center justify-between border-b border-border bg-surface-subtle px-3 py-2">
-                  <span className="text-[11px] font-medium text-muted">
-                    app.ledgerai.ng/overview
+                <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border bg-surface-subtle px-3 py-2">
+                  <span
+                    className="min-w-0 truncate text-[11px] font-medium text-muted"
+                    title="ledgerai-zootodev.vercel.app/overview"
+                  >
+                    ledgerai-zootodev.vercel.app/overview
                   </span>
-                  <span className="text-[11px] text-subtle">Morrow Foods</span>
+                  <span className="shrink-0 text-[11px] text-subtle">Adaeze&apos;s Bakery</span>
                 </div>
                 <Image
                   src="/product-overview.png"
@@ -111,7 +114,7 @@ export default async function HomePage() {
                 />
               </div>
               <figcaption className="mt-2 text-xs leading-5 text-muted">
-                October 2026, after a GTBank CSV import and four accounts.
+                A sample bakery&apos;s October, imported from a GTBank CSV.
               </figcaption>
             </figure>
           </div>
@@ -264,8 +267,8 @@ export default async function HomePage() {
               <Link href={user ? "/overview" : "/signup"} className={primaryCta}>
                 {user ? "Open your books" : "Create an account"}
               </Link>
-              <Link href="/import" className={secondaryCta}>
-                See the import screen
+              <Link href="#import" className={secondaryCta}>
+                See how import works
               </Link>
             </div>
           </div>

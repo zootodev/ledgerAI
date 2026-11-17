@@ -39,6 +39,7 @@ import {
 import { AskHistoryList } from "@/components/ask/ask-history";
 import { resolveAskFirstPaintState } from "@/lib/ask/ask-first-state";
 import type { ConversationMessage, ConversationSummary } from "@/lib/types/assistant";
+import { countPhrase } from "@/lib/utils/pluralise";
 
 const SUGGESTIONS = [
   "How much did I spend last month?",
@@ -671,7 +672,9 @@ export function AskShell({
         title="Delete all conversations?"
         description={
           conversationsState.length > 0
-            ? `All ${conversationsState.length} conversation${conversationsState.length === 1 ? "" : "s"} will be permanently removed.`
+            ? conversationsState.length === 1
+              ? "This conversation will be permanently removed."
+              : `All ${countPhrase(conversationsState.length, "conversation")} will be permanently removed.`
             : undefined
         }
         pending={deleteAllPending}

@@ -182,13 +182,13 @@ describe("dual-business Reports/export tenant isolation (real service pipeline)"
 
   it("exports a monthly CSV with only the owning tenant's buckets", async () => {
     const aCsv = await csvBody(exportRequest("type=monthly"));
-    expect(aCsv).toContain("2026-06,300.00");
-    expect(aCsv).not.toContain("2026-07");
+    expect(aCsv).toContain("Jun 2026,300.00");
+    expect(aCsv).not.toContain("Jul 2026");
 
     activeBiz = businessB;
     const bCsv = await csvBody(exportRequest("type=monthly"));
-    expect(bCsv).toContain("2026-07,700.00");
-    expect(bCsv).not.toContain("2026-06");
+    expect(bCsv).toContain("Jul 2026,700.00");
+    expect(bCsv).not.toContain("Jun 2026");
   });
 
   it("never exposes another tenant's category names in the category export", async () => {

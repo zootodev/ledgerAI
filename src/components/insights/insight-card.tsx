@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { round } from "@/lib/finance/engine";
 import type { InspectInsight } from "@/lib/types/insights";
+import { formatIsoDate } from "@/lib/utils/dates";
 
 const KIND_LABELS: Record<InspectInsight["kind"], string> = {
   key: "Headline",
@@ -97,18 +98,9 @@ function transactionsHref(insight: InspectInsight): string {
 function periodLabel(period: InspectInsight["period"]): string {
   const { from, to } = period;
   if (!from && !to) return "All time";
-  if (from && to) return `${formatDay(from)} – ${formatDay(to)}`;
-  if (from) return `From ${formatDay(from)}`;
-  return `Up to ${formatDay(to as string)}`;
-}
-
-function formatDay(iso: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${iso}T00:00:00.000Z`));
+  if (from && to) return `${formatIsoDate(from)} – ${formatIsoDate(to)}`;
+  if (from) return `From ${formatIsoDate(from)}`;
+  return `Up to ${formatIsoDate(to as string)}`;
 }
 
 /** Stable, humanized metadata entries for the row footer (fields to show). */

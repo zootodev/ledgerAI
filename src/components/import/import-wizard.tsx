@@ -89,6 +89,8 @@ import type { CategoryRuleDto } from "@/types";
 import type { AccountServiceData } from "@/lib/services/accounts";
 import type { CategoryServiceData } from "@/lib/services/categories";
 import type { ImportHistoryItem, ImportCommitServiceResult } from "@/lib/services/imports";
+import { countPhrase } from "@/lib/utils/pluralise";
+import { formatIsoDate } from "@/lib/utils/dates";
 
 export interface ImportWizardProps {
   accounts: AccountServiceData[];
@@ -121,18 +123,9 @@ const MAPPING_FIELDS: { field: (typeof IMPORT_FIELDS)[number]; label: string; re
   { field: "category", label: "Category column" },
 ];
 
-const DAY_FORMAT = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
 /** Format an ISO day for display, or "Not stated" when absent. */
 function formatDay(iso: string | null): string {
-  if (!iso) return "Not stated";
-  const date = new Date(`${iso}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? iso : DAY_FORMAT.format(date);
+  return iso ? formatIsoDate(iso) : "Not stated";
 }
 
 /** Draft/selection maps round-trip through JSON with string keys. */
@@ -610,7 +603,7 @@ export function ImportWizard({
         const title =
           res.result.imported === 0 && skipped > 0
             ? `${res.result.imported} imported · ${skipped} skipped as duplicates`
-            : `${res.result.imported} of ${res.result.total} row${res.result.total === 1 ? "" : "s"} imported`;
+            : `${res.result.imported} of ${countPhrase(res.result.total, "row")} imported`;
         toast.success({
           title,
           description: <ImportSuccessDescription result={res.result} />,
@@ -869,8 +862,7 @@ export function ImportWizard({
                     >
                       {sections.map((section) => (
                         <option key={section.id} value={section.id}>
-                          {section.label} · {section.rowCount} row
-                          {section.rowCount === 1 ? "" : "s"}
+                          {section.label} · {countPhrase(section.rowCount, "row")}
                           {section.isDefault ? " (main)" : ""}
                         </option>
                       ))}
@@ -931,9 +923,7 @@ export function ImportWizard({
                   <Alert tone="success" title="Statement balances match">
                     <p>
                       {preview.summary.reconcileChecked > 0 &&
-                        `${preview.summary.reconcileChecked} balance check${
-                          preview.summary.reconcileChecked === 1 ? "" : "s"
-                        } verified. `}
+                        `${countPhrase(preview.summary.reconcileChecked, "balance check")} verified. `}
                       Opening {preview.reconciliation.openingBalance ?? "not stated"} + credits −
                       debits = closing {preview.reconciliation.closingBalance ?? "not stated"}.
                       {preview.summary.headerMismatches === 0 &&
@@ -952,8 +942,7 @@ export function ImportWizard({
                     {preview.summary.reconcileMismatches > 0 && (
                       <p className="mt-2">
                         The running balance stops adding up for{" "}
-                        {preview.summary.reconcileMismatches} row
-                        {preview.summary.reconcileMismatches === 1 ? "" : "s"}. The rows and
+                        {countPhrase(preview.summary.reconcileMismatches, "row")}. The rows and
                         amounts below are unchanged. Use the &quot;Doesn&apos;t reconcile&quot;
                         filter to see them.
                       </p>
@@ -991,7 +980,7 @@ export function ImportWizard({
 
               {preview.summary.needsReview > 0 && (
                 <Alert tone="warning" title="Some categories need a look">
-                  {preview.summary.needsReview} row{preview.summary.needsReview === 1 ? "" : "s"} have a
+                  {countPhrase(preview.summary.needsReview, "row", { verb: ["has", "have"] })} a
                   weak category match. Change the category in the table below, or leave it and
                   the fallback category (Other / Other Income) is used.
                 </Alert>
@@ -1141,10 +1130,10 @@ export function ImportWizard({
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
                 <p className="text-sm text-muted">
                   {preview.summary.invalid > 0 &&
-                    `${preview.summary.invalid} invalid row${preview.summary.invalid === 1 ? "" : "s"} cannot be imported.`}
+                    `${countPhrase(preview.summary.invalid, "invalid row")} cannot be imported.`}
                   {preview.summary.invalid > 0 && preview.summary.skipped > 0 && " "}
                   {preview.summary.skipped > 0 &&
-                    `${preview.summary.skipped} row${preview.summary.skipped === 1 ? "" : "s"} set aside as not a transaction.`}
+                    `${countPhrase(preview.summary.skipped, "row")} set aside as not a transaction.`}
                   {preview.summary.invalid === 0 &&
                     preview.summary.skipped === 0 &&
                     "Every row in this file looks like a transaction."}
@@ -1180,7 +1169,7 @@ export function ImportWizard({
             <CardHeader>
               <CardTitle>Confirm import</CardTitle>
               <CardDescription>
-                {parsed.fileName} · {includeCount} row{includeCount === 1 ? "" : "s"} to import.
+                {parsed.fileName} · {countPhrase(includeCount, "row")} to import.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1248,7 +1237,7 @@ export function ImportWizard({
                     onClick={handleCommit}
                     leftIcon={<Check className="h-4 w-4" />}
                   >
-                    Import {includeCount} transaction{includeCount === 1 ? "" : "s"}
+                    Import {countPhrase(includeCount, "transaction")}
                   </Button>
                 </div>
               </div>
@@ -1322,8 +1311,7 @@ export function ImportSuccessDescription({ result }: ImportSuccessDescriptionPro
       <p>{parts.length > 0 ? parts.join(" · ") : "Nothing to import."}</p>
       {result.learnedRuleCount > 0 && (
         <p className="mt-1">
-          Remembered {result.learnedRuleCount} categorisation
-          {result.learnedRuleCount === 1 ? "" : "s"}.{" "}
+          Remembered {countPhrase(result.learnedRuleCount, "categorisation rule")}.{" "}
           <Link href="/settings/rules" className="underline">
             Manage them in Settings → Rules
           </Link>
@@ -1361,8 +1349,7 @@ export function ImportCompletePanel({ result, onStartOver }: ImportCompletePanel
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
               <h3 className="text-sm font-medium text-foreground">
-                {result.exceptions.length} row
-                {result.exceptions.length === 1 ? "" : "s"} not imported
+                {countPhrase(result.exceptions.length, "row")} not imported
               </h3>
             </div>
             <p className="text-xs text-muted">

@@ -9,6 +9,7 @@ import { computeSummary, round, type ProfitRow } from "@/lib/finance/engine";
 import { numericCell, toCsv, type NumericCell } from "@/lib/csv";
 import type { Prisma } from "@/generated/prisma/client";
 import type { TransactionModel } from "@/generated/prisma/models/Transaction";
+import { formatIsoDate } from "@/lib/utils/dates";
 
 /** Supported CSV report types (one per section shown on the Reports page). */
 export const REPORT_TYPES = [
@@ -228,16 +229,11 @@ export function reportPeriodLabel(period: {
   to: string | null;
 }): string {
   if (!period.from && !period.to) return "All time";
-  const fmt = (iso: string): string =>
-    new Intl.DateTimeFormat("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      timeZone: "UTC",
-    }).format(new Date(`${iso}T00:00:00.000Z`));
-  if (period.from && period.to) return `${fmt(period.from)} – ${fmt(period.to)}`;
-  if (period.from) return `From ${fmt(period.from)}`;
-  return `Up to ${fmt(period.to as string)}`;
+  if (period.from && period.to) {
+    return `${formatIsoDate(period.from)} – ${formatIsoDate(period.to)}`;
+  }
+  if (period.from) return `From ${formatIsoDate(period.from)}`;
+  return `Up to ${formatIsoDate(period.to as string)}`;
 }
 
 /**
@@ -287,8 +283,8 @@ export function buildSummaryCsv(summary: AnalyticsSummary): string {
   return toCsv(
     ["Metric", "Value"],
     [
-      ["Report period from", summary.period.from ?? ""],
-      ["Report period to", summary.period.to ?? ""],
+      ["Report period from", formatIsoDate(summary.period.from)],
+      ["Report period to", formatIsoDate(summary.period.to)],
       ["Revenue", num(summary.revenue)],
       ["Expenses", num(summary.expenses)],
       ["Transfers", num(summary.transfers)],
@@ -299,12 +295,12 @@ export function buildSummaryCsv(summary: AnalyticsSummary): string {
   );
 }
 
-/** Serialize the monthly trend to CSV rows (month key is YYYY-MM). */
+/** Serialize the monthly trend to CSV rows with human month labels. */
 export function buildMonthlyCsv(trends: AnalyticsTrends): string {
   return toCsv(
     ["Month", "Revenue", "Expenses", "Transfers", "Net profit", "Profit margin (%)"],
     trends.points.map((p) => [
-      p.key,
+      p.label,
       num(p.revenue),
       num(p.expenses),
       num(p.transfers),
@@ -349,8 +345,8 @@ export function buildProfitCsv(report: ProfitReport): string {
   return toCsv(
     ["Metric", "Value"],
     [
-      ["Report period from", report.period.from ?? ""],
-      ["Report period to", report.period.to ?? ""],
+      ["Report period from", formatIsoDate(report.period.from)],
+      ["Report period to", formatIsoDate(report.period.to)],
       ["Revenue", num(report.revenue)],
       ["Expenses", num(report.expenses)],
       ["Net profit", num(report.netProfit)],

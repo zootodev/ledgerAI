@@ -47,7 +47,9 @@ describe("landing page", () => {
     expect(html.match(/<section/g)?.length).toBe(5);
     expect(html).toContain("Your OPay, Kuda and GTBank records, in one set of books.");
     expect(html).toContain("product-overview.png");
-    expect(html).toContain("October 2026, after a GTBank CSV import");
+    expect(html).toContain("A sample bakery&#x27;s October, imported from a GTBank CSV.");
+    expect(html).toContain("ledgerai-zootodev.vercel.app/overview");
+    expect(html).not.toContain("app.ledgerai.ng");
   });
 
   it("explains the import as four numbered steps, not a feature-card grid", () => {
@@ -61,6 +63,9 @@ describe("landing page", () => {
       expect(html).toContain(step);
     }
     expect(html).toContain("A POS settlement imported twice is caught");
+    expect(html).toContain('href="#import"');
+    expect(html).toContain("See how import works");
+    expect(html).not.toContain("See the import screen");
   });
 
   it("shows an insights example with real-looking figures and named rows", () => {

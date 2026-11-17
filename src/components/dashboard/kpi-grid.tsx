@@ -9,8 +9,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { buttonVariants } from "@/components/ui/button";
 
 /** Help text for the Cash Balance KPI (ledger-derived, not a bank statement). */
-export const CASH_BALANCE_HELP =
-  "Ledger-derived cash position based on recorded income and expenses. It does not represent a verified bank statement balance.";
+export const CASH_BALANCE_HELP = "From recorded transactions only.";
 
 /** A fully-zero summary means the business has no recorded transactions yet. */
 export function isEmptySummary(summary: AnalyticsSummary): boolean {

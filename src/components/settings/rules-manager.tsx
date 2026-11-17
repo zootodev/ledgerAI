@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { deleteCategoryRuleAction } from "@/lib/actions/rules";
 import type { CategoryRuleDto } from "@/types";
+import { countPhrase } from "@/lib/utils/pluralise";
 
 export interface RulesManagerProps {
   rules: CategoryRuleDto[];
@@ -49,7 +50,7 @@ export function RulesManager({ rules }: RulesManagerProps) {
           ) : (
             <>
               <div className="mb-3 flex flex-wrap justify-between gap-2 text-sm text-muted">
-                <span>{rules.length} rule{rules.length === 1 ? "" : "s"}</span>
+                <span>{countPhrase(rules.length, "rule")}</span>
                 <span>Rules are learned from your category corrections</span>
               </div>
               <ul className="divide-y divide-border border-t border-border">

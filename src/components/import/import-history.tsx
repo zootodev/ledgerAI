@@ -6,15 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ImportExceptions } from "@/components/import/import-exceptions";
 import type { ImportHistoryItem } from "@/lib/services/imports";
+import { countPhrase } from "@/lib/utils/pluralise";
+import { formatIsoDateTime } from "@/lib/utils/dates";
 
 function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(iso));
+  return formatIsoDateTime(iso);
 }
 
 interface SummaryPart {
@@ -133,8 +129,7 @@ export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
                 {item.errors && item.errors.exceptions.length > 0 && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs text-muted">
-                      {item.errors.exceptions.length} row
-                      {item.errors.exceptions.length === 1 ? "" : "s"} not imported. View details
+                      {countPhrase(item.errors.exceptions.length, "row")} not imported. View details
                     </summary>
                     <div className="mt-2">
                       <ImportExceptions exceptions={item.errors.exceptions} />

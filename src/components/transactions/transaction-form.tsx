@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
@@ -118,10 +119,9 @@ export function TransactionForm({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Date" required htmlFor="tx-date">
-            <Input
+            <DateField
               id="tx-date"
               name="date"
-              type="date"
               required
               defaultValue={transaction?.date ?? new Date().toISOString().slice(0, 10)}
             />

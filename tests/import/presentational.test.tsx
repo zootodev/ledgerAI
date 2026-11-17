@@ -237,7 +237,7 @@ describe("ImportSuccessDescription", () => {
     const html = renderToStaticMarkup(
       <ImportSuccessDescription result={{ ...baseResult, learnedRuleCount: 2 }} />,
     );
-    expect(html).toContain("Remembered 2 categorisations");
+    expect(html).toContain("Remembered 2 categorisation rules");
     expect(html).toContain('href="/settings/rules"');
   });
 
