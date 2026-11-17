@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { InsightCard } from "@/components/insights/insight-card";
+import { InsightRow } from "@/components/insights/insight-card";
 import type { InspectInsight } from "@/lib/types/insights";
 
 function revenueInsight(): InspectInsight {
@@ -22,10 +22,10 @@ function format(value: number, currency: string): string {
   }).format(value);
 }
 
-describe("InsightCard currency", () => {
+describe("InsightRow currency", () => {
   it("renders backing money figures in the configured currency", () => {
     const html = renderToStaticMarkup(
-      createElement(InsightCard, { insight: revenueInsight(), currency: "GBP" }),
+      createElement(InsightRow, { insight: revenueInsight(), currency: "GBP", index: 1 }),
     );
 
     expect(html).toContain(format(900_000, "GBP"));
@@ -35,7 +35,7 @@ describe("InsightCard currency", () => {
 
   it("shows the insight period and drills through to transactions", () => {
     const html = renderToStaticMarkup(
-      createElement(InsightCard, { insight: revenueInsight(), currency: "GBP" }),
+      createElement(InsightRow, { insight: revenueInsight(), currency: "GBP", index: 1 }),
     );
 
     expect(html).toContain("1 Jun 2026 – 30 Jun 2026");
@@ -58,7 +58,7 @@ describe("InsightCard currency", () => {
       period: { from: "2026-06-01", to: "2026-06-30" },
     };
     const html = renderToStaticMarkup(
-      createElement(InsightCard, { insight, currency: "NGN" }),
+      createElement(InsightRow, { insight, currency: "NGN", index: 2 }),
     );
 
     expect(html).toContain("dateFrom=2026-06-01");
@@ -74,7 +74,7 @@ describe("InsightCard currency", () => {
       period: { from: null, to: null },
     };
     const html = renderToStaticMarkup(
-      createElement(InsightCard, { insight, currency: "NGN" }),
+      createElement(InsightRow, { insight, currency: "NGN", index: 2 }),
     );
 
     expect(html).toContain("All time");
@@ -90,9 +90,9 @@ describe("InsightCard currency", () => {
       period: { from: "2026-06-01", to: "2026-06-30" },
     };
     const html = renderToStaticMarkup(
-      createElement(InsightCard, { insight, currency: "NGN" }),
+      createElement(InsightRow, { insight, currency: "NGN", index: 2 }),
     );
 
-    expect(html).toContain("Suggested next step based on this period");
+    expect(html).toContain("Suggested action");
   });
 });

@@ -56,9 +56,9 @@ export function AccountSettings({ email }: AccountSettingsProps) {
             Export my data
           </CardTitle>
           <CardDescription>
-            Download a copy of everything you own in LedgerAI — businesses,
-            accounts, categories, transactions and imports. JSON keeps the full
-            structure; CSV is one multi-section spreadsheet.
+            Download a copy of what you have in LedgerAI: businesses, accounts,
+            categories, transactions and imports. JSON keeps the full structure.
+            CSV is one multi-section spreadsheet.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
@@ -96,7 +96,7 @@ export function AccountSettings({ email }: AccountSettingsProps) {
             <Field
               id="confirm"
               label='Type "DELETE" to confirm'
-              hint="This is the only confirmation step — it runs immediately."
+              hint="Type DELETE to confirm. Deletion starts at once."
             >
               <Input
                 id="confirm"

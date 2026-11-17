@@ -32,8 +32,8 @@ describe("OverviewCharts (Overview chart integration)", () => {
     const element = await OverviewCharts({ currency: "NGN" });
     const html = renderToStaticMarkup(element as never);
 
-    expect(html).toContain("Revenue vs expenses");
-    expect(html).toContain("Net profit trend");
+    expect(html).toContain("Money in and out");
+    expect(html).toContain("Profit over time");
   });
 
   it("calls the trend service with the page range and a sensible groupBy", async () => {
@@ -75,7 +75,7 @@ describe("OverviewCharts (Overview chart integration)", () => {
     const html = renderToStaticMarkup(element as never);
 
     expect(html).toContain("No chart data yet");
-    expect(html).not.toContain("Revenue vs expenses");
+    expect(html).not.toContain("Money in and out");
   });
 
   it("shows 'No activity in this period' instead of a flat zero chart", async () => {
@@ -91,8 +91,8 @@ describe("OverviewCharts (Overview chart integration)", () => {
     const html = renderToStaticMarkup(element as never);
 
     expect(html).toContain("No activity in this period");
-    expect(html).not.toContain("Revenue vs expenses");
-    expect(html).not.toContain("Net profit trend");
+    expect(html).not.toContain("Money in and out");
+    expect(html).not.toContain("Profit over time");
   });
 
   it("plots the charts when a single bucket has activity", async () => {
@@ -107,7 +107,7 @@ describe("OverviewCharts (Overview chart integration)", () => {
     const element = await OverviewCharts({ currency: "NGN" });
     const html = renderToStaticMarkup(element as never);
 
-    expect(html).toContain("Revenue vs expenses");
+    expect(html).toContain("Money in and out");
     expect(html).not.toContain("No activity in this period");
   });
 
@@ -125,7 +125,7 @@ describe("OverviewCharts (Overview chart integration)", () => {
 describe("ChartsFallback", () => {
   it("renders two placeholder chart cards", () => {
     const html = renderToStaticMarkup(createElement(ChartsFallback));
-    expect(html).toContain("Revenue vs expenses");
-    expect(html).toContain("Net profit trend");
+    expect(html).toContain("Money in and out");
+    expect(html).toContain("Profit over time");
   });
 });

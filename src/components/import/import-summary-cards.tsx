@@ -1,12 +1,5 @@
 "use client";
 
-import {
-  CheckCircle2,
-  Copy,
-  Eye,
-  Rows3,
-  XCircle,
-} from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import type { ImportSummary } from "@/lib/import/types";
 
@@ -17,32 +10,12 @@ export function ImportSummaryCards({
   summary: ImportSummary;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      <StatCard
-        label="Rows found"
-        value={String(summary.total)}
-        icon={<Rows3 className="h-4.5 w-4.5" />}
-      />
-      <StatCard
-        label="Ready to import"
-        value={String(summary.readyToImport)}
-        icon={<CheckCircle2 className="h-4.5 w-4.5" />}
-      />
-      <StatCard
-        label="Duplicates"
-        value={String(summary.duplicates)}
-        icon={<Copy className="h-4.5 w-4.5" />}
-      />
-      <StatCard
-        label="Needs review"
-        value={String(summary.needsReview)}
-        icon={<Eye className="h-4.5 w-4.5" />}
-      />
-      <StatCard
-        label="Invalid rows"
-        value={String(summary.invalid)}
-        icon={<XCircle className="h-4.5 w-4.5" />}
-      />
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-3 lg:grid-cols-5">
+      <StatCard label="Rows found" value={String(summary.total)} />
+      <StatCard label="Ready to import" value={String(summary.readyToImport)} />
+      <StatCard label="Duplicates" value={String(summary.duplicates)} />
+      <StatCard label="Needs review" value={String(summary.needsReview)} />
+      <StatCard label="Invalid rows" value={String(summary.invalid)} />
     </div>
   );
 }

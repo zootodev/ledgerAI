@@ -48,7 +48,7 @@ export function ReportsAccountFilter({
 
   return (
     <label className="flex min-w-0 flex-col gap-1.5">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted">
+      <span className="text-xs text-muted">
         Account
       </span>
       <Select

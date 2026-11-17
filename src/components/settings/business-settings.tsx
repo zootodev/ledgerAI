@@ -43,8 +43,8 @@ export function BusinessSettings({ business }: BusinessSettingsProps) {
       <CardHeader>
         <CardTitle>Business</CardTitle>
         <CardDescription>
-          Basic profile for your organisation. This drives defaults across the
-          app, including the currency used in the ledger.
+          Used on reports, imports and new transactions. Changing the currency
+          does not convert amounts already recorded.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -66,7 +66,7 @@ export function BusinessSettings({ business }: BusinessSettingsProps) {
               name="name"
               type="text"
               defaultValue={business.name}
-              placeholder="Zooto Fashion"
+              placeholder="e.g. Mama Nkechi Foods"
               required
             />
           </Field>
@@ -101,7 +101,7 @@ export function BusinessSettings({ business }: BusinessSettingsProps) {
             </Field>
           </div>
 
-          <Field label="How many people?" htmlFor="business-size">
+          <Field label="Team size" htmlFor="business-size">
             <Select id="business-size" name="size" defaultValue={business.size ?? ""}>
               <option value="">Select a range</option>
               {BUSINESS_SIZES.map((size) => (

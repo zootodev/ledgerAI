@@ -128,9 +128,9 @@ const DAY_FORMAT = new Intl.DateTimeFormat("en-GB", {
   timeZone: "UTC",
 });
 
-/** Format an ISO day for display, or an em dash when absent. */
+/** Format an ISO day for display, or "Not stated" when absent. */
 function formatDay(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "Not stated";
   const date = new Date(`${iso}T00:00:00.000Z`);
   return Number.isNaN(date.getTime()) ? iso : DAY_FORMAT.format(date);
 }
@@ -756,7 +756,7 @@ export function ImportWizard({
                       Reading your statement…
                     </p>
                     <p className="text-sm text-muted">
-                      Parsing the file on our server — this usually takes a few
+                      Parsing the file on our server. This usually takes a few
                       seconds.
                     </p>
                   </>
@@ -769,7 +769,7 @@ export function ImportWizard({
                       Drop a statement file here
                     </p>
                     <p className="text-sm text-muted">
-                      Statements from Moniepoint, Kuda, Opay, Access, GTB, and
+                      Statements from Moniepoint, OPay, Kuda, GTBank, Access and
                       similar exports work best. Column names are detected
                       automatically and can be corrected next.
                     </p>
@@ -800,9 +800,7 @@ export function ImportWizard({
 
               <p className="mt-3 flex items-start gap-1.5 text-xs text-muted">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                Nothing is sent to any AI service. CSV and Excel files are read on your device;
-                PDF statements are read securely on our server to build this preview, and your
-                choices only apply when you confirm the import in the last step.
+                The file stays between your browser and our server. CSV and Excel files are read on your device. PDF statements are read on our server to build this preview. Nothing is saved until you confirm the import.
               </p>
 
               {parseError && (
@@ -920,10 +918,9 @@ export function ImportWizard({
             <CardHeader>
               <CardTitle>Review imported rows</CardTitle>
               <CardDescription>
-                Rows ready to import are included by default. Duplicates are excluded until you
-                choose &quot;Import anyway&quot;. Review low-confidence categories and override per-row
-                where needed. When you change a suggested category, LedgerAI will remember that
-                correction for future imports.
+                Rows ready to import are included. Duplicates stay out until you
+                choose &quot;Import anyway&quot;. Category corrections are
+                remembered for next time.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -931,15 +928,14 @@ export function ImportWizard({
 
               {preview.summary.hasReconciliation && preview.reconciliation && (
                 preview.summary.reconciled ? (
-                  <Alert tone="success" title="Balances reconcile ✓">
+                  <Alert tone="success" title="Statement balances match">
                     <p>
                       {preview.summary.reconcileChecked > 0 &&
                         `${preview.summary.reconcileChecked} balance check${
                           preview.summary.reconcileChecked === 1 ? "" : "s"
-                        } verified`}
-                      {preview.summary.reconcileChecked > 0 && " — "}
-                      opening {preview.reconciliation.openingBalance ?? "—"} + credits −
-                      debits = closing {preview.reconciliation.closingBalance ?? "—"}.
+                        } verified. `}
+                      Opening {preview.reconciliation.openingBalance ?? "not stated"} + credits −
+                      debits = closing {preview.reconciliation.closingBalance ?? "not stated"}.
                       {preview.summary.headerMismatches === 0 &&
                         " The statement header totals and row counts also match."}
                     </p>
@@ -958,7 +954,7 @@ export function ImportWizard({
                         The running balance stops adding up for{" "}
                         {preview.summary.reconcileMismatches} row
                         {preview.summary.reconcileMismatches === 1 ? "" : "s"}. The rows and
-                        amounts below are unchanged — use the &quot;Doesn&apos;t reconcile&quot;
+                        amounts below are unchanged. Use the &quot;Doesn&apos;t reconcile&quot;
                         filter to see them.
                       </p>
                     )}
@@ -996,7 +992,7 @@ export function ImportWizard({
               {preview.summary.needsReview > 0 && (
                 <Alert tone="warning" title="Some categories need a look">
                   {preview.summary.needsReview} row{preview.summary.needsReview === 1 ? "" : "s"} have a
-                  low-confidence suggestion. Change the category in the table below, or leave it and
+                  weak category match. Change the category in the table below, or leave it and
                   the fallback category (Other / Other Income) is used.
                 </Alert>
               )}
@@ -1100,7 +1096,7 @@ export function ImportWizard({
 
               {preview.summary.readyToImport === 0 && (
                 <p className="text-sm text-muted">
-                  No new rows — use Import anyway on duplicates.
+                  No new rows. Use &quot;Import anyway&quot; on duplicates.
                 </p>
               )}
 
@@ -1214,7 +1210,7 @@ export function ImportWizard({
               )}
 
               <label className="flex w-full max-w-sm flex-col gap-1.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                <span className="text-xs font-medium text-muted">
                   Account (optional)
                 </span>
                 <Select value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="Choose an account for the imported transactions">
@@ -1229,8 +1225,8 @@ export function ImportWizard({
 
               <Alert tone="info" title="What happens next">
                 <ul className="list-disc pl-4">
-                  <li>Rows marked ready are written in one atomic step — all or nothing.</li>
-                  <li>Duplicates that already exist in your ledger are skipped automatically.</li>
+                  <li>Rows marked ready are written together in one step.</li>
+                  <li>Duplicates that already exist in your ledger are skipped.</li>
                   <li>Rows you chose to skip, and any that turn out to duplicate, are not saved.</li>
                 </ul>
               </Alert>
@@ -1291,18 +1287,18 @@ export function AliveSample({
   push(mapping.description, "Description");
   push(mapping.amount, "Amount");
   // Keep the debit/credit pair next to Balance, using the same money-in /
-  // money-out language as the mapping fields. Show an em dash for the empty
-  // side so it is obvious which column a bank statement fills.
+  // money-out language as the mapping fields. Mark the empty side as blank so
+  // it is obvious which column a bank statement fills.
   if (mapping.credit || mapping.debit) {
-    parts.push(`Money In: ${read(mapping.credit) || "—"}`);
-    parts.push(`Money Out: ${read(mapping.debit) || "—"}`);
+    parts.push(`Money In: ${read(mapping.credit) || "blank"}`);
+    parts.push(`Money Out: ${read(mapping.debit) || "blank"}`);
   }
   push(mapping.balance, "Balance");
   push(mapping.reference, "Ref");
 
   return (
     <p className="text-sm text-muted">
-      <span className="font-medium uppercase tracking-wide text-xs">Sample row:</span>{" "}
+      <span className="text-xs font-medium">Sample row:</span>{" "}
       {parts.length > 0 ? parts.join(" · ") : "No sample values to show yet."}
     </p>
   );
@@ -1327,9 +1323,9 @@ export function ImportSuccessDescription({ result }: ImportSuccessDescriptionPro
       {result.learnedRuleCount > 0 && (
         <p className="mt-1">
           Remembered {result.learnedRuleCount} categorisation
-          {result.learnedRuleCount === 1 ? "" : "s"} —{" "}
+          {result.learnedRuleCount === 1 ? "" : "s"}.{" "}
           <Link href="/settings/rules" className="underline">
-            manage them in Settings → Rules
+            Manage them in Settings → Rules
           </Link>
         </p>
       )}
@@ -1375,7 +1371,7 @@ export function ImportCompletePanel({ result, onStartOver }: ImportCompletePanel
             <ImportExceptions exceptions={result.exceptions} />
           </div>
         ) : (
-          <p className="text-sm text-muted">Every row in this statement was handled.</p>
+          <p className="text-sm text-muted">No rows were left out.</p>
         )}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">

@@ -161,7 +161,7 @@ describe("getCategoryReport (breakdown)", () => {
     expect(report.expenses).toBe(300);
     expect(report.rows.map((r) => [r.name, r.type, r.amount, r.share])).toEqual([
       ["Sales", "income", 400, 66.67],
-      ["Uncategorized", "income", 200, 33.33],
+      ["Uncategorised", "income", 200, 33.33],
       ["Rent", "expense", 200, 66.67],
       ["Transport", "expense", 100, 33.33],
     ]);
@@ -178,7 +178,7 @@ describe("getCategoryReport (breakdown)", () => {
     expect(report.rows).toEqual([
       {
         categoryId: null,
-        name: "Uncategorized",
+        name: "Uncategorised",
         type: "expense",
         amount: 0,
         share: null,
@@ -290,7 +290,7 @@ describe("CSV report serializers", () => {
         },
         {
           categoryId: null,
-          name: "Uncategorized",
+          name: "Uncategorised",
           type: "expense" as const,
           amount: 50,
           share: null,
@@ -298,7 +298,7 @@ describe("CSV report serializers", () => {
       ],
     };
     expect(buildCategoryCsv(report)).toBe(
-      'Type,Category,Amount,% of type\r\nincome,"Sales, ""Spring""",400.00,66.67\r\nexpense,Uncategorized,50.00,\r\n',
+      'Type,Category,Amount,% of type\r\nincome,"Sales, ""Spring""",400.00,66.67\r\nexpense,Uncategorised,50.00,\r\n',
     );
   });
 

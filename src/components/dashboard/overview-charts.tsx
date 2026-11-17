@@ -1,4 +1,4 @@
-import { CalendarRange, FileUp, TrendingUp } from "lucide-react";
+import { CalendarRange, FileUp } from "lucide-react";
 import Link from "next/link";
 import { getAnalyticsTrends, type AnalyticsQuery, type AnalyticsTrends } from "@/lib/services";
 import { BarChart } from "@/components/charts/bar-chart";
@@ -38,9 +38,8 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
   if (trends.points.length === 0) {
     return (
       <EmptyState
-        icon={<TrendingUp className="h-6 w-6" />}
         title="No chart data yet"
-        description="Add transactions or import a bank statement to see revenue and profit trends here."
+        description="Import a bank statement to plot your first month."
         action={
           <Link href="/import" className={buttonVariants({ variant: "outline" })}>
             <FileUp className="h-4 w-4" aria-hidden="true" />
@@ -66,23 +65,16 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
   if (!hasActivity) {
     return (
       <EmptyState
-        icon={<CalendarRange className="h-6 w-6" />}
         title="No activity in this period"
-        description="There are no recorded amounts in the selected range. View all time or import a statement to see revenue and profit trends."
+        description="Nothing was recorded between these dates."
         action={
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <Link
-              href="/overview?range=all"
-              className={buttonVariants({ variant: "outline" })}
-            >
-              <CalendarRange className="h-4 w-4" aria-hidden="true" />
-              View all time
-            </Link>
-            <Link href="/import" className={buttonVariants()}>
-              <FileUp className="h-4 w-4" aria-hidden="true" />
-              Import a statement
-            </Link>
-          </div>
+          <Link
+            href="/overview?range=all"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <CalendarRange className="h-4 w-4" aria-hidden="true" />
+            View all time
+          </Link>
         }
       />
     );
@@ -92,7 +84,7 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
     <div className="grid gap-4 xl:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Revenue vs expenses</CardTitle>
+          <CardTitle>Money in and out</CardTitle>
         </CardHeader>
         <CardContent>
           <BarChart
@@ -109,7 +101,7 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Net profit trend</CardTitle>
+          <CardTitle>Profit over time</CardTitle>
         </CardHeader>
         <CardContent>
           <LineChart
@@ -129,7 +121,7 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
 export function ChartsFallback() {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      {["Revenue vs expenses", "Net profit trend"].map((title) => (
+      {["Money in and out", "Profit over time"].map((title) => (
         <Card key={title}>
           <CardHeader>
             <CardTitle>{title}</CardTitle>

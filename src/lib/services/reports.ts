@@ -176,7 +176,7 @@ export async function getCategoryReport(
         categoryId: g.categoryId,
         name:
           (g.categoryId !== null ? nameById.get(g.categoryId) : undefined) ??
-          "Uncategorized",
+          "Uncategorised",
         type,
         amount,
         share: typeTotal === 0 ? null : round((amount / typeTotal) * 100, 2),

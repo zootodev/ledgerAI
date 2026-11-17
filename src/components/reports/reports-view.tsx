@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { AppShell } from "@/components/layout/app-shell";
-import { Badge } from "@/components/ui/badge";
 import { CalendarRange, Landmark } from "lucide-react";
 
 export interface ReportsViewProps {
@@ -55,9 +54,8 @@ export function ReportsView({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Reports
+              {businessName}
             </h1>
-            <p className="mt-1 text-muted">{businessName}</p>
             {periodLabel && (
               <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
                 <CalendarRange className="h-3.5 w-3.5" aria-hidden="true" />
@@ -78,7 +76,7 @@ export function ReportsView({
           </div>
           <div className="flex flex-wrap items-center gap-2 print:hidden">
             {actions}
-            <Badge tone="brand">{currency}</Badge>
+            <span className="text-xs text-muted">{currency}</span>
           </div>
         </div>
 

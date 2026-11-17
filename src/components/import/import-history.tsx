@@ -1,6 +1,6 @@
 "use client";
 
-import { FileDown, History } from "lucide-react";
+import { History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -47,14 +47,14 @@ function importedSummary(item: ImportHistoryItem): SummaryPart {
   }
   const counts = `${item.transactionsImported} of ${item.transactionsFound} imported`;
   if (outcome === "partial") {
-    return { key: "imported", text: `Partial import — ${counts}`, tone: "text-warning-strong" };
+    return { key: "imported", text: `Partial import: ${counts}`, tone: "text-warning-strong" };
   }
   return { key: "imported", text: counts, tone: "text-success-strong" };
 }
 
 /**
- * One consistent row summary for every import — "14 of 16 imported · 1 invalid
- * · 1 excluded" — so the newest and oldest rows read the same way instead of
+ * One consistent row summary for every import: "14 of 16 imported · 1 invalid
+ * · 1 excluded", so the newest and oldest rows read the same way instead of
  * the latest row showing a bare "+14". The leading part is coloured by outcome:
  * green for a full import, amber for a partial one, red when nothing landed.
  */
@@ -101,16 +101,15 @@ export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
       <CardContent>
         {items.length === 0 ? (
           <EmptyState
-            icon={<FileDown className="h-5 w-5" />}
             title="Nothing imported yet"
-            description="Imported statements will appear here with their row counts."
+            description="Your statements will be listed here with their row counts."
           />
         ) : (
-          <ul className="space-y-3">
+          <ul className="divide-y divide-border border-t border-border">
             {items.map((item) => (
               <li
                 key={item.id}
-                className="rounded-field border border-border bg-surface-subtle/40 px-3 py-2.5"
+                className="py-3"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -135,7 +134,7 @@ export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs text-muted">
                       {item.errors.exceptions.length} row
-                      {item.errors.exceptions.length === 1 ? "" : "s"} not imported — view details
+                      {item.errors.exceptions.length === 1 ? "" : "s"} not imported. View details
                     </summary>
                     <div className="mt-2">
                       <ImportExceptions exceptions={item.errors.exceptions} />

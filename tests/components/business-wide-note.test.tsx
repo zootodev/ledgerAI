@@ -24,7 +24,7 @@ describe("BusinessWideNote", () => {
     expect(html).toContain("Reports or Transactions");
   });
 
-  it("is composed into the Overview shell", () => {
+  it("composes the all-accounts caption into the Overview shell", () => {
     const html = renderToStaticMarkup(
       <OverviewShell
         userEmail="ada@example.com"
@@ -33,10 +33,10 @@ describe("BusinessWideNote", () => {
         kpis={<div />}
       />,
     );
-    expect(html).toContain("Totals across all accounts");
+    expect(html).toContain("All accounts · GBP");
   });
 
-  it("is composed into the Insights shell", () => {
+  it("composes the all-accounts caption into the Insights shell", () => {
     const html = renderToStaticMarkup(
       <InsightsShell
         userEmail="ada@example.com"
@@ -45,7 +45,7 @@ describe("BusinessWideNote", () => {
         insights={[]}
       />,
     );
-    expect(html).toContain("Totals cover every account");
+    expect(html).toContain("All accounts · USD");
     expect(html).not.toContain("Totals across all accounts");
   });
 });

@@ -31,8 +31,8 @@ export function ProfileSettings({ initialName, email }: ProfileSettingsProps) {
       <CardHeader>
         <CardTitle>Profile</CardTitle>
         <CardDescription>
-          Your display name is used across LedgerAI. Your email is your sign-in
-          identity and cannot be changed here.
+          Your display name appears in the header and on exports. Your email is
+          your sign-in identity, so it is fixed here.
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -67,10 +67,10 @@ describe("report prior-period deltas — metric-aware tone", () => {
     const html = await render(reportData());
 
     expect(html).toContain(
-      `>+20%<span class="sr-only">up from the previous period — adverse for expenses`,
+      `>+20%<span class="sr-only">up from the previous period. adverse for expenses`,
     );
     expect(html).toContain(
-      `text-danger">-2%<span class="sr-only">down from the previous period — adverse for net profit`,
+      `text-danger">-2%<span class="sr-only">down from the previous period. adverse for net profit`,
     );
     // A higher expense must never be styled as success anywhere.
     expect(html).not.toContain(`text-success">+20%`);
@@ -109,10 +109,10 @@ describe("report prior-period deltas — metric-aware tone", () => {
     );
 
     expect(html).toContain(
-      `text-success">+11%<span class="sr-only">up from the previous period — favorable for revenue`,
+      `text-success">+11%<span class="sr-only">up from the previous period. favorable for revenue`,
     );
     expect(html).toContain(
-      `text-success">-17%<span class="sr-only">down from the previous period — favorable for expenses`,
+      `text-success">-17%<span class="sr-only">down from the previous period. favorable for expenses`,
     );
   });
 
@@ -131,7 +131,7 @@ describe("report prior-period deltas — metric-aware tone", () => {
     );
 
     expect(html).toContain(
-      `—<span class="sr-only">: no prior figure to compare against`,
+      `Not comparable<span class="sr-only">: no prior figure to compare against`,
     );
     expect(html).not.toContain("+Infinity%");
     expect(html).not.toContain("NaN%");
@@ -167,7 +167,7 @@ describe("report prior-period deltas — metric-aware tone", () => {
       "No activity in the previous period, so there is nothing to compare against yet.",
     );
     expect(html).not.toContain(
-      `—<span class="sr-only">: no prior figure to compare against`,
+      `Not comparable<span class="sr-only">: no prior figure to compare against`,
     );
     expect(html).not.toContain("-100%");
     expect(html).not.toContain("+0%");

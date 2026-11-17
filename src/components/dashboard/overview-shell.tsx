@@ -2,8 +2,6 @@
 
 import * as React from "react";
 import { AppShell } from "@/components/layout/app-shell";
-import { Badge } from "@/components/ui/badge";
-import { BusinessWideNote } from "@/components/dashboard/business-wide-note";
 
 export interface OverviewShellProps {
   userName?: string;
@@ -41,20 +39,18 @@ export function OverviewShell({
         user: userName ? { name: userName, email: userEmail } : null,
       }}
     >
-      <div className="mx-auto min-w-0 max-w-6xl space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Welcome back
-            </h1>
-            <p className="mt-1 text-muted">{businessName}</p>
-          </div>
-          <Badge tone="brand">{currency}</Badge>
+      <div className="mx-auto min-w-0 max-w-6xl space-y-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {businessName}
+          </h1>
+          <span className="text-xs text-muted">
+            All accounts · {currency}
+          </span>
         </div>
 
         {actions}
         {rangeControl}
-        <BusinessWideNote />
         {kpis}
         {charts}
       </div>

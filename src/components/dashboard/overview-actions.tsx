@@ -1,6 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
-import { FileUp, Inbox, Sparkles, Tag } from "lucide-react";
+import { FileUp, Inbox, Tag } from "lucide-react";
 import { getOverviewActionItems, LOW_CONFIDENCE_THRESHOLD } from "@/lib/services/overview";
 import { Alert } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
@@ -25,20 +25,19 @@ export async function OverviewActionItems() {
     uncategorizedCount > 0 || lowConfidenceCount > 0 || latestImport !== null;
   if (!hasAnything) return null;
 
-  // Shown so "low confidence" is measurable rather than vague — the same
-  // number the Review queue uses.
+  // Shown so "low confidence" is measurable rather than vague. This is the
+  // same threshold the Review queue uses.
   const reviewPercent = Math.round(LOW_CONFIDENCE_THRESHOLD * 100);
 
   return (
     <section className="space-y-3" aria-label="Needs your attention">
       {uncategorizedCount > 0 && (
-        <Alert tone="warning" title="Some transactions aren’t categorized">
+        <Alert tone="warning" title="Some rows still need a category">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
               {uncategorizedCount} transaction
-              {uncategorizedCount === 1 ? "" : "s"} still need
-              {uncategorizedCount === 1 ? "s" : ""} a category. Categories power
-              your insights and reports.
+              {uncategorizedCount === 1 ? "" : "s"} have no category yet.
+              Reports group spending by category.
             </span>
             <Link
               href="/transactions?uncategorized=1"
@@ -52,20 +51,19 @@ export async function OverviewActionItems() {
       )}
 
       {lowConfidenceCount > 0 && (
-        <Alert tone="info" title="Some transactions need a category check">
+        <Alert tone="info" title="Some categories need a second look">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
               {lowConfidenceCount} transaction
-              {lowConfidenceCount === 1 ? "" : "s"} were auto-categorized with
-              low confidence. AI confidence is how sure the model is about its
-              category — under {reviewPercent}% goes to Review. Confirm or
-              correct them to improve future suggestions.
+              {lowConfidenceCount === 1 ? "" : "s"} were tagged automatically,
+              but the match was weak. Under {reviewPercent}% goes to Review.
+              Confirm or correct them so the next import learns the pattern.
             </span>
             <Link
               href="/transactions?lowConfidence=1"
               className={buttonVariants({ variant: "outline", size: "sm" })}
             >
-              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              <Tag className="h-3.5 w-3.5" aria-hidden="true" />
               Review {lowConfidenceCount}
             </Link>
           </div>
@@ -73,7 +71,7 @@ export async function OverviewActionItems() {
       )}
 
       {latestImport && (
-        <Alert tone="success" title="Your latest import">
+        <Alert tone="success" title="Latest import">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex min-w-0 flex-col gap-0.5">
@@ -84,7 +82,7 @@ export async function OverviewActionItems() {
                   </span>
                 </span>
                 <span className="text-sm text-muted">
-                  — {latestImport.imported} of {latestImport.found} imported
+                  {latestImport.imported} of {latestImport.found} rows imported
                   {latestImport.existingDuplicates > 0
                     ? `, ${latestImport.existingDuplicates} duplicate${latestImport.existingDuplicates === 1 ? "" : "s"} skipped`
                     : ""}

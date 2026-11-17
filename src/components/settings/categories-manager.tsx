@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
-import { FolderOpen, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -101,9 +101,8 @@ export function CategoriesManager({ categories }: CategoriesManagerProps) {
         <CardContent>
           {categories.length === 0 ? (
             <EmptyState
-              icon={<FolderOpen className="h-6 w-6" />}
               title="No categories yet"
-              description="Categories group imported and manual transactions for clean reports."
+              description="Add one category for the spending you track most."
               action={
                 <Button onClick={() => openCreate("expense")} leftIcon={<Plus className="h-4 w-4" />}>
                   Add a category
@@ -149,24 +148,19 @@ export function CategoriesManager({ categories }: CategoriesManagerProps) {
                 <p className="text-sm text-muted">
                   {visibleCategories.length} categor
                   {visibleCategories.length === 1 ? "y" : "ies"}
-                  {" · "}
-                  {customCount} custom · built-ins are read-only
+                  {customCount > 0 ? ` · ${customCount} custom` : ""}
                 </p>
               </div>
-              <ul className="space-y-2">
+              <ul className="divide-y divide-border border-t border-border">
                 {visibleCategories.map((category) => (
                   <li
                     key={category.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-field border border-border bg-surface-subtle/40 px-3 py-3"
+                    className="flex flex-wrap items-center justify-between gap-3 py-2.5"
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      <FolderOpen className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
                       <p className="font-medium text-foreground">{category.name}</p>
                       {category.isSystem && (
-                        <Badge tone="default">
-                          <Lock className="h-3 w-3" aria-hidden="true" />
-                          Built-in
-                        </Badge>
+                        <Badge tone="default">Built-in</Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-1">
@@ -224,7 +218,7 @@ export function CategoriesManager({ categories }: CategoriesManagerProps) {
         title="Delete category?"
         description={
           deleting
-            ? `"${deleting.name}" will be removed. Transactions with this category will fall back to uncategorized.`
+            ? `"${deleting.name}" will be removed. Its transactions become uncategorised.`
             : undefined
         }
       />
@@ -255,7 +249,7 @@ function CategoryFormModal({
     editing?.type ?? defaultType,
   );
   const namePlaceholder =
-    categoryType === "income" ? "e.g. Consulting fees" : "e.g. Fuel & tolls";
+    categoryType === "income" ? "e.g. POS commissions" : "e.g. Generator fuel";
 
   const notified = React.useRef(false);
   React.useEffect(() => {
@@ -270,7 +264,7 @@ function CategoryFormModal({
       open
       onClose={onClose}
       title={editing ? "Edit category" : "Add category"}
-      description="Used by the automatic categorizer and import suggestions."
+      description="Offered when categories are suggested during an import."
       size="sm"
       footer={
         <>

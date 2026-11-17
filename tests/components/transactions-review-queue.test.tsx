@@ -92,17 +92,17 @@ beforeEach(() => {
 });
 
 describe("review queue copy (the real 75% threshold)", () => {
-  it("explains the AI · % badge at 75%, not a rounded 80%", () => {
+  it("explains the match score at 75%, not a rounded 80%", () => {
     const html = render({ lowConfidence: "1" });
     expect(html).toContain(
-      "The AI · % badge shows how confident the AI is in its category. Anything under 75% lands here.",
+      "The match score shows how sure LedgerAI was about the category. Anything under 75% lands here.",
     );
     expect(html).not.toContain("80%");
   });
 
-  it("still shows the AI · 42% badge for a low-confidence row", () => {
+  it("still shows the 42% match badge for a low-confidence row", () => {
     const html = render({ lowConfidence: "1" });
-    expect(html).toContain("AI · 42%");
+    expect(html).toContain("42% match");
   });
 });
 
@@ -129,9 +129,9 @@ describe("per-row review controls", () => {
     expect(select).not.toContain("Sales");
   });
 
-  it("offers an Uncategorized choice so a wrong suggestion can be cleared", () => {
+  it("offers an Uncategorised choice so a wrong suggestion can be cleared", () => {
     const html = render({ lowConfidence: "1" });
-    expect(html).toContain('<option value="">Uncategorized</option>');
+    expect(html).toContain('<option value="">Uncategorised</option>');
   });
 
   it("hides the controls outside the review queue (normal list keeps badges)", () => {

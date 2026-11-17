@@ -1,6 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
-import { CalendarRange, DollarSign, FileUp, Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { CalendarRange, FileUp } from "lucide-react";
 import { getAnalyticsSummary, type AnalyticsQuery, type AnalyticsSummary } from "@/lib/services";
 import { formatAmount, percentChange, round } from "@/lib/finance/engine";
 import { StatCard } from "@/components/ui/stat-card";
@@ -34,15 +34,14 @@ export interface KpiGridProps {
  *
  * - `null` when there is no comparison window, or the baseline is negative
  *   (a percentage against a negative baseline is meaningless).
- * - "—" when both periods are zero — there is no movement to report, and a
- *   percentage would be fabricated.
+ * - "No change" when both periods are zero, so no percentage is fabricated.
  * - "New" when only the prior period is zero — there is no baseline to
  *   compute a percentage from, but the activity is genuinely new.
  * - otherwise the signed percentage ("+12%", "-3%").
  */
 function changeBadge(current: number, prior: number | null | undefined): string | null {
   if (prior === null || prior === undefined) return null;
-  if (prior === 0) return current === 0 ? "—" : "New";
+  if (prior === 0) return current === 0 ? "No change" : "New";
   if (prior < 0) return null;
   const delta = percentChange(current, prior);
   if (delta === null) return null;
@@ -94,13 +93,12 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border xl:grid-cols-4">
         <StatCard
           label="Revenue"
           value={formatAmount(summary.revenue, currency)}
           delta={revenueDelta}
           href={transactionsHref("income", summary.period)}
-          icon={<DollarSign className="h-4.5 w-4.5" />}
           compactOnMobile
         />
         <StatCard
@@ -109,7 +107,6 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
           delta={expensesDelta}
           invertDelta
           href={transactionsHref("expense", summary.period)}
-          icon={<TrendingDown className="h-4.5 w-4.5" />}
           compactOnMobile
         />
         <StatCard
@@ -117,7 +114,6 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
           value={formatAmount(summary.netProfit, currency)}
           delta={profitDelta}
           href={reportsHref(summary.period)}
-          icon={<TrendingUp className="h-4.5 w-4.5" />}
           compactOnMobile
         />
         <StatCard
@@ -125,7 +121,6 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
           value={formatAmount(summary.cashBalance, currency)}
           hint={CASH_BALANCE_HELP}
           href={reportsHref(summary.period)}
-          icon={<Wallet className="h-4.5 w-4.5" />}
           compactOnMobile
         />
       </div>
@@ -135,42 +130,26 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
           <EmptyState
             icon={<CalendarRange className="h-6 w-6" />}
             title="No activity in this period"
-            description="There are no transactions in the selected range. View all time or import a statement to see more."
+            description="Nothing was recorded between these dates."
             action={
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Link
-                  href="/overview?range=all"
-                  className={buttonVariants({ variant: "outline" })}
-                >
-                  <CalendarRange className="h-4 w-4" aria-hidden="true" />
-                  View all time
-                </Link>
-                <Link href="/import" className={buttonVariants()}>
-                  <FileUp className="h-4 w-4" aria-hidden="true" />
-                  Import a statement
-                </Link>
-              </div>
+              <Link
+                href="/overview?range=all"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                <CalendarRange className="h-4 w-4" aria-hidden="true" />
+                View all time
+              </Link>
             }
           />
         ) : (
           <EmptyState
-            icon={<Wallet className="h-6 w-6" />}
             title="No transactions yet"
-            description="Add your first income, expense, or transfer — or import a bank statement — and your overview will update here."
+            description="Import a bank statement to start your books."
             action={
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Link href="/transactions" className={buttonVariants()}>
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  Add transaction
-                </Link>
-                <Link
-                  href="/import"
-                  className={buttonVariants({ variant: "outline" })}
-                >
-                  <FileUp className="h-4 w-4" aria-hidden="true" />
-                  Import a statement
-                </Link>
-              </div>
+              <Link href="/import" className={buttonVariants()}>
+                <FileUp className="h-4 w-4" aria-hidden="true" />
+                Import a statement
+              </Link>
             }
           />
         ))}
@@ -181,11 +160,11 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
 /** Skeleton grid shown while the analytics summary is loading. */
 export function KpiGridFallback() {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-      <StatCard label="Revenue" value="—" loading compactOnMobile />
-      <StatCard label="Expenses" value="—" loading compactOnMobile />
-      <StatCard label="Net profit" value="—" loading compactOnMobile />
-      <StatCard label="Cash balance" value="—" loading compactOnMobile />
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border xl:grid-cols-4">
+      <StatCard label="Revenue" value="" loading compactOnMobile />
+      <StatCard label="Expenses" value="" loading compactOnMobile />
+      <StatCard label="Net profit" value="" loading compactOnMobile />
+      <StatCard label="Cash balance" value="" loading compactOnMobile />
     </div>
   );
 }

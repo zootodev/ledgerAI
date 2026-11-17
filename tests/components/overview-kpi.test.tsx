@@ -91,7 +91,6 @@ describe("AnalyticsKpiGrid (Overview data integration)", () => {
     const html = renderToStaticMarkup(element as never);
 
     expect(html).toContain("No transactions yet");
-    expect(html).toContain("Add transaction");
     expect(html).toContain("Import a statement");
   });
 
@@ -193,7 +192,7 @@ describe("AnalyticsKpiGrid (Overview data integration)", () => {
     expect(html).toContain("/reports?from=2026-02-01&amp;to=2026-02-28");
   });
 
-  it("shows an em dash when both periods are zero, never a fabricated -100%", async () => {
+  it("shows No change when both periods are zero, never a fabricated -100%", async () => {
     mockedGetAnalyticsSummary.mockResolvedValue(
       makeSummary({
         revenue: 0,
@@ -218,7 +217,7 @@ describe("AnalyticsKpiGrid (Overview data integration)", () => {
     });
     const html = renderToStaticMarkup(element as never);
 
-    expect(html).toContain(">—<");
+    expect(html).toContain(">No change<");
     expect(html).not.toContain("-100%");
     expect(html).not.toContain("NaN");
   });

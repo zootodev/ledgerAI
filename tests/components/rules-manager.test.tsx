@@ -36,7 +36,9 @@ describe("RulesManager", () => {
   it("renders the empty state copy when there are no rules", () => {
     const html = renderToStaticMarkup(<RulesManager rules={[]} />);
     expect(html).toContain("No rules yet");
-    expect(html).toContain("they appear as you correct categories during imports");
+    expect(html).toContain(
+      "Rules appear here when you correct a category during an import.",
+    );
   });
 
   it("renders a rule row with its uppercase pattern and badges", () => {

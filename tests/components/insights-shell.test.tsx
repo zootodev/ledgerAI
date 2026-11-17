@@ -59,9 +59,12 @@ describe("InsightsShell empty states", () => {
   });
 
   it("prefers the error state over the empty state", () => {
-    const html = render({ hasRange: true, error: "We couldn’t compute your insights right now." });
+    const html = render({
+      hasRange: true,
+      error: "We couldn't compute your insights right now.",
+    });
 
-    expect(html).toContain("Couldn’t compute insights");
+    expect(html).toContain("Couldn&#x27;t compute insights");
     expect(html).not.toContain("No activity in this period");
   });
 });

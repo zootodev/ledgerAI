@@ -88,7 +88,7 @@ export function AnalyticsRangeControl({
       ) : (
         <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center">
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted">
+            <span className="text-xs font-medium text-muted">
               From
             </span>
             <Input
@@ -99,7 +99,7 @@ export function AnalyticsRangeControl({
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted">
+            <span className="text-xs font-medium text-muted">
               To
             </span>
             <Input

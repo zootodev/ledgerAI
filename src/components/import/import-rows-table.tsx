@@ -76,7 +76,7 @@ export function ImportRowsTable({
       headerClassName: "min-w-36",
       cell: (row) => {
         if (!row.valid) {
-          return <span className="text-xs text-muted">—</span>;
+          return <span className="text-xs text-muted">Not imported</span>;
         }
         const isDuplicate =
           row.duplicate === "duplicate_existing" ||
@@ -185,7 +185,7 @@ export function ImportRowsTable({
         if (type === "transfer") {
           return (
             <div className="flex flex-col items-start gap-1">
-              <span className="text-muted">Transfer — none</span>
+              <span className="text-muted">Transfer, no category</span>
               {!row.skipped &&
                 onTypeOverride &&
                 (row.transfer?.kind === "self" || row.transfer == null) && (

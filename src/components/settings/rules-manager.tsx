@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,9 +43,8 @@ export function RulesManager({ rules }: RulesManagerProps) {
         <CardContent>
           {rules.length === 0 ? (
             <EmptyState
-              icon={<Sparkles className="h-6 w-6" />}
               title="No rules yet"
-              description="No rules yet — they appear as you correct categories during imports."
+              description="Rules appear here when you correct a category during an import."
             />
           ) : (
             <>
@@ -53,21 +52,18 @@ export function RulesManager({ rules }: RulesManagerProps) {
                 <span>{rules.length} rule{rules.length === 1 ? "" : "s"}</span>
                 <span>Rules are learned from your category corrections</span>
               </div>
-              <ul className="space-y-2">
+              <ul className="divide-y divide-border border-t border-border">
                 {rules.map((rule) => (
                   <li
                     key={rule.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-field border border-border bg-surface-subtle/40 px-3 py-3"
+                    className="flex flex-wrap items-center justify-between gap-3 py-3"
                   >
                     <div className="flex min-w-0 items-center gap-2">
-<p className="font-mono text-sm font-semibold uppercase tracking-wide text-foreground">
+                      <p className="font-mono text-sm font-semibold text-foreground">
                         {rule.pattern.toUpperCase()}
                       </p>
                       <Badge tone="info">Merchant</Badge>
-                      <Badge tone="default">
-                        <Sparkles className="h-3 w-3" aria-hidden="true" />
-                        Learned
-                      </Badge>
+                      <Badge tone="default">Learned</Badge>
                     </div>
                     <div className="flex items-center gap-3">
                       <Badge tone={rule.categoryId ? "success" : "default"} variant="outline">
@@ -101,7 +97,7 @@ export function RulesManager({ rules }: RulesManagerProps) {
         title="Delete rule?"
         description={
           deleting
-            ? `Categorization for this pattern will fall back to the built-in rules.`
+            ? `Categorisation for this pattern will fall back to the built-in rules.`
             : undefined
         }
       />

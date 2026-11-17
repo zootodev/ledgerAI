@@ -45,7 +45,7 @@ export function ImportExceptions({ exceptions }: { exceptions: ImportException[]
             className="min-w-0 flex-1 truncate text-foreground"
             title={exception.description}
           >
-            {exception.description || "—"}
+            {exception.description || "No description"}
           </span>
           {exception.date && (
             <span className="whitespace-nowrap text-muted tabular-nums">{exception.date}</span>

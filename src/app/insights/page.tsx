@@ -11,7 +11,7 @@ import { AnalyticsRangeControl } from "@/components/dashboard/analytics-range-co
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const metadata: Metadata = {
-  title: "AI Insights",
+  title: "Insights",
 };
 
 type InsightsSearchParams = Record<string, string | string[] | undefined>;
@@ -43,12 +43,14 @@ export default async function InsightsPage({
             <AnalyticsRangeControl from={range?.dateFrom} to={range?.dateTo} params={raw} />
           }
         >
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="rounded-card border border-border bg-surface p-5">
-                <Skeleton className="h-9 w-9 rounded-lg" />
-                <Skeleton className="mt-4 h-4 w-2/3" height={16} />
-                <Skeleton className="mt-2 h-12 w-full" height={48} />
+              <div key={i} className="grid gap-x-4 gap-y-2 px-4 py-4 sm:grid-cols-[2.25rem_minmax(0,1fr)]">
+                <Skeleton className="h-3 w-5" height={12} />
+                <div>
+                  <Skeleton className="h-4 w-2/3" height={16} />
+                  <Skeleton className="mt-2 h-3 w-full" height={12} />
+                </div>
               </div>
             ))}
           </div>
@@ -93,7 +95,7 @@ async function InsightsLoader({
     // generic message: raw server/DB errors are never surfaced to the client.
     if (e instanceof AuthorizationError) redirect("/login");
     console.error("[insights] failed to compute insights", range ?? {}, e);
-    error = "We couldn’t compute your insights right now. Please try again.";
+    error = "We couldn't compute your insights right now. Try again.";
   }
 
   return (

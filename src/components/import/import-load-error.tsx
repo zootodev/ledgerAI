@@ -29,16 +29,11 @@ export function ImportLoadError({ userName, userEmail, onSignOut }: ImportLoadEr
       }}
     >
       <div className="mx-auto max-w-6xl">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Import transactions
-        </h1>
-        <div className="mt-6">
-          <ErrorState
-            title="Couldn't load your imports, try again"
-            description="Something went wrong talking to the database. Your data is safe."
-            onRetry={() => router.refresh()}
-          />
-        </div>
+        <ErrorState
+          title="Imports didn't load"
+          description="The database request failed. Try again. Your saved imports are unchanged."
+          onRetry={() => router.refresh()}
+        />
       </div>
     </AppShell>
   );

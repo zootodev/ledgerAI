@@ -79,7 +79,7 @@ describe("AliveSample", () => {
     ],
   };
 
-  it("shows Money In and Money Out beside Balance, using an em dash for the empty side", () => {
+  it("shows Money In and Money Out beside Balance, using blank for the empty side", () => {
     const html = renderToStaticMarkup(
       <AliveSample
         parsed={file}
@@ -94,7 +94,7 @@ describe("AliveSample", () => {
     );
 
     expect(html).toContain("Money In: 25,000.00");
-    expect(html).toContain("Money Out: —");
+    expect(html).toContain("Money Out: blank");
     expect(html).toContain("Balance: 130,000.00");
     // The old Debit/Credit wording is gone from the sample row.
     expect(html).not.toContain("Debit:");
@@ -131,7 +131,7 @@ describe("AliveSample", () => {
       />,
     );
 
-    expect(html).toContain("Money In: —");
+    expect(html).toContain("Money In: blank");
     expect(html).toContain("Money Out: 18,500.00");
   });
 });
@@ -195,7 +195,7 @@ describe("ImportHistory", () => {
 
     expect(html).toContain("3 of 3 imported");
     expect(html).toContain("text-success-strong");
-    expect(html).toContain("Partial import — 4 of 10 imported");
+    expect(html).toContain("Partial import: 4 of 10 imported");
     expect(html).toContain("text-warning-strong");
     expect(html).toContain("No rows imported");
     expect(html).toContain("text-danger-strong");
@@ -347,6 +347,6 @@ describe("ImportCompletePanel", () => {
     const html = renderToStaticMarkup(
       <ImportCompletePanel result={result} onStartOver={() => {}} />,
     );
-    expect(html).toContain("Every row in this statement was handled.");
+    expect(html).toContain("No rows were left out.");
   });
 });

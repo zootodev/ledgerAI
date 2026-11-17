@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
 import {
-  ArrowLeftRight,
   FileUp,
   Pencil,
   Plus,
@@ -88,9 +87,9 @@ const typeTone: Record<string, "success" | "danger" | "default"> = {
  */
 const REVIEW_PERCENT = Math.round(REVIEW_THRESHOLD * 100);
 
-const CONFIDENCE_LEGEND = `The AI · % badge shows how confident the AI is in its category. Anything under ${REVIEW_PERCENT}% lands here.`;
+const CONFIDENCE_LEGEND = `The match score shows how sure LedgerAI was about the category. Anything under ${REVIEW_PERCENT}% lands here.`;
 
-/** AI categorization confidence, e.g. "AI · 92%". Unknown when null. */
+/** Categorization match score, e.g. "92% match". Unknown when null. */
 function aiConfidenceBadge(confidence: number): React.ReactNode {
   const pct = Math.round(confidence * 100);
   const tone: "success" | "warning" | "danger" =
@@ -101,7 +100,7 @@ function aiConfidenceBadge(confidence: number): React.ReactNode {
         : "danger";
   return (
     <Badge tone={tone} title={CONFIDENCE_LEGEND}>
-      AI · {pct}%
+      {pct}% match
     </Badge>
   );
 }
@@ -183,8 +182,8 @@ export function TransactionsView({
   );
 
   // Whether the business has any accounts to filter or label rows with. When
-  // it has none, the Account control/column are dropped (a wall of "—" helps
-  // no one) and a hint points to where accounts are created.
+  // it has none, the Account control/column are dropped (a column of empty
+  // cells helps no one) and a hint points to where accounts are created.
   const hasAccounts = accounts.length > 0;
 
   // Partial-failure state: the list loaded, but support data (accounts /
@@ -364,7 +363,7 @@ export function TransactionsView({
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted">
           <span className="whitespace-nowrap tabular-nums">{formatDate(tx.date)}</span>
           <span aria-hidden="true">·</span>
-          <span className="min-w-0 break-words">{category?.name ?? "—"}</span>
+          <span className="min-w-0 break-words">{category?.name ?? "Uncategorised"}</span>
           {tx.aiConfidence !== null && (
             <>
               <span aria-hidden="true">·</span>
@@ -427,7 +426,7 @@ export function TransactionsView({
           return c ? (
             <Badge tone={c.type === "income" ? "brand" : "info"}>{c.name}</Badge>
           ) : (
-            <span className="text-muted">—</span>
+            <span className="text-muted">Uncategorised</span>
           );
         }
         // Review mode: the category is editable inline. Only categories that
@@ -444,7 +443,7 @@ export function TransactionsView({
               disabled={busy}
               onChange={(e) => handleSetCategory(t, e.target.value)}
             >
-              <option value="">Uncategorized</option>
+              <option value="">Uncategorised</option>
               {rowCategories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
@@ -478,7 +477,7 @@ export function TransactionsView({
               return a ? (
                 <span className="text-secondary">{a.name}</span>
               ) : (
-                <span className="text-muted">—</span>
+                <span className="text-muted">No account</span>
               );
             },
           } satisfies Column<TransactionServiceData>,
@@ -576,49 +575,50 @@ export function TransactionsView({
         </div>
 
         {!loadError && (
-          <div
-            className={cn(
-              "grid gap-3",
-              tileCount === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+          <div className="space-y-1.5">
+            {hasFilters && (
+              <p className="text-xs text-muted">Totals for the current filters</p>
             )}
-          >
-            {showIncomeTile && (
-              <div className="rounded-card border border-border bg-surface px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                  Income{hasFilters ? " (filtered)" : ""}
-                </p>
-                <p className="mt-1 text-lg font-semibold tabular-nums text-success">
-                  +{formatAmount(result.totals.income, currency)}
-                </p>
+            <div className="overflow-hidden rounded-card border border-border bg-surface">
+              <div
+                className={cn(
+                  "grid gap-px bg-border",
+                  tileCount === 3 ? "grid-cols-3" : "grid-cols-2",
+                )}
+              >
+                {showIncomeTile && (
+                  <div className="min-w-0 bg-surface px-3 py-2.5 sm:px-4">
+                    <p className="text-xs text-muted">Money in</p>
+                    <p className="mt-0.5 break-words text-sm font-semibold tabular-nums text-success sm:text-base">
+                      +{formatAmount(result.totals.income, currency)}
+                    </p>
+                  </div>
+                )}
+                {showExpenseTile && (
+                  <div className="min-w-0 bg-surface px-3 py-2.5 sm:px-4">
+                    <p className="text-xs text-muted">Money out</p>
+                    <p className="mt-0.5 break-words text-sm font-semibold tabular-nums text-danger sm:text-base">
+                      −{formatAmount(result.totals.expense, currency)}
+                    </p>
+                  </div>
+                )}
+                <div className="min-w-0 bg-surface px-3 py-2.5 sm:px-4">
+                  <p className="text-xs text-muted">Net</p>
+                  <p className="mt-0.5 break-words text-sm font-semibold tabular-nums text-secondary sm:text-base">
+                    {result.totals.net < 0 ? "−" : ""}
+                    {formatAmount(Math.abs(result.totals.net), currency)}
+                  </p>
+                </div>
               </div>
-            )}
-            {showExpenseTile && (
-              <div className="rounded-card border border-border bg-surface px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                  Expenses{hasFilters ? " (filtered)" : ""}
-                </p>
-                <p className="mt-1 text-lg font-semibold tabular-nums text-danger">
-                  −{formatAmount(result.totals.expense, currency)}
-                </p>
-              </div>
-            )}
-            <div className="rounded-card border border-border bg-surface px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                Net
-              </p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-secondary">
-                {result.totals.net < 0 ? "−" : ""}
-                {formatAmount(Math.abs(result.totals.net), currency)}
-              </p>
             </div>
           </div>
         )}
 
         {!hasAccounts && !accountsError && !loadError && (
           <p className="text-sm text-muted">
-            No accounts yet —{" "}
+            No accounts yet.{" "}
             <Link href="/settings/accounts" className="text-brand underline-offset-4 hover:underline">
-              add an account
+              Add an account
             </Link>{" "}
             to tag transactions and filter by account.
           </p>
@@ -640,14 +640,14 @@ export function TransactionsView({
         )}
 
         {(params.uncategorized || params.lowConfidence) && (
-          <Alert tone="info" title="Reviewing flagged transactions">
+          <Alert tone="info" title="Showing rows that need a category">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span>
                 {params.uncategorized && params.lowConfidence
-                  ? "Showing transactions with no category and low-confidence categorizations."
+                  ? "These rows have no category or a weak match."
                   : params.uncategorized
-                    ? "Showing non-transfer transactions that have no category yet."
-                    : "Showing transactions whose AI category was low-confidence. Accept a suggestion to keep it, or pick a category to correct it — either way the row leaves Review."}
+                    ? "These rows have no category yet."
+                    : "These rows were tagged automatically, but the match was weak. Accept the suggestion or pick another category, and the row leaves Review."}
                 {" "}
                 {CONFIDENCE_LEGEND}
               </span>
@@ -674,7 +674,7 @@ export function TransactionsView({
               }}
             >
               <label className="flex min-w-[200px] flex-col gap-1.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                <span className="text-xs text-muted">
                   Search
                 </span>
                 <Input
@@ -688,7 +688,7 @@ export function TransactionsView({
               </label>
               {!lockedType && (
                 <label className="flex min-w-0 flex-col gap-1.5">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                  <span className="text-xs text-muted">
                     Type
                   </span>
                   <Select
@@ -710,7 +710,7 @@ export function TransactionsView({
               )}
               {hasAccounts && (
                 <label className="flex min-w-0 flex-col gap-1.5">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                  <span className="text-xs text-muted">
                     Account
                   </span>
                   <Select
@@ -731,7 +731,7 @@ export function TransactionsView({
                 </label>
               )}
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                <span className="text-xs text-muted">
                   Category
                 </span>
                 <Select
@@ -752,7 +752,7 @@ export function TransactionsView({
               </label>
               <div className="grid w-full grid-cols-2 gap-3 sm:w-auto sm:flex sm:items-end">
                 <label className="flex min-w-0 flex-col gap-1.5">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                  <span className="text-xs text-muted">
                     From
                   </span>
                   <Input
@@ -763,7 +763,7 @@ export function TransactionsView({
                   />
                 </label>
                 <label className="flex min-w-0 flex-col gap-1.5">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                  <span className="text-xs text-muted">
                     To
                   </span>
                   <Input
@@ -828,31 +828,43 @@ export function TransactionsView({
             }
             empty={
               <EmptyState
-                icon={<ArrowLeftRight className="h-6 w-6" />}
                 title={hasFilters ? "No matching transactions" : "No transactions yet"}
                 description={
                   hasFilters
-                    ? "Try adjusting or clearing your filters."
-                    : "Add your first transaction to start tracking income and expenses."
+                    ? "No row matches these filters."
+                    : "Import a bank statement to start your books."
                 }
                 action={
-                  !hasFilters ? (
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      <Button
-                        onClick={openCreate}
-                        leftIcon={<Plus className="h-4 w-4" />}
-                      >
-                        Add transaction
-                      </Button>
-                      <Link
-                        href="/import"
-                        className={buttonVariants({ variant: "outline" })}
-                      >
-                        <FileUp className="h-4 w-4" aria-hidden="true" />
-                        Import a statement
-                      </Link>
-                    </div>
-                  ) : undefined
+                  hasFilters ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSearchText("");
+                        push({
+                          q: undefined,
+                          search: undefined,
+                          type: undefined,
+                          accountId: undefined,
+                          categoryId: undefined,
+                          dateFrom: undefined,
+                          dateTo: undefined,
+                          uncategorized: undefined,
+                          lowConfidence: undefined,
+                          status: undefined,
+                        });
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  ) : (
+                    <Link
+                      href="/import"
+                      className={buttonVariants({ variant: "outline" })}
+                    >
+                      <FileUp className="h-4 w-4" aria-hidden="true" />
+                      Import a statement
+                    </Link>
+                  )
                 }
               />
             }

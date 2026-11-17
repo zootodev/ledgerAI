@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 export interface WizardStep {
@@ -10,8 +10,8 @@ export interface WizardStep {
 }
 
 /**
- * Lightweight inline stepper (the design system has no Stepper primitive).
- * Renders numbered steps with a connector and marks completed steps.
+ * Inline import progress. Numbered text rather than pills, so the file task
+ * stays the loudest thing on the screen.
  */
 export function WizardStepper({
   steps,
@@ -32,31 +32,20 @@ export function WizardStepper({
           <li key={step.id} className="flex shrink-0 items-center gap-1 sm:gap-2">
             {index > 0 && (
               <ChevronRight
-                className="h-4 w-4 text-subtle"
+                className="h-3.5 w-3.5 text-subtle"
                 aria-hidden="true"
               />
             )}
             <span
               aria-current={active ? "step" : undefined}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium sm:px-2.5",
-                active && "bg-brand text-on-accent",
-                done && "bg-success-soft text-success-strong",
-                !active && !done && "bg-surface-subtle text-secondary",
+                "inline-flex items-center gap-1.5 text-xs",
+                active && "font-semibold text-foreground",
+                done && "text-muted",
+                !active && !done && "text-subtle",
               )}
             >
-              {done ? (
-                <Check className="h-3 w-3" aria-hidden="true" />
-              ) : (
-                <span
-                  className={cn(
-                    "flex h-4 w-4 items-center justify-center rounded-full text-[10px]",
-                    active ? "bg-white/20" : "bg-surface",
-                  )}
-                >
-                  {step.id}
-                </span>
-              )}
+              <span className="tabular-nums">{step.id}.</span>
               <span className={active ? "inline" : "hidden sm:inline"}>
                 {step.label}
               </span>

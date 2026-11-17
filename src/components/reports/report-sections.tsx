@@ -59,10 +59,48 @@ function ExportCsvLink({ href }: { href: string }) {
 }
 
 function percent(value: number | null): string {
-  return value === null ? "—" : `${value.toFixed(1)}%`;
+  return value === null ? "No revenue" : `${value.toFixed(1)}%`;
 }
 
 const cellNumber = "text-right tabular-nums";
+
+/**
+ * One section of the printed report packet. A rule separates sections; they
+ * share the page rather than floating as six separate cards.
+ */
+function Section({
+  title,
+  period,
+  note,
+  exportType,
+  range,
+  children,
+}: {
+  title: string;
+  period: string;
+  note?: string;
+  exportType: string;
+  range?: ReportsQuery;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border-t border-border pt-5 first:border-t-0 first:pt-0">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+            {title}
+          </h2>
+          <p className="mt-0.5 text-sm text-muted">
+            {period}
+            {note ? ` · ${note}` : ""}
+          </p>
+        </div>
+        <ExportCsvLink href={exportHref(exportType, range)} />
+      </div>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
 
 /**
  * Drill-through link from a report row to the filtered transactions that
@@ -163,7 +201,7 @@ function PriorDelta({
       <li className="flex items-baseline justify-between gap-4">
         <span className="text-muted">{label}</span>
         <span className="tabular-nums text-muted">
-          —
+          Not comparable
           <span className="sr-only">: no prior figure to compare against</span>
         </span>
       </li>
@@ -194,7 +232,7 @@ function PriorDelta({
       >
         {rose ? `+${rounded}%` : `${rounded}%`}
         <span className="sr-only">
-          {rose ? "up" : "down"} from the previous period —{" "}
+          {rose ? "up" : "down"} from the previous period.{" "}
           {favorable ? "favorable" : "adverse"} for {label.toLowerCase()}
         </span>
       </span>
@@ -226,62 +264,49 @@ function SummarySection({
     { label: "Cash balance", value: formatAmount(summary.cashBalance, currency), amount: summary.cashBalance },
   ];
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle>Summary</CardTitle>
-            <p className="mt-0.5 text-sm text-muted">
-              {sectionPeriod(range)}
+    <Section title="Summary" period={sectionPeriod(range)} exportType="summary" range={range}>
+      <table className="w-full text-sm">
+        <tbody>
+          {rows.map(({ label, value, href, amount }) => (
+            <tr key={label} className="border-b border-border last:border-0">
+              <td className="py-2.5 text-muted">
+                {href ? <DrillLink href={href}>{label}</DrillLink> : label}
+              </td>
+              <td
+                className={cn(
+                  "py-2.5 text-right font-medium tabular-nums",
+                  amount !== undefined && amount < 0 ? "text-danger" : "text-foreground",
+                )}
+              >
+                {value}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {summary.prior && (
+        <div className="mt-4 rounded-field border border-border bg-surface-subtle/40 p-3">
+          <p className="text-xs font-medium text-muted">
+            Against the previous period · {reportPeriodLabel(summary.prior.period)}
+          </p>
+          {priorHadActivity(summary.prior) ? (
+            <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+              <PriorDelta label="Revenue" current={summary.revenue} prior={summary.prior.revenue} polarity="up-is-good" />
+              <PriorDelta label="Expenses" current={summary.expenses} prior={summary.prior.expenses} polarity="up-is-adverse" />
+              <PriorDelta label="Net profit" current={summary.netProfit} prior={summary.prior.netProfit} polarity="up-is-good" />
+              <PriorDelta label="Cash balance" current={summary.cashBalance} prior={summary.prior.cashBalance} polarity="up-is-good" />
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-muted">
+              No activity in the previous period, so there is nothing to compare against yet.
             </p>
-          </div>
-          <ExportCsvLink href={exportHref("summary", range)} />
+          )}
         </div>
-      </CardHeader>
-      <CardContent>
-        <table className="w-full text-sm">
-          <tbody>
-            {rows.map(({ label, value, href, amount }) => (
-              <tr key={label} className="border-b border-border last:border-0">
-                <td className="py-2.5 text-muted">
-                  {href ? <DrillLink href={href}>{label}</DrillLink> : label}
-                </td>
-                <td
-                  className={cn(
-                    "py-2.5 text-right font-medium tabular-nums",
-                    amount !== undefined && amount < 0 ? "text-danger" : "text-foreground",
-                  )}
-                >
-                  {value}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {summary.prior && (
-          <div className="mt-4 rounded-field border border-border bg-surface-subtle/40 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">
-              vs previous period · {reportPeriodLabel(summary.prior.period)}
-            </p>
-            {priorHadActivity(summary.prior) ? (
-              <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-                <PriorDelta label="Revenue" current={summary.revenue} prior={summary.prior.revenue} polarity="up-is-good" />
-                <PriorDelta label="Expenses" current={summary.expenses} prior={summary.prior.expenses} polarity="up-is-adverse" />
-                <PriorDelta label="Net profit" current={summary.netProfit} prior={summary.prior.netProfit} polarity="up-is-good" />
-                <PriorDelta label="Cash balance" current={summary.cashBalance} prior={summary.prior.cashBalance} polarity="up-is-good" />
-              </ul>
-            ) : (
-              <p className="mt-2 text-sm text-muted">
-                No activity in the previous period, so there is nothing to compare against yet.
-              </p>
-            )}
-          </div>
-        )}
-        <p className="mt-2 text-xs text-muted">
-          Cash balance is as of the end of the selected range.
-        </p>
-      </CardContent>
-    </Card>
+      )}
+      <p className="mt-2 text-xs text-muted">
+        Cash balance is as of the end of the selected range.
+      </p>
+    </Section>
   );
 }
 
@@ -295,91 +320,78 @@ function MonthlySection({
   range?: ReportsQuery;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle>Monthly profit &amp; loss</CardTitle>
-            <p className="mt-0.5 text-sm text-muted">
-              Income, expenses and net result per month · {sectionPeriod(range)}
-            </p>
-          </div>
-          <ExportCsvLink href={exportHref("monthly", range)} />
-        </div>
-      </CardHeader>
-      <CardContent>
-        {trends.points.length === 0 ? (
-          <p className="text-sm text-muted">
-            No transactions in this period.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-max text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th scope="col" className="py-2 pr-4 text-xs font-medium uppercase tracking-wide text-muted">
-                    Month
-                  </th>
-                  <th scope="col" className="py-2 px-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    Revenue
-                  </th>
-                  <th scope="col" className="py-2 px-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    Expenses
-                  </th>
-                  <th scope="col" className="py-2 px-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    Transfers
-                  </th>
-                  <th scope="col" className="py-2 px-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    Net profit
-                  </th>
-                  <th scope="col" className="py-2 pl-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    Margin
-                  </th>
+    <Section title="Monthly profit & loss" period={sectionPeriod(range)} exportType="monthly" range={range}>
+      {trends.points.length === 0 ? (
+        <p className="text-sm text-muted">
+          No transactions in this period.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th scope="col" className="sticky top-0 bg-surface py-2 pr-4 text-xs font-medium text-muted">
+                  Month
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 px-4 text-right text-xs font-medium text-muted">
+                  Revenue
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 px-4 text-right text-xs font-medium text-muted">
+                  Expenses
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 px-4 text-right text-xs font-medium text-muted">
+                  Transfers
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 px-4 text-right text-xs font-medium text-muted">
+                  Net profit
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 pl-4 text-right text-xs font-medium text-muted">
+                  Margin
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {trends.points.map((p) => (
+                <tr key={p.key} className="border-b border-border last:border-0">
+                  <td className="py-2 pr-4 text-foreground">
+                    <DrillLink href={monthTransactionsHref(p.key, range)}>
+                      {p.label}
+                    </DrillLink>
+                  </td>
+                  <td className={cn(cellNumber, "py-2 px-4 text-success")}>
+                    {formatAmount(p.revenue, currency)}
+                  </td>
+                  <td className={cn(cellNumber, "py-2 px-4 text-danger")}>
+                    {formatAmount(p.expenses, currency)}
+                  </td>
+                  <td className={cn(cellNumber, "py-2 px-4 text-muted")}>
+                    {formatAmount(p.transfers, currency)}
+                  </td>
+                  <td
+                    className={cn(
+                      cellNumber,
+                      "py-2 px-4 font-medium",
+                      p.netProfit < 0 ? "text-danger" : "text-foreground",
+                    )}
+                  >
+                    {formatAmount(p.netProfit, currency)}
+                  </td>
+                  <td className={cn(cellNumber, "py-2 pl-4 text-muted")}>
+                    {percent(p.profitMargin)}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {trends.points.map((p) => (
-                  <tr key={p.key} className="border-b border-border last:border-0">
-                    <td className="py-2.5 pr-4 text-foreground">
-                      <DrillLink href={monthTransactionsHref(p.key, range)}>
-                        {p.label}
-                      </DrillLink>
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 px-4 text-success")}>
-                      {formatAmount(p.revenue, currency)}
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 px-4 text-danger")}>
-                      {formatAmount(p.expenses, currency)}
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 px-4 text-muted")}>
-                      {formatAmount(p.transfers, currency)}
-                    </td>
-                    <td
-                      className={cn(
-                        cellNumber,
-                        "py-2.5 px-4 font-medium",
-                        p.netProfit < 0 ? "text-danger" : "text-foreground",
-                      )}
-                    >
-                      {formatAmount(p.netProfit, currency)}
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 pl-4 text-muted")}>
-                      {percent(p.profitMargin)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {trends.points.length > 0 && (
-          <p className="mt-3 px-1 text-xs text-muted">
-            Margin is the month&apos;s net profit divided by its revenue. A
-            negative margin means the month ran at a loss.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {trends.points.length > 0 && (
+        <p className="mt-3 px-1 text-xs text-muted">
+          Margin is the month&apos;s net profit divided by its revenue. A
+          negative margin means the month ran at a loss.
+        </p>
+      )}
+    </Section>
   );
 }
 
@@ -393,66 +405,58 @@ function CategorySection({
   range?: ReportsQuery;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle>Category breakdown</CardTitle>
-            <p className="mt-0.5 text-sm text-muted">
-              Income and expenses split by category, with each category&apos;s
-              share of its type total. Transfers excluded · {sectionPeriod(range)}
-            </p>
-          </div>
-          <ExportCsvLink href={exportHref("category", range)} />
-        </div>
-      </CardHeader>
-      <CardContent>
-        {report.rows.length === 0 ? (
-          <p className="text-sm text-muted">
-            No categorized income or expenses in this period.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-max text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th scope="col" className="py-2 pr-4 text-xs font-medium uppercase tracking-wide text-muted">
-                    Type
-                  </th>
-                  <th scope="col" className="py-2 px-4 text-xs font-medium uppercase tracking-wide text-muted">
-                    Category
-                  </th>
-                  <th scope="col" className="py-2 px-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    Amount
-                  </th>
-                  <th scope="col" className="py-2 pl-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    % of type
-                  </th>
+    <Section
+      title="Category breakdown"
+      period={sectionPeriod(range)}
+      note="Transfers excluded"
+      exportType="category"
+      range={range}
+    >
+      {report.rows.length === 0 ? (
+        <p className="text-sm text-muted">
+          No categorised income or expenses in this period.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th scope="col" className="sticky top-0 bg-surface py-2 pr-4 text-xs font-medium text-muted">
+                  Type
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 px-4 text-xs font-medium text-muted">
+                  Category
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 px-4 text-right text-xs font-medium text-muted">
+                  Amount
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 pl-4 text-right text-xs font-medium text-muted">
+                  % of type
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.rows.map((r) => (
+                <tr key={`${r.type}-${r.categoryId ?? "none"}`} className="border-b border-border last:border-0">
+                  <td className="py-2 pr-4 capitalize text-muted">{r.type}</td>
+                  <td className="py-2 px-4 text-foreground">
+                    <DrillLink href={categoryTransactionsHref(r.categoryId, r.type, range)}>
+                      {r.name}
+                    </DrillLink>
+                  </td>
+                  <td className={cn(cellNumber, "py-2 px-4 font-medium text-foreground")}>
+                    {formatAmount(r.amount, currency)}
+                  </td>
+                  <td className={cn(cellNumber, "py-2 pl-4 text-muted")}>
+                    {percent(r.share)}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {report.rows.map((r) => (
-                  <tr key={`${r.type}-${r.categoryId ?? "none"}`} className="border-b border-border last:border-0">
-                    <td className="py-2.5 pr-4 capitalize text-muted">{r.type}</td>
-                    <td className="py-2.5 px-4 text-foreground">
-                      <DrillLink href={categoryTransactionsHref(r.categoryId, r.type, range)}>
-                        {r.name}
-                      </DrillLink>
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 px-4 font-medium text-foreground")}>
-                      {formatAmount(r.amount, currency)}
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 pl-4 text-muted")}>
-                      {percent(r.share)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -467,67 +471,59 @@ function IncomeStatementSection({
   range?: ReportsQuery;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle>Income statement</CardTitle>
-            <p className="mt-0.5 text-sm text-muted">
-              Revenue by category for the period, with each category&apos;s share
-              of total revenue. Transfers excluded · {sectionPeriod(range)}
-            </p>
-          </div>
-          <ExportCsvLink href={exportHref("income", range)} />
-        </div>
-      </CardHeader>
-      <CardContent>
-        {report.rows.length === 0 ? (
-          <p className="text-sm text-muted">No income in this period.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-max text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th scope="col" className="py-2 pr-4 text-xs font-medium uppercase tracking-wide text-muted">
-                    Category
-                  </th>
-                  <th scope="col" className="py-2 px-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    Amount
-                  </th>
-                  <th scope="col" className="py-2 pl-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    % of revenue
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.rows.map((r) => (
-                  <tr key={r.categoryId ?? "none"} className="border-b border-border">
-                    <td className="py-2.5 pr-4 text-foreground">
-                      <DrillLink href={categoryTransactionsHref(r.categoryId, "income", range)}>
-                        {r.name}
-                      </DrillLink>
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 px-4 font-medium text-success")}>
-                      {formatAmount(r.amount, currency)}
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 pl-4 text-muted")}>
-                      {percent(r.share)}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-t-2 border-border">
-                  <td className="py-2.5 pr-4 font-medium text-foreground">Total revenue</td>
-                  <td className={cn(cellNumber, "py-2.5 px-4 font-semibold text-success")}>
-                    {formatAmount(report.total, currency)}
+    <Section
+      title="Income statement"
+      period={sectionPeriod(range)}
+      note="Transfers excluded"
+      exportType="income"
+      range={range}
+    >
+      {report.rows.length === 0 ? (
+        <p className="text-sm text-muted">No income in this period.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th scope="col" className="sticky top-0 bg-surface py-2 pr-4 text-xs font-medium text-muted">
+                  Category
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 px-4 text-right text-xs font-medium text-muted">
+                  Amount
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 pl-4 text-right text-xs font-medium text-muted">
+                  % of revenue
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.rows.map((r) => (
+                <tr key={r.categoryId ?? "none"} className="border-b border-border">
+                  <td className="py-2 pr-4 text-foreground">
+                    <DrillLink href={categoryTransactionsHref(r.categoryId, "income", range)}>
+                      {r.name}
+                    </DrillLink>
                   </td>
-                  <td className={cn(cellNumber, "py-2.5 pl-4 text-muted")}>100%</td>
+                  <td className={cn(cellNumber, "py-2 px-4 font-medium text-success")}>
+                    {formatAmount(r.amount, currency)}
+                  </td>
+                  <td className={cn(cellNumber, "py-2 pl-4 text-muted")}>
+                    {percent(r.share)}
+                  </td>
                 </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              ))}
+              <tr className="border-t-2 border-border">
+                <td className="py-2 pr-4 font-medium text-foreground">Total revenue</td>
+                <td className={cn(cellNumber, "py-2 px-4 font-semibold text-success")}>
+                  {formatAmount(report.total, currency)}
+                </td>
+                <td className={cn(cellNumber, "py-2 pl-4 text-muted")}>100%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -542,67 +538,59 @@ function ExpenseBreakdownSection({
   range?: ReportsQuery;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle>Expense breakdown</CardTitle>
-            <p className="mt-0.5 text-sm text-muted">
-              Expenses by category for the period, with each category&apos;s
-              share of total expenses. Transfers excluded · {sectionPeriod(range)}
-            </p>
-          </div>
-          <ExportCsvLink href={exportHref("expense", range)} />
-        </div>
-      </CardHeader>
-      <CardContent>
-        {report.rows.length === 0 ? (
-          <p className="text-sm text-muted">No expenses in this period.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-max text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th scope="col" className="py-2 pr-4 text-xs font-medium uppercase tracking-wide text-muted">
-                    Category
-                  </th>
-                  <th scope="col" className="py-2 px-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    Amount
-                  </th>
-                  <th scope="col" className="py-2 pl-4 text-right text-xs font-medium uppercase tracking-wide text-muted">
-                    % of expenses
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.rows.map((r) => (
-                  <tr key={r.categoryId ?? "none"} className="border-b border-border">
-                    <td className="py-2.5 pr-4 text-foreground">
-                      <DrillLink href={categoryTransactionsHref(r.categoryId, "expense", range)}>
-                        {r.name}
-                      </DrillLink>
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 px-4 font-medium text-danger")}>
-                      {formatAmount(r.amount, currency)}
-                    </td>
-                    <td className={cn(cellNumber, "py-2.5 pl-4 text-muted")}>
-                      {percent(r.share)}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-t-2 border-border">
-                  <td className="py-2.5 pr-4 font-medium text-foreground">Total expenses</td>
-                  <td className={cn(cellNumber, "py-2.5 px-4 font-semibold text-danger")}>
-                    {formatAmount(report.total, currency)}
+    <Section
+      title="Expense breakdown"
+      period={sectionPeriod(range)}
+      note="Transfers excluded"
+      exportType="expense"
+      range={range}
+    >
+      {report.rows.length === 0 ? (
+        <p className="text-sm text-muted">No expenses in this period.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th scope="col" className="sticky top-0 bg-surface py-2 pr-4 text-xs font-medium text-muted">
+                  Category
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 px-4 text-right text-xs font-medium text-muted">
+                  Amount
+                </th>
+                <th scope="col" className="sticky top-0 bg-surface py-2 pl-4 text-right text-xs font-medium text-muted">
+                  % of expenses
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.rows.map((r) => (
+                <tr key={r.categoryId ?? "none"} className="border-b border-border">
+                  <td className="py-2 pr-4 text-foreground">
+                    <DrillLink href={categoryTransactionsHref(r.categoryId, "expense", range)}>
+                      {r.name}
+                    </DrillLink>
                   </td>
-                  <td className={cn(cellNumber, "py-2.5 pl-4 text-muted")}>100%</td>
+                  <td className={cn(cellNumber, "py-2 px-4 font-medium text-danger")}>
+                    {formatAmount(r.amount, currency)}
+                  </td>
+                  <td className={cn(cellNumber, "py-2 pl-4 text-muted")}>
+                    {percent(r.share)}
+                  </td>
                 </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              ))}
+              <tr className="border-t-2 border-border">
+                <td className="py-2 pr-4 font-medium text-foreground">Total expenses</td>
+                <td className={cn(cellNumber, "py-2 px-4 font-semibold text-danger")}>
+                  {formatAmount(report.total, currency)}
+                </td>
+                <td className={cn(cellNumber, "py-2 pl-4 text-muted")}>100%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -623,61 +611,48 @@ function ProfitSection({
     { label: "Profit margin", value: percent(report.profitMargin) },
   ];
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle>Profit (P&amp;L)</CardTitle>
-            <p className="mt-0.5 text-sm text-muted">
-              {sectionPeriod(range)}
+    <Section title="Profit (P&L)" period={sectionPeriod(range)} exportType="profit" range={range}>
+      <table className="w-full text-sm">
+        <tbody>
+          {rows.map(({ label, value, href, amount }) => (
+            <tr key={label} className="border-b border-border last:border-0">
+              <td className="py-2.5 text-muted">
+                {href ? <DrillLink href={href}>{label}</DrillLink> : label}
+              </td>
+              <td
+                className={cn(
+                  "py-2.5 text-right font-medium tabular-nums",
+                  amount !== undefined && amount < 0 ? "text-danger" : "text-foreground",
+                )}
+              >
+                {value}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {report.prior && (
+        <div className="mt-4 rounded-field border border-border bg-surface-subtle/40 p-3">
+          <p className="text-xs font-medium text-muted">
+            Against the previous period · {reportPeriodLabel(report.prior.period)}
+          </p>
+          {priorHadActivity(report.prior) ? (
+            <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+              <PriorDelta label="Revenue" current={report.revenue} prior={report.prior.revenue} polarity="up-is-good" />
+              <PriorDelta label="Expenses" current={report.expenses} prior={report.prior.expenses} polarity="up-is-adverse" />
+              <PriorDelta label="Net profit" current={report.netProfit} prior={report.prior.netProfit} polarity="up-is-good" />
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-muted">
+              No activity in the previous period, so there is nothing to compare against yet.
             </p>
-          </div>
-          <ExportCsvLink href={exportHref("profit", range)} />
+          )}
         </div>
-      </CardHeader>
-      <CardContent>
-        <table className="w-full text-sm">
-          <tbody>
-            {rows.map(({ label, value, href, amount }) => (
-              <tr key={label} className="border-b border-border last:border-0">
-                <td className="py-2.5 text-muted">
-                  {href ? <DrillLink href={href}>{label}</DrillLink> : label}
-                </td>
-                <td
-                  className={cn(
-                    "py-2.5 text-right font-medium tabular-nums",
-                    amount !== undefined && amount < 0 ? "text-danger" : "text-foreground",
-                  )}
-                >
-                  {value}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {report.prior && (
-          <div className="mt-4 rounded-field border border-border bg-surface-subtle/40 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">
-              vs previous period · {reportPeriodLabel(report.prior.period)}
-            </p>
-            {priorHadActivity(report.prior) ? (
-              <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-                <PriorDelta label="Revenue" current={report.revenue} prior={report.prior.revenue} polarity="up-is-good" />
-                <PriorDelta label="Expenses" current={report.expenses} prior={report.prior.expenses} polarity="up-is-adverse" />
-                <PriorDelta label="Net profit" current={report.netProfit} prior={report.prior.netProfit} polarity="up-is-good" />
-              </ul>
-            ) : (
-              <p className="mt-2 text-sm text-muted">
-                No activity in the previous period, so there is nothing to compare against yet.
-              </p>
-            )}
-          </div>
-        )}
-        <p className="mt-2 text-xs text-muted">
-          Net profit is revenue minus expenses; transfers are excluded.
-        </p>
-      </CardContent>
-    </Card>
+      )}
+      <p className="mt-2 text-xs text-muted">
+        Net profit is revenue minus expenses. Transfers are excluded.
+      </p>
+    </Section>
   );
 }
 
@@ -697,14 +672,14 @@ export async function ReportSections({
   const query: ReportsQuery = { ...range, accountId };
   const data = await getReportData(query);
   return (
-    <>
+    <div className="space-y-6">
       <SummarySection summary={data.summary} currency={currency} range={query} />
       <MonthlySection trends={data.monthly} currency={currency} range={query} />
       <CategorySection report={data.category} currency={currency} range={query} />
       <IncomeStatementSection report={data.income} currency={currency} range={query} />
       <ExpenseBreakdownSection report={data.expense} currency={currency} range={query} />
       <ProfitSection report={data.profit} currency={currency} range={query} />
-    </>
+    </div>
   );
 }
 

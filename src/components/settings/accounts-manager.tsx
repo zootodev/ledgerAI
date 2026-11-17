@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
-import { Landmark, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -11,7 +11,6 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -73,9 +72,8 @@ export function AccountsManager({ accounts, currency }: AccountsManagerProps) {
         <CardContent>
           {accounts.length === 0 ? (
             <EmptyState
-              icon={<Landmark className="h-6 w-6" />}
               title="No accounts yet"
-              description="Add a bank or wallet account so imported transactions can be linked to it."
+              description="Add a bank or wallet so imported rows can be tagged to it."
               action={
                 <Button onClick={openCreate} leftIcon={<Plus className="h-4 w-4" />}>
                   Add account
@@ -83,11 +81,11 @@ export function AccountsManager({ accounts, currency }: AccountsManagerProps) {
               }
             />
           ) : (
-            <ul className="space-y-2">
+            <ul className="divide-y divide-border border-t border-border">
               {accounts.map((account) => (
                 <li
                   key={account.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-field border border-border bg-surface-subtle/40 px-3 py-3"
+                  className="flex flex-wrap items-center justify-between gap-3 py-2.5"
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-foreground">{account.name}</p>
@@ -96,7 +94,6 @@ export function AccountsManager({ accounts, currency }: AccountsManagerProps) {
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Badge tone="info">{account.currency}</Badge>
                     <Button
                       variant="ghost"
                       size="icon"

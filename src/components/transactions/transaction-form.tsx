@@ -149,7 +149,7 @@ export function TransactionForm({
           <Input
             id="tx-description"
             name="description"
-            placeholder="e.g. Stripe payout"
+            placeholder="e.g. POS settlement"
             required
             defaultValue={transaction?.description}
           />
@@ -160,7 +160,7 @@ export function TransactionForm({
           required
           htmlFor="tx-amount"
           error={amountError}
-          hint="Positive number only — the transaction type decides income or expense."
+          hint="Enter a positive amount. The type sets whether it is money in or money out."
         >
           <Input
             id="tx-amount"
@@ -238,7 +238,7 @@ export function TransactionForm({
         </div>
 
         {/* Actions live INSIDE the form so click and Enter both submit
-            through React's form action — no cross-element `form=` wiring. */}
+            through React's form action, with no cross-element `form=` wiring. */}
         <div className="flex items-center justify-end gap-2 pt-1">
           <Button variant="outline" type="button" onClick={onClose} disabled={pending}>
             Cancel
