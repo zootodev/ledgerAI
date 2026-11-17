@@ -23,11 +23,15 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 import {
+  DEFAULT_SESSION_IDLE_MINUTES,
+  DEFAULT_SESSION_MAX_AGE_HOURS,
   LAST_SEEN_COOKIE,
+  resolveSessionLimits,
   signLastSeen,
   verifyLastSeen,
 } from "@/lib/auth/session-limits";
 import { proxy } from "@/proxy";
+import { SESSION_PING_PATH } from "@/lib/auth/session-ping";
 
 const SECRET = "test-session-cookie-secret";
 const NOW = new Date("2026-05-10T12:00:00.000Z").getTime();
@@ -106,8 +110,8 @@ beforeEach(() => {
 
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
-  process.env.SESSION_MAX_AGE_DAYS = "14";
-  process.env.SESSION_IDLE_HOURS = "72";
+  process.env.SESSION_MAX_AGE_HOURS = String(DEFAULT_SESSION_MAX_AGE_HOURS);
+  process.env.SESSION_IDLE_MINUTES = String(DEFAULT_SESSION_IDLE_MINUTES);
   process.env.SESSION_COOKIE_SECRET = SECRET;
 
   mocks.next.mockImplementation(() => mockResponse());
@@ -141,22 +145,76 @@ afterEach(() => {
   vi.useRealTimers();
   delete process.env.NEXT_PUBLIC_SUPABASE_URL;
   delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  delete process.env.SESSION_MAX_AGE_HOURS;
+  delete process.env.SESSION_IDLE_MINUTES;
+  // Old names are set by one test below to prove they are ignored.
   delete process.env.SESSION_MAX_AGE_DAYS;
   delete process.env.SESSION_IDLE_HOURS;
   delete process.env.SESSION_COOKIE_SECRET;
   vi.clearAllMocks();
 });
 
-describe("proxy() session limits", () => {
-  it("expires a session whose absolute lifetime has elapsed", async () => {
-    mocks.getClaims.mockResolvedValue(claimsAt(NOW - 15 * DAY));
+describe("resolveSessionLimits()", () => {
+  it("uses the finance-app defaults in minutes and hours", () => {
+    delete process.env.SESSION_MAX_AGE_HOURS;
+    delete process.env.SESSION_IDLE_MINUTES;
 
-    await proxy(requestFor("/transactions"));
+    const limits = resolveSessionLimits();
+
+    expect(limits.idleMs).toBe(30 * 60 * 1000);
+    expect(limits.maxAgeMs).toBe(12 * 60 * 60 * 1000);
+  });
+
+  it("falls back for non-positive and non-numeric values", () => {
+    process.env.SESSION_IDLE_MINUTES = "0";
+    process.env.SESSION_MAX_AGE_HOURS = "not-a-number";
+
+    const limits = resolveSessionLimits();
+
+    expect(limits.idleMs).toBe(DEFAULT_SESSION_IDLE_MINUTES * 60 * 1000);
+    expect(limits.maxAgeMs).toBe(DEFAULT_SESSION_MAX_AGE_HOURS * 60 * 60 * 1000);
+  });
+
+  it("clamps idle to 5–1440 minutes and absolute to 1–336 hours", () => {
+    process.env.SESSION_IDLE_MINUTES = "2";
+    process.env.SESSION_MAX_AGE_HOURS = "0.5";
+    expect(resolveSessionLimits()).toMatchObject({
+      idleMs: 5 * 60 * 1000,
+      maxAgeMs: 60 * 60 * 1000,
+    });
+
+    process.env.SESSION_IDLE_MINUTES = "2000";
+    process.env.SESSION_MAX_AGE_HOURS = "500";
+    expect(resolveSessionLimits()).toMatchObject({
+      idleMs: 1440 * 60 * 1000,
+      maxAgeMs: 336 * 60 * 60 * 1000,
+    });
+  });
+
+  it("never reads the retired day/hour variable names", () => {
+    delete process.env.SESSION_MAX_AGE_HOURS;
+    delete process.env.SESSION_IDLE_MINUTES;
+    process.env.SESSION_MAX_AGE_DAYS = "14";
+    process.env.SESSION_IDLE_HOURS = "72";
+
+    const limits = resolveSessionLimits();
+
+    expect(limits.idleMs).toBe(30 * 60 * 1000);
+    expect(limits.maxAgeMs).toBe(12 * 60 * 60 * 1000);
+  });
+});
+
+describe("proxy() session limits", () => {
+  it("expires a session at the 12-hour absolute limit", async () => {
+    const lastSeen = await signLastSeen(SECRET, "u-1", NOW - 60 * 1000);
+    mocks.getClaims.mockResolvedValue(claimsAt(NOW - 12 * HOUR));
+
+    await proxy(requestFor("/transactions", { [LAST_SEEN_COOKIE]: lastSeen }));
 
     expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(mocks.redirect).toHaveBeenCalledTimes(1);
-    expect(lastRedirect?.url.toString()).toContain("/login");
     expect(lastRedirect?.url.toString()).toContain("reason=session_expired");
+    expect(lastRedirect?.url.toString()).toContain("expiry=absolute");
     expect(lastRedirect?.cookies.set).toHaveBeenCalledWith(
       LAST_SEEN_COOKIE,
       "",
@@ -164,13 +222,24 @@ describe("proxy() session limits", () => {
     );
   });
 
-  it("expires a session after the idle window with no requests", async () => {
-    const lastSeen = await signLastSeen(SECRET, "u-1", NOW - 73 * HOUR);
+  it("lets a 29-minute-idle session through", async () => {
+    const lastSeen = await signLastSeen(SECRET, "u-1", NOW - 29 * 60 * 1000);
+
+    await proxy(requestFor("/transactions", { [LAST_SEEN_COOKIE]: lastSeen }));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.signOut).not.toHaveBeenCalled();
+    expect(mocks.next).toHaveBeenCalled();
+  });
+
+  it("expires a session at exactly 30 minutes idle", async () => {
+    const lastSeen = await signLastSeen(SECRET, "u-1", NOW - 30 * 60 * 1000);
 
     await proxy(requestFor("/transactions", { [LAST_SEEN_COOKIE]: lastSeen }));
 
     expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(lastRedirect?.url.toString()).toContain("reason=session_expired");
+    expect(lastRedirect?.url.toString()).toContain("expiry=idle");
   });
 
   it("lets a fresh session through without rewriting the cookie", async () => {
@@ -205,6 +274,35 @@ describe("proxy() session limits", () => {
     await expect(verifyLastSeen(SECRET, "u-1", write?.[1] ?? "")).resolves.toBe(NOW);
   });
 
+  it("refreshes last-seen on the ping while the session is still active", async () => {
+    const lastSeen = await signLastSeen(SECRET, "u-1", NOW - 6 * 60 * 1000);
+
+    await proxy(requestFor(SESSION_PING_PATH, { [LAST_SEEN_COOKIE]: lastSeen }));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.signOut).not.toHaveBeenCalled();
+    const write = lastResponse?.cookies.set.mock.calls.find(
+      ([name]) => name === LAST_SEEN_COOKIE,
+    );
+    expect(write).toBeDefined();
+    await expect(verifyLastSeen(SECRET, "u-1", write?.[1] ?? "")).resolves.toBe(NOW);
+  });
+
+  it("cannot revive an already-idle session on the ping", async () => {
+    const lastSeen = await signLastSeen(SECRET, "u-1", NOW - 31 * 60 * 1000);
+
+    await proxy(requestFor(SESSION_PING_PATH, { [LAST_SEEN_COOKIE]: lastSeen }));
+
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(lastRedirect?.url.toString()).toContain("reason=session_expired");
+    expect(lastRedirect?.url.toString()).toContain("expiry=idle");
+    expect(lastResponse?.cookies.set).not.toHaveBeenCalledWith(
+      LAST_SEEN_COOKIE,
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it("treats a tampered cookie as now once, then enforces idle expiry", async () => {
     const tampered = `${await signLastSeen(SECRET, "u-1", NOW - HOUR)}x`;
 
@@ -217,9 +315,9 @@ describe("proxy() session limits", () => {
     expect(write).toBeDefined();
     const freshCookie = write?.[1] as string;
 
-    // The next request is 73 hours later. The cookie written above is now
+    // The next request is 31 minutes later. The cookie written above is now
     // stale, so the idle limit is enforced rather than counting as "now" again.
-    vi.setSystemTime(new Date(NOW + 73 * HOUR));
+    vi.setSystemTime(new Date(NOW + 31 * 60 * 1000));
     await proxy(requestFor("/transactions", { [LAST_SEEN_COOKIE]: freshCookie }));
 
     expect(mocks.signOut).toHaveBeenCalledTimes(1);

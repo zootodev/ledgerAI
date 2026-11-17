@@ -15,6 +15,8 @@ export interface ModalProps {
   size?: "sm" | "md" | "lg";
   closeOnOverlay?: boolean;
   className?: string;
+  /** `alertdialog` for urgent, time-boxed decisions. Defaults to `dialog`. */
+  role?: "dialog" | "alertdialog";
 }
 
 const sizeClasses = {
@@ -34,25 +36,55 @@ export function Modal({
   size = "md",
   closeOnOverlay = true,
   className,
+  role = "dialog",
 }: ModalProps) {
   const panelRef = React.useRef<HTMLDivElement>(null);
+  const onCloseRef = React.useRef(onClose);
+
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   React.useEffect(() => {
     if (!open) return;
 
+    const panel = panelRef.current;
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab" || !panel) return;
+
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(focusableSelector),
+      );
+      if (focusable.length === 0) {
+        e.preventDefault();
+        panel.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
     document.addEventListener("keydown", handleKey);
     document.body.style.overflow = "hidden";
     // Focus the panel (or first focusable) on open
-    const panel = panelRef.current;
     if (panel) {
-      const focusable = panel.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
+      const focusable = panel.querySelector<HTMLElement>(focusableSelector);
       (focusable ?? panel).focus();
     }
 
@@ -61,7 +93,7 @@ export function Modal({
       document.body.style.overflow = "";
       previouslyFocused?.focus();
     };
-  }, [open, onClose]);
+  }, [open, role]);
 
   if (!open) return null;
 
@@ -74,7 +106,7 @@ export function Modal({
       />
       <div
         ref={panelRef}
-        role="dialog"
+        role={role}
         aria-modal="true"
         aria-label={typeof title === "string" ? title : undefined}
         tabIndex={-1}

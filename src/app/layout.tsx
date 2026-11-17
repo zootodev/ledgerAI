@@ -3,6 +3,8 @@ import localFont from "next/font/local";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 import { Toaster } from "@/components/ui/toast";
+import { IdleSessionGuard } from "@/components/auth/idle-session-guard";
+import { resolveSessionLimits } from "@/lib/auth/session-limits";
 import { siteUrl } from "@/lib/site";
 import "./globals.css";
 
@@ -51,10 +53,15 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // The guard is mounted once for the whole app, but stays inert on public
+  // routes. Only the idle duration crosses the server/client boundary.
+  const { idleMs } = resolveSessionLimits();
+
   return (
     <html lang="en-NG" className={`${bricolage.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         {children}
+        <IdleSessionGuard idleMs={idleMs} />
         <Toaster />
         <SpeedInsights />
         <Analytics />

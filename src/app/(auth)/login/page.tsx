@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/server";
+import { resolveSessionLimits } from "@/lib/auth/session-limits";
 import { LoginForm } from "@/components/auth/login-form";
 import { Alert } from "@/components/ui/alert";
 
@@ -61,7 +62,7 @@ export default async function LoginPage({
   const user = await getCurrentUser();
   if (user) redirect("/overview");
 
-  const { error, reason, type } = await searchParams;
+  const { error, reason, type, expiry } = await searchParams;
   const callbackError =
     typeof error === "string" ? CALLBACK_ERRORS[error] : undefined;
   const action =
@@ -69,12 +70,19 @@ export default async function LoginPage({
       ? errorAction(error, typeof type === "string" ? type : undefined)
       : undefined;
   const sessionExpired = reason === "session_expired";
+  const { idleMs, maxAgeMs } = resolveSessionLimits();
+  const idleMinutes = Math.round(idleMs / 60_000);
+  const maxAgeHours = Math.round(maxAgeMs / 3_600_000);
+  const sessionExpiredMessage =
+    expiry === "absolute"
+      ? `You were signed out after ${maxAgeHours} hours. Please sign in again.`
+      : `You were signed out after ${idleMinutes} minutes of inactivity. Please sign in again.`;
 
   return (
     <>
       {sessionExpired && (
         <Alert tone="info" title="Signed out for security" className="mb-6">
-          <p>You were signed out for security. Please sign in again.</p>
+          <p>{sessionExpiredMessage}</p>
         </Alert>
       )}
       {callbackError && (

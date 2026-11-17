@@ -7,6 +7,11 @@ import {
   readAalFromAccessToken,
 } from "@/lib/auth/mfa";
 import {
+  isMfaChallengePath,
+  isProtectedPath,
+  isPublicPath,
+} from "@/lib/auth/routes";
+import {
   earliestAmrTimestampMs,
   LAST_SEEN_COOKIE,
   lastSeenCookieOptions,
@@ -18,74 +23,13 @@ import {
   type SessionExpiryReason,
 } from "@/lib/auth/session-limits";
 
-// Public routes are reachable without a session. Everything else under the
-// app area requires an authenticated user. /auth/callback and /auth/confirm
-// must stay public: both are hit without a session when the user first clicks
-// an email link (the callback forwards the token, the confirm page verifies it
-// on an explicit POST).
-// /forgot-password and /reset-password are reachable without a session (the
-// reset link's recovery page is hit before a session is established).
-// /api/health is an uptime probe: it must answer a monitor directly (not with
-// a /login redirect) and returns only a fixed, non-sensitive status body.
-//
-// Matching is EXACT (pathname equality only), never prefix-based, so lookalike
-// routes such as "/design-editor" are never accidentally public. A trailing
-// slash is normalized so "/login/" behaves like "/login" — Next serves these
-// pages at their canonical, slash-less form.
-const PUBLIC_PATHS = new Set([
-  "/",
-  "/login",
-  "/signup",
-  "/design",
-  "/privacy",
-  "/terms",
-  "/auth/callback",
-  "/auth/confirm",
-  "/forgot-password",
-  "/reset-password",
-  "/verify-email",
-  "/api/health",
-]);
-
-/** True when `path` is one of the deliberately public route pathnames. */
-export function isPublicPath(path: string): boolean {
-  const normalized = path === "/" ? path : path.replace(/\/+$/, "");
-  return PUBLIC_PATHS.has(normalized);
-}
-
-/**
- * Root pathnames of the authenticated app. Only these (and their children)
- * are sent to /login for an anonymous visitor: an unknown URL is left alone so
- * Next renders the branded 404 instead of bouncing the visitor into a sign-in
- * flow for a page that was never going to exist. Matching on a known root is
- * what keeps lookalikes (/design-editor) unknown.
- *
- * This is a routing nicety, not the security boundary: every real page still
- * calls requireAuthContext() and redirects itself.
- */
-const PROTECTED_ROOT_PATHS = new Set([
-  "/overview",
-  "/transactions",
-  "/income",
-  "/expenses",
-  "/reports",
-  "/insights",
-  "/import",
-  "/onboarding",
-  "/account",
-  "/settings",
-  "/ask",
-  "/ask-v2",
-  MFA_CHALLENGE_PATH,
-]);
-
-/** True when `path` is a known authenticated app route (or a child of one). */
-export function isProtectedPath(path: string): boolean {
-  const normalized = path === "/" ? path : path.replace(/\/+$/, "");
-  if (PROTECTED_ROOT_PATHS.has(normalized)) return true;
-  const [root] = normalized.slice(1).split("/");
-  return PROTECTED_ROOT_PATHS.has(`/${root}`);
-}
+// Route classification lives in a pure module so the client-side idle guard
+// can reuse the protected-root list. Re-exported here for existing callers.
+export {
+  isMfaChallengePath,
+  isProtectedPath,
+  isPublicPath,
+} from "@/lib/auth/routes";
 
 /**
  * The one authenticated route reachable at aal1: the second-factor challenge.
@@ -95,11 +39,10 @@ export function isProtectedPath(path: string): boolean {
  */
 export { MFA_CHALLENGE_PATH };
 
-/** True when the path is the MFA challenge itself (never step-up gated). */
-export function isMfaChallengePath(path: string): boolean {
-  const normalized = path === "/" ? path : path.replace(/\/+$/, "");
-  return normalized === MFA_CHALLENGE_PATH;
-}
+// The activity ping (/api/session/ping) is deliberately NOT public. It goes
+// through the same absolute/idle checks as every other authenticated request,
+// so an already idle session expires on the ping instead of using it to
+// revive itself.
 
 /** Content-Security-Policy with a per-request nonce (SG1-04). */
 export function cspPolicy(nonce: string): string {
@@ -219,6 +162,9 @@ async function expireSession(
   url.pathname = "/login";
   url.search = "";
   url.searchParams.set("reason", "session_expired");
+  // The login page keeps the existing generic reason for copy compatibility,
+  // and uses this detail to show the matching idle/absolute explanation.
+  url.searchParams.set("expiry", reason);
 
   const redirect = NextResponse.redirect(url);
   clearAuthCookies(redirect, request);

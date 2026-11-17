@@ -16,6 +16,11 @@ export interface ConfirmDialogProps {
   pending?: boolean;
   /** Extra warning shown in the dialog body. Defaults to the destructive-action copy. */
   notice?: React.ReactNode;
+  /** Urgent, time-boxed decisions use `alertdialog`. Defaults to `dialog`. */
+  role?: "dialog" | "alertdialog";
+  /** Use `primary` when confirming is the safe action (e.g. staying signed in). */
+  confirmVariant?: "primary" | "danger" | "dangerOutline";
+  cancelVariant?: "outline" | "dangerOutline";
 }
 
 /** Generic destructive/blocking action confirmation dialog. */
@@ -29,6 +34,9 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   pending = false,
   notice,
+  role = "dialog",
+  confirmVariant = "danger",
+  cancelVariant = "outline",
 }: ConfirmDialogProps) {
   return (
     <Modal
@@ -37,13 +45,14 @@ export function ConfirmDialog({
       title={title}
       description={description}
       size="sm"
+      role={role}
       footer={
         <>
-          <Button variant="outline" onClick={onClose} disabled={pending}>
+          <Button variant={cancelVariant} onClick={onClose} disabled={pending}>
             {cancelLabel}
           </Button>
           <Button
-            variant="danger"
+            variant={confirmVariant}
             onClick={() => void onConfirm()}
             loading={pending}
           >

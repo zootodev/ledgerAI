@@ -13,13 +13,26 @@
 // Everything here is pure/edge-safe: Web Crypto only, no Node APIs.
 // ============================================================
 
+import { LAST_SEEN_REFRESH_MS } from "./session-ping";
+
 export const LAST_SEEN_COOKIE = "ledgerai_last_seen";
 
 /** Never write the last-seen cookie more often than this. */
-export const LAST_SEEN_REFRESH_MS = 5 * 60 * 1000;
+export { LAST_SEEN_REFRESH_MS };
 
-export const DEFAULT_SESSION_MAX_AGE_DAYS = 14;
-export const DEFAULT_SESSION_IDLE_HOURS = 72;
+// Finance data: short idle and absolute windows are deliberate. The old
+// day/hour variables are intentionally not read anywhere — stale production
+// values must not silently restore the previous 14-day / 72-hour limits.
+export const DEFAULT_SESSION_MAX_AGE_HOURS = 12;
+export const DEFAULT_SESSION_IDLE_MINUTES = 30;
+
+export const MIN_SESSION_MAX_AGE_HOURS = 1;
+export const MAX_SESSION_MAX_AGE_HOURS = 336;
+export const MIN_SESSION_IDLE_MINUTES = 5;
+export const MAX_SESSION_IDLE_MINUTES = 1440;
+
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
 
 // Accepts `process.env` (which has an index signature) and small test objects.
 type SessionLimitEnv = Record<string, string | undefined>;
@@ -40,21 +53,27 @@ function positiveNumber(raw: string | undefined, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 export function resolveSessionLimits(
   env: SessionLimitEnv = process.env,
 ): SessionLimits {
-  const maxDays = positiveNumber(
-    env.SESSION_MAX_AGE_DAYS,
-    DEFAULT_SESSION_MAX_AGE_DAYS,
+  const maxAgeHours = clamp(
+    positiveNumber(env.SESSION_MAX_AGE_HOURS, DEFAULT_SESSION_MAX_AGE_HOURS),
+    MIN_SESSION_MAX_AGE_HOURS,
+    MAX_SESSION_MAX_AGE_HOURS,
   );
-  const idleHours = positiveNumber(
-    env.SESSION_IDLE_HOURS,
-    DEFAULT_SESSION_IDLE_HOURS,
+  const idleMinutes = clamp(
+    positiveNumber(env.SESSION_IDLE_MINUTES, DEFAULT_SESSION_IDLE_MINUTES),
+    MIN_SESSION_IDLE_MINUTES,
+    MAX_SESSION_IDLE_MINUTES,
   );
 
   return {
-    maxAgeMs: maxDays * 24 * 60 * 60 * 1000,
-    idleMs: idleHours * 60 * 60 * 1000,
+    maxAgeMs: maxAgeHours * HOUR_MS,
+    idleMs: idleMinutes * MINUTE_MS,
     secret: env.SESSION_COOKIE_SECRET?.trim() || null,
   };
 }

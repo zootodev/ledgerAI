@@ -7,7 +7,17 @@ const mocks = vi.hoisted(() => ({
     throw new Error("NEXT_REDIRECT");
   }),
   LoginForm: vi.fn(() => null as never),
+  resolveSessionLimits: vi.fn(() => ({
+    idleMs: 30 * 60 * 1000,
+    maxAgeMs: 12 * 60 * 60 * 1000,
+    secret: null,
+  })),
 }));
+
+vi.mock("@/lib/auth/session-limits", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth/session-limits")>();
+  return { ...actual, resolveSessionLimits: mocks.resolveSessionLimits };
+});
 
 vi.mock("@/lib/auth/server", () => ({
   getCurrentUser: mocks.getCurrentUser,
@@ -99,11 +109,25 @@ describe("login page", () => {
     expect(html).toContain("Email sign-in isn&#x27;t available right now");
   });
 
-  it("explains a session-expired sign-out", async () => {
+  it("explains an idle session-expired sign-out", async () => {
     const html = await render(undefined, { reason: "session_expired" });
 
     expect(html).toContain("Signed out for security");
-    expect(html).toContain("You were signed out for security. Please sign in again.");
+    expect(html).toContain(
+      "You were signed out after 30 minutes of inactivity. Please sign in again.",
+    );
+  });
+
+  it("explains an absolute session-expired sign-out", async () => {
+    const html = await render(undefined, {
+      reason: "session_expired",
+      expiry: "absolute",
+    });
+
+    expect(html).toContain(
+      "You were signed out after 12 hours. Please sign in again.",
+    );
+    expect(html).not.toContain("minutes of inactivity");
   });
 
   it("never echoes unknown or raw error values", async () => {

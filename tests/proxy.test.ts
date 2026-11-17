@@ -98,6 +98,8 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_SUPABASE_URL;
   delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  delete process.env.SESSION_MAX_AGE_HOURS;
+  delete process.env.SESSION_IDLE_MINUTES;
   delete process.env.SESSION_MAX_AGE_DAYS;
   delete process.env.SESSION_IDLE_HOURS;
   delete process.env.SESSION_COOKIE_SECRET;
@@ -139,6 +141,7 @@ describe("isPublicPath", () => {
     "/settings",
     "/reports",
     "/transactions",
+    "/api/session/ping",
   ])("treats the lookalike route %s as NOT public", (path) => {
     expect(isPublicPath(path)).toBe(false);
   });
