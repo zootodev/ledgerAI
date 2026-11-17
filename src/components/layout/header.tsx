@@ -34,12 +34,12 @@ export function Header({ title, user, actions, onSignOut, className }: HeaderPro
   return (
     <header
       className={cn(
-        "sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur-sm sm:px-6 print:hidden",
+        "sticky top-0 z-20 flex h-12 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6 print:hidden",
         className,
       )}
     >
       <div className="flex flex-1 items-center gap-3">
-        {title && <h1 className="truncate text-base font-semibold text-foreground">{title}</h1>}
+        {title && <h1 className="truncate text-sm font-medium text-foreground">{title}</h1>}
       </div>
 
       <div className="flex items-center gap-1.5">

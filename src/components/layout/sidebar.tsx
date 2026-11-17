@@ -32,19 +32,22 @@ function SidebarNavLink({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group flex items-center gap-2.5 rounded-field px-3 py-2 text-sm font-medium transition-colors",
+        "group relative flex items-center gap-2.5 rounded-field px-3 py-2 text-sm font-medium transition-colors",
         active
-          ? "bg-brand-soft text-brand-strong"
-          : "text-secondary hover:bg-surface-subtle hover:text-foreground",
+          ? "bg-brand-soft/70 text-brand-strong"
+          : "text-secondary hover:bg-surface-subtle/70 hover:text-foreground",
       )}
     >
+      {active && (
+        <span className="absolute inset-y-1.5 left-0 w-0.5 bg-brand" aria-hidden="true" />
+      )}
       <Icon
         className={cn("h-4.5 w-4.5", active ? "text-brand" : "text-muted group-hover:text-secondary")}
         aria-hidden="true"
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {badge && (
-        <Badge className="px-1.5 text-[10px] uppercase tracking-wide">
+        <Badge className="px-1.5 text-[10px]">
           {badge}
         </Badge>
       )}
@@ -56,11 +59,11 @@ export function Sidebar({ onNavigate, className }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Main" className={cn("flex h-full flex-col gap-6 px-3 py-5", className)}>
+    <nav aria-label="Main" className={cn("flex h-full flex-col gap-5 px-3 py-5", className)}>
       {NAV_SECTIONS.map((section) => (
         <div key={section.title} className="flex flex-col">
           {section.items.length > 0 && (
-            <p className="px-3 pb-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+            <p className="px-3 pb-1.5 text-[11px] font-medium text-subtle">
               {section.title}
             </p>
           )}

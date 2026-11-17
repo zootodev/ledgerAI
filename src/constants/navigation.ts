@@ -5,7 +5,7 @@ import {
   TrendingUp,
   TrendingDown,
   FileBarChart,
-  Sparkles,
+  ChartSpline,
   Upload,
   Settings,
 } from "lucide-react";
@@ -25,7 +25,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Income", href: "/income", icon: TrendingUp, section: "main" },
   { label: "Expenses", href: "/expenses", icon: TrendingDown, section: "main" },
   { label: "Reports", href: "/reports", icon: FileBarChart, section: "analysis" },
-  { label: "AI Insights", href: "/insights", icon: Sparkles, section: "analysis" },
+  { label: "Insights", href: "/insights", icon: ChartSpline, section: "analysis" },
   // Phase 5: the Ask feature is intentionally absent from navigation while it
   // is incomplete. The /ask and /ask-v2 routes exist but answer 404; do not
   // re-add a nav item until Ask ships as a finished product surface.

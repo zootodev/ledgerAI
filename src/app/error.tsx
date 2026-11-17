@@ -34,8 +34,8 @@ export default function AppError({
     <main className="flex min-h-[70vh] items-center justify-center px-4 py-12 sm:px-6">
       <div className="w-full max-w-md">
         <ErrorState
-          title="Something went wrong"
-          description="We couldn't load this page. Try again, or head back to your overview."
+          title="This page didn't load"
+          description="The data request failed. Try again, or go back to the overview."
           onRetry={reset}
         />
         <div className="mt-4 text-center">

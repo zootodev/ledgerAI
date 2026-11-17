@@ -57,10 +57,7 @@ export function SignupForm() {
   return (
     <div>
       <h1 className="text-xl font-semibold text-foreground">Create your account</h1>
-      <p className="mt-1 text-sm text-muted">
-        Import your first statement, review it once, and see your profit clearly.
-      </p>
-      <AuthValueStrip intent="signup" className="mt-4" />
+      <AuthValueStrip intent="signup" className="mt-2" />
 
       <form
         ref={formRef}

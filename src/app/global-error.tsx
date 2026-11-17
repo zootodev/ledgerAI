@@ -23,13 +23,13 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="en">
+    <html lang="en-NG">
       <body className="bg-background text-foreground">
         <main className="flex min-h-screen items-center justify-center px-4 py-12 sm:px-6">
           <div className="w-full max-w-md">
             <ErrorState
-              title="Something went wrong"
-              description="The app hit an unexpected error. Try again, or reload the page."
+              title="The app didn't start"
+              description="Reload the page. If it still fails, come back in a few minutes."
               onRetry={reset}
             />
             <div className="mt-4 text-center">

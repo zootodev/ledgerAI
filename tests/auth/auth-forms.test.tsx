@@ -36,12 +36,13 @@ beforeEach(() => {
 });
 
 describe("signup form", () => {
-  it("leads with the import → review → profit outcome and a show-password toggle", () => {
+  it("states the next step after signup and keeps a show-password toggle", () => {
     const html = staticMarkup(SignupForm);
     const copy = visible(html);
-    expect(copy).toContain("Import — Upload a bank or PDF statement");
-    expect(copy).toContain("Review — Confirm how each transaction is categorized");
-    expect(copy).toContain("Profit — See income minus costs, clearly");
+    expect(copy).toContain("After you sign up, upload one statement.");
+    expect(copy).toContain(
+      "LedgerAI shows every row before anything is saved.",
+    );
     expect(html).toContain("Show password");
     expect(html).toContain('type="password"');
   });
@@ -76,9 +77,11 @@ describe("signup form", () => {
 });
 
 describe("login form", () => {
-  it("reframes the outcomes for sign-in and keeps the masked password toggle", () => {
+  it("points a returning user at the latest import and keeps the masked toggle", () => {
     const html = staticMarkup(LoginForm);
-    expect(visible(html)).toContain("Review — Check recent imports and uncategorized rows");
+    expect(visible(html)).toContain(
+      "Your latest import and any rows left in review are waiting on the overview.",
+    );
     expect(html).toContain("Forgot your password?");
     expect(html).toContain("Show password");
     expect(html).toContain('type="password"');

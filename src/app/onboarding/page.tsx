@@ -4,6 +4,7 @@ import { ensureOnboarding } from "@/lib/services/auth";
 import { requireAuthContext } from "@/lib/services/auth-context";
 import { getBusinessProfile } from "@/lib/services/business";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
+import { Wordmark } from "@/components/brand/wordmark";
 
 export const metadata: Metadata = {
   title: "Set up your business",
@@ -27,10 +28,7 @@ export default async function OnboardingPage() {
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-lg">
         <div className="mb-6 flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-bold text-on-accent">
-            L
-          </span>
-          <span className="font-semibold text-foreground">LedgerAI</span>
+          <Wordmark />
         </div>
         <OnboardingForm
           defaults={{

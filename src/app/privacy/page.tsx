@@ -45,8 +45,8 @@ export default function PrivacyPage() {
         <p>
           When you create an account we store your email address, your name, and
           the business details you provide. When you import a statement, the
-          transactions parsed from it — dates, descriptions, amounts, and any
-          category you assign — are stored so they can be shown back to you in
+          transactions parsed from it (dates, descriptions, amounts, and any
+          category you assign) are stored so they can be shown back to you in
           your dashboard, reports, and exports.
         </p>
         <p>
@@ -66,8 +66,8 @@ export default function PrivacyPage() {
           We process personal data to perform the service you asked for
           (providing your account, importing and showing your transactions, and
           producing your reports), to keep the service secure and prevent abuse,
-          and to meet our own legal obligations. Where we rely on your consent —
-          for example, an optional feature or product email — you can withdraw
+          and to meet our own legal obligations. Where we rely on your consent,
+          for example an optional feature or product email, you can withdraw
           that consent at any time without affecting your use of the core
           service.
         </p>
@@ -101,7 +101,7 @@ export default function PrivacyPage() {
               <span className="font-medium text-foreground">
                 {processor.name}
               </span>{" "}
-              — {processor.purpose}.
+              {processor.purpose}.
             </li>
           ))}
         </ul>
@@ -172,9 +172,9 @@ export default function PrivacyPage() {
           delete your account and all of its data.
         </p>
         <p>
-          For everything else — correcting anything that is inaccurate or
+          For everything else (correcting anything that is inaccurate or
           incomplete, restricting or objecting to processing, or withdrawing
-          consent — email{" "}
+          consent), email{" "}
           <a
             href={`mailto:${LEGAL_CONTACT_EMAIL}`}
             className="font-medium text-brand hover:underline"

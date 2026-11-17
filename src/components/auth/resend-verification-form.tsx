@@ -76,8 +76,8 @@ export function ResendVerificationForm({
       </h1>
       <p className="mt-1 text-sm text-secondary">
         For your security you must confirm your email address before signing in.
-        Open the link we emailed you{initialEmail ? ` to ${initialEmail}` : ""} —
-        it can take a minute to arrive, so check your spam folder too.
+        Open the link we emailed you{initialEmail ? ` to ${initialEmail}` : ""}.
+        It can take a minute to arrive, so check your spam folder too.
       </p>
 
       <form

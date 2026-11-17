@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header, type HeaderProps } from "@/components/layout/header";
 import { MobileNav, MobileMenuButton } from "@/components/layout/mobile-nav";
+import { Logo } from "@/components/layout/logo";
 import { DATA_CONTROLLER, PRIVACY_PATH, TERMS_PATH } from "@/lib/legal/constants";
 import { cn } from "@/lib/utils/cn";
 
@@ -28,16 +29,13 @@ export function AppShell({
   return (
     <div className="flex min-h-screen w-full bg-background">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-border bg-surface lg:block print:hidden">
+      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 border-r border-border bg-surface lg:block print:hidden">
         <Link
           href="/overview"
-          className="flex h-14 items-center gap-2 border-b border-border px-4"
+          className="flex h-14 items-center border-b border-border px-4"
           aria-label="LedgerAI, go to overview"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-sm font-bold text-on-accent">
-            L
-          </span>
-          <span className="font-semibold text-foreground">LedgerAI</span>
+          <Logo />
         </Link>
         <Sidebar />
       </aside>

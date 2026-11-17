@@ -16,7 +16,7 @@ function renderWith(message: string, digest?: string) {
 describe("reports/error route boundary", () => {
   it("renders a safe message and a retry action (apostrophe HTML-encoded)", () => {
     const html = renderWith("boom");
-    expect(html).toContain("couldn");
+    expect(html).toContain("didn&#x27;t load");
     expect(html).toContain("Try again");
   });
 

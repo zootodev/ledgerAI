@@ -32,8 +32,8 @@ export default function ReportsError({
     <main className="flex min-h-[70vh] items-center justify-center px-6 py-12">
       <div className="w-full max-w-md">
         <ErrorState
-          title="Reports couldn't be loaded"
-          description="Something went wrong while preparing your reports. Click Try again to reload them."
+          title="Your reports didn't load"
+          description="The data request failed. Try again. If it still fails, reload the page."
           onRetry={reset}
         />
       </div>

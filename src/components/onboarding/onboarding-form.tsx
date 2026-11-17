@@ -80,11 +80,11 @@ export function OnboardingForm({ defaults }: OnboardingFormProps) {
             <CardTitle>Set up your business</CardTitle>
             <CardDescription>
               {step === 1
-                ? "Tell LedgerAI what you do — this takes under a minute."
-                : "Where you operate and how big you are. You can change everything later in Settings."}
+                ? "Start with the name your customers know."
+                : "Where you trade, and how many people you pay."}
             </CardDescription>
           </div>
-          <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted">
+          <span className="shrink-0 text-xs font-medium text-muted">
             Step {step} of 2
           </span>
         </div>
@@ -184,7 +184,7 @@ export function OnboardingForm({ defaults }: OnboardingFormProps) {
             <Field
               label="Goals (optional)"
               htmlFor="onboarding-goals"
-              hint="One per line — e.g. Know my real profit, Stop losing receipts."
+              hint="One goal per line, for example knowing your real profit or keeping every receipt."
             >
               <Textarea
                 id="onboarding-goals"
@@ -223,15 +223,14 @@ export function OnboardingForm({ defaults }: OnboardingFormProps) {
             ) : (
               <div className="flex flex-col items-end gap-2">
                 <p className="text-right text-sm text-muted">
-                  Next up: importing your first statement — your dashboard will
-                  point you straight to it.
+                  Next, import a statement from GTBank, Kuda, OPay or Moniepoint.
                 </p>
                 <Button
                   type="submit"
                   loading={pending}
                   leftIcon={<Check className="h-4 w-4" />}
                 >
-                  Finish &amp; open dashboard
+                  Open dashboard
                 </Button>
               </div>
             )}

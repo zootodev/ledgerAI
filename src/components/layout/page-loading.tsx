@@ -32,16 +32,16 @@ export function PageLoading({ title, children }: PageLoadingProps) {
   );
 }
 
-/** Four KPI tile placeholders, matching the overview KPI grid. */
+/** Four KPI cell placeholders, matching the overview summary strip. */
 export function KpiSkeletons() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border xl:grid-cols-4">
       {Array.from({ length: 4 }).map((_, i) => (
-        <Card key={i} className="p-5">
+        <div key={i} className="bg-surface px-4 py-3">
           <Skeleton className="h-3.5 w-20" height={14} />
           <Skeleton className="mt-3 h-6 w-28" height={24} />
           <Skeleton className="mt-2 h-3.5 w-16" height={14} />
-        </Card>
+        </div>
       ))}
     </div>
   );

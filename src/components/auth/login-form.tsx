@@ -38,10 +38,7 @@ export function LoginForm() {
   return (
     <div>
       <h1 className="text-xl font-semibold text-foreground">Sign in</h1>
-      <p className="mt-1 text-sm text-muted">
-        Review your imports and keep your profit picture clear.
-      </p>
-      <AuthValueStrip intent="login" className="mt-4" />
+      <AuthValueStrip intent="login" className="mt-2" />
 
       <form
         ref={formRef}

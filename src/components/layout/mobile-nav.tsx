@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { Sidebar } from "@/components/layout/sidebar";
+import { Logo } from "@/components/layout/logo";
 import { cn } from "@/lib/utils/cn";
 
 export interface MobileNavProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -36,7 +37,7 @@ export function MobileNav({ open, onClose, className }: MobileNavProps) {
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-foreground/40"
             onClick={onClose}
             aria-hidden="true"
           />
@@ -44,19 +45,16 @@ export function MobileNav({ open, onClose, className }: MobileNavProps) {
             role="dialog"
             aria-modal="true"
             aria-label="Navigation"
-            className="absolute inset-y-0 left-0 flex w-72 flex-col bg-surface shadow-modal"
+            className="absolute inset-y-0 left-0 flex w-64 flex-col bg-surface shadow-modal"
           >
             <div className="flex h-14 items-center justify-between border-b border-border px-4">
               <Link
                 href="/overview"
                 onClick={onClose}
-                className="flex items-center gap-2 font-semibold text-foreground"
+                className="flex items-center font-semibold text-foreground"
                 aria-label="LedgerAI, go to overview"
               >
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-sm font-bold text-on-accent">
-                  L
-                </span>
-                LedgerAI
+                <Logo />
               </Link>
               <button
                 type="button"

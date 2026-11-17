@@ -66,9 +66,9 @@ export default function TermsPage() {
           demonstration service.
         </p>
         <p>
-          You agree not to misuse the service — including by attempting to gain
+          You agree not to misuse the service. That includes attempting to gain
           unauthorised access to other users&rsquo; data or to the systems that
-          run the service, by probing or disrupting the service, or by uploading
+          run the service, probing or disrupting the service, or uploading
           unlawful content.
         </p>
       </section>

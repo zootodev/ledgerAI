@@ -28,7 +28,7 @@ function renderGlobalError(message: string, digest?: string) {
 describe("root error boundary", () => {
   it("renders a safe message, a retry action and a way back to the app", () => {
     const html = renderAppError("boom");
-    expect(html).toContain("Something went wrong");
+    expect(html).toContain("This page didn&#x27;t load");
     expect(html).toContain("Try again");
     expect(html).toContain('href="/overview"');
     expect(html).toContain("Back to overview");
