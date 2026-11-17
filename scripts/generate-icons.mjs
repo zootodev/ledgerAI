@@ -15,9 +15,10 @@ import { fileURLToPath } from "node:url";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const BRAND = "#2563eb";
-const INK = "#0f172a";
-const MUTED = "#475569";
+const BRAND = "#1c4b36";
+const PAPER = "#f4f0e7";
+const INK = "#1d211c";
+const MUTED = "#5b625a";
 const SANS = "Arial, Helvetica, sans-serif";
 
 const svg = readFileSync(join(root, "src/app/icon.svg"));
@@ -107,7 +108,7 @@ writeFileSync(join(root, "public/icon-maskable-512.png"), maskablePng(512));
   const H = 630;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, W, H);
 
   // Brand strip down the left edge.
@@ -127,7 +128,7 @@ writeFileSync(join(root, "public/icon-maskable-512.png"), maskablePng(512));
 
   ctx.fillStyle = MUTED;
   ctx.font = `36px ${SANS}`;
-  ctx.fillText("Financial intelligence for small businesses", textX, H / 2 + 62);
+  ctx.fillText("Simple books for Nigerian small businesses", textX, H / 2 + 62);
 
   writeFileSync(join(root, "src/app/opengraph-image.png"), canvas.toBuffer("image/png"));
 }

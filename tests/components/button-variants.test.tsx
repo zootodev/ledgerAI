@@ -80,12 +80,10 @@ describe("empty-state CTAs are single elements (no button-in-link)", () => {
     const element = await AnalyticsKpiGrid({ currency: "NGN" });
     const html = renderToStaticMarkup(element as never);
 
-    // Both CTAs are present…
-    expect(html).toContain('href="/transactions"');
+    // The single CTA is present…
     expect(html).toContain('href="/import"');
-    expect(html).toContain("Add transaction");
     expect(html).toContain("Import a statement");
-    // …styled as buttons…
+    // …styled as a button…
     expect(html).toContain("rounded-button");
     // …and no <button> is nested inside any <a>.
     for (const anchor of html.match(/<a\b[^>]*>[\s\S]*?<\/a>/g) ?? []) {

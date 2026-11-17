@@ -215,7 +215,7 @@ export function DataTable<T>({
                       : undefined
                   }
                   className={cn(
-                    "px-4 py-3",
+                    "px-4 py-2.5",
                     onRowClick &&
                       "cursor-pointer transition-colors hover:bg-surface-subtle/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand",
                   )}
@@ -234,10 +234,10 @@ export function DataTable<T>({
           mobileRow && "hidden md:block",
         )}
       >
-        <div ref={scrollRef} className="overflow-x-auto overscroll-x-contain">
+        <div ref={scrollRef} className="max-h-[68vh] overflow-auto overscroll-contain">
           <table className="w-full min-w-max border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-subtle/60">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-border bg-surface-subtle">
                 {columns.map((col) => {
                   const sortable = !!col.sortValue;
                   return (
@@ -252,7 +252,7 @@ export function DataTable<T>({
                           : undefined
                       }
                       className={cn(
-                        "px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted",
+                        "px-4 py-2.5 text-[11px] font-medium text-muted",
                         alignClass[col.align ?? "left"],
                         col.headerClassName,
                       )}
@@ -282,7 +282,7 @@ export function DataTable<T>({
               ? Array.from({ length: 5 }).map((_, i) => (
                   <tr key={`loading-${i}`} className="border-b border-border last:border-0">
                     {columns.map((col) => (
-                      <td key={col.key} className="px-4 py-3">
+                      <td key={col.key} className="px-4 py-2.5">
                         <div className="h-4 animate-pulse rounded bg-surface-subtle" />
                       </td>
                     ))}
@@ -321,7 +321,7 @@ export function DataTable<T>({
                           <td
                             key={col.key}
                             className={cn(
-                              "px-4 py-3 align-middle text-foreground",
+                              "px-4 py-2.5 align-middle text-foreground",
                               alignClass[col.align ?? "left"],
                               col.className,
                             )}

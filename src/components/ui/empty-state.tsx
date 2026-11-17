@@ -2,6 +2,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils/cn";
 
 export interface EmptyStateProps {
+  /** Retained for call-site compatibility. Empty states stay icon-free. */
   icon?: React.ReactNode;
   title: string;
   description?: React.ReactNode;
@@ -9,8 +10,11 @@ export interface EmptyStateProps {
   className?: string;
 }
 
+/**
+ * A quiet ruled panel: one statement of what is missing, one sentence on what
+ * to do next, one action. No medallion, illustration or celebration.
+ */
 export function EmptyState({
-  icon,
   title,
   description,
   action,
@@ -19,20 +23,15 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-card border border-dashed border-border-strong bg-surface py-16 px-6 text-center",
+        "rounded-card border border-border bg-surface px-5 py-8",
         className,
       )}
     >
-      {icon && (
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-subtle text-subtle">
-          {icon}
-        </div>
-      )}
-      <h3 className="text-base font-semibold text-foreground">{title}</h3>
+      <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
       {description && (
-        <p className="mt-1.5 max-w-md text-sm text-muted">{description}</p>
+        <p className="mt-1.5 max-w-xl text-sm leading-6 text-muted">{description}</p>
       )}
-      {action && <div className="mt-5">{action}</div>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }

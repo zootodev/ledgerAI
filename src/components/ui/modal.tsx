@@ -68,7 +68,7 @@ export function Modal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-foreground/40"
         onClick={closeOnOverlay ? onClose : undefined}
         aria-hidden="true"
       />

@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+
+// Vitest does not run Next's font loader; the layout test only needs the
+// variable name the loader exposes.
+vi.mock("next/font/local", () => ({
+  default: () => ({ variable: "--font-bricolage", className: "font-bricolage" }),
+}));
 
 import { config } from "@/proxy";
 import manifest from "@/app/manifest";
@@ -29,7 +35,7 @@ describe("app icons (file-based metadata)", () => {
   it("ships a scalable SVG brand mark in the brand colour", () => {
     const svg = read("src/app/icon.svg").toString("utf8");
     expect(svg).toContain("<svg");
-    expect(svg).toContain("#2563eb");
+    expect(svg).toContain("#1c4b36");
   });
 
   it("ships a favicon.ico containing 16, 32 and 48 px images", () => {
@@ -71,8 +77,8 @@ describe("web manifest", () => {
     const m = manifest();
     expect(m.name).toBe("LedgerAI");
     expect(m.short_name).toBe("LedgerAI");
-    expect(m.theme_color).toBe("#2563eb");
-    expect(m.background_color).toBe("#ffffff");
+    expect(m.theme_color).toBe("#1c4b36");
+    expect(m.background_color).toBe("#f4f0e7");
   });
 
   it("declares 192 and 512 icons, including a maskable one", () => {
@@ -86,7 +92,7 @@ describe("web manifest", () => {
 
 describe("theme colour + CSP", () => {
   it("exposes the brand theme colour via the viewport export", () => {
-    expect(viewport.themeColor).toBe("#2563eb");
+    expect(viewport.themeColor).toBe("#1c4b36");
   });
 
   it("lets the browser load same-origin icons and the manifest", () => {

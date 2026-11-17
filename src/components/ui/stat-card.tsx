@@ -1,38 +1,40 @@
 import * as React from "react";
 import Link from "next/link";
-import { TrendingDown, TrendingUp } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils/cn";
 
 export interface StatCardProps {
   label: string;
   value: string;
   /**
-   * Optional change vs the prior period: a signed percentage ("+12.5%",
-   * "-3.2%") or a literal label where a percentage is not meaningful
-   * ("—" for a flat zero, "New" when there is no prior baseline).
+   * `StatCard` delta prop: a signed percentage ("+12.5%", "-3.2%") or a
+   * literal label where a percentage is not meaningful ("No change" for a flat
+   * zero, "New" when there is no prior baseline).
    */
   delta?: string | null;
+  /** Retained for call-site compatibility. Metrics render without icons. */
   icon?: React.ReactNode;
   hint?: string;
   loading?: boolean;
   className?: string;
-  /** When set, the whole card links to the underlying records/report. */
+  /** When set, the whole cell links to the underlying records/report. */
   href?: string;
   /**
    * Flip the delta sentiment for metrics where "up is bad" (e.g. expenses):
-   * a rise is shown in red and a fall in green. The arrow still follows sign.
+   * a rise is shown in clay and a fall in green.
    */
   invertDelta?: boolean;
-  /** Tighter padding/type and no icon below sm (for two-up mobile grids). */
+  /** Tighter padding/type below sm (for two-up mobile grids). */
   compactOnMobile?: boolean;
 }
 
+/**
+ * One figure in a ledger summary strip. No icon tile, no card, no floating
+ * shadow: the parent supplies the rules between cells.
+ */
 export function StatCard({
   label,
   value,
   delta,
-  icon,
   hint,
   loading = false,
   className,
@@ -40,107 +42,78 @@ export function StatCard({
   invertDelta = false,
   compactOnMobile = false,
 }: StatCardProps) {
-  // A delta is either a percentage ("+12%") or a literal label used when a
-  // percentage would be misleading ("—" for a flat zero, "New" when there is
-  // no prior baseline). Literals render neutrally, with no arrow.
   const isPercent = delta != null && delta.trim().endsWith("%");
   const isLabel = delta != null && !isPercent;
   const showDelta = !!delta && !loading;
   const positive = !isLabel && delta != null && !delta.startsWith("-");
-  // Exactly zero movement is neither up nor down: show a neutral "0%" with no
-  // arrow (and no success/danger tone) instead of implying a direction.
   const unchanged = !isLabel && delta != null && /^[-+]?0%$/.test(delta.trim());
-  // Tone reflects whether the movement is good, not merely its direction.
   const good = invertDelta ? !positive : positive;
 
-  const card = (
-    <Card
+  const cell = (
+    <div
       className={cn(
-        "p-5",
-        compactOnMobile && "p-4 sm:p-5",
-        href && "h-full transition-colors hover:border-brand/40",
+        "min-w-0 bg-surface px-4 py-3",
+        href && "h-full transition-colors hover:bg-surface-hover",
+        compactOnMobile && "px-3 py-2.5 sm:px-4 sm:py-3",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p
-            className={cn(
-              "text-sm font-medium text-muted",
-              compactOnMobile && "text-xs sm:text-sm",
-            )}
-          >
-            {label}
-          </p>
-          {loading ? (
-            <div
+      <p
+        className={cn(
+          "truncate text-xs text-muted",
+          compactOnMobile && "text-[11px] sm:text-xs",
+        )}
+      >
+        {label}
+      </p>
+      {loading ? (
+        <div
+          className={cn(
+            "mt-2 h-7 w-24 animate-pulse rounded bg-surface-subtle",
+            compactOnMobile && "h-6 w-20 sm:h-7 sm:w-24",
+          )}
+        />
+      ) : (
+        <p
+          className={cn(
+            "mt-1 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-foreground tabular-nums",
+            compactOnMobile && "text-lg sm:text-[22px]",
+          )}
+        >
+          {value}
+        </p>
+      )}
+      {(showDelta || hint) && (
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          {showDelta && (
+            <span
               className={cn(
-                "mt-2 h-8 w-24 animate-pulse rounded bg-surface-subtle",
-                compactOnMobile && "h-6 w-16 sm:h-8 sm:w-24",
-              )}
-            />
-          ) : (
-            <p
-              className={cn(
-                "mt-1.5 text-2xl font-semibold tracking-tight text-foreground tabular-nums",
-                compactOnMobile && "text-lg sm:text-2xl",
+                "text-xs font-medium tabular-nums",
+                unchanged || isLabel
+                  ? "text-muted"
+                  : good
+                    ? "text-success-strong"
+                    : "text-danger-strong",
               )}
             >
-              {value}
-            </p>
+              {isPercent ? `${delta.replace("%", "")}%` : delta}
+            </span>
           )}
-          <div className="mt-1.5 flex items-center gap-2">
-            {showDelta && (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-0.5 text-sm font-medium tabular-nums",
-                  unchanged || isLabel ? "text-muted" : good ? "text-success" : "text-danger",
-                  compactOnMobile && "text-xs sm:text-sm",
-                )}
-              >
-                {isPercent &&
-                  !unchanged &&
-                  (positive ? (
-                    <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
-                  ) : (
-                    <TrendingDown className="h-3.5 w-3.5" aria-hidden="true" />
-                  ))}
-                {isPercent ? `${delta.replace("%", "")}%` : delta}
-              </span>
-            )}
-            {hint && (
-              <span
-                className={cn(
-                  "text-sm text-muted",
-                  compactOnMobile && "text-xs sm:text-sm",
-                )}
-              >
-                {hint}
-              </span>
-            )}
-          </div>
+          {hint && (
+            <span className="text-xs text-muted">{hint}</span>
+          )}
         </div>
-        {icon && (
-          <div
-            className={cn(
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand",
-              compactOnMobile && "hidden sm:flex",
-            )}
-          >
-            {icon}
-          </div>
-        )}
-      </div>
-    </Card>
+      )}
+    </div>
   );
 
-  if (!href || loading) return card;
+  if (!href || loading) return cell;
   return (
     <Link
       href={href}
-      className="block rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="block h-full rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
-      {card}
+      {cell}
     </Link>
   );
 }

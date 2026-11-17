@@ -24,13 +24,13 @@ export interface ButtonProps
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    "bg-brand text-on-accent shadow-sm hover:bg-brand-hover active:bg-brand-strong disabled:opacity-50",
+    "bg-brand text-on-accent hover:bg-brand-hover active:bg-brand-strong disabled:opacity-50",
   secondary:
     "bg-surface-subtle text-foreground hover:bg-border/60 disabled:opacity-50",
   outline:
     "border border-border-strong bg-surface text-foreground hover:bg-surface-subtle disabled:opacity-50",
   ghost: "text-secondary hover:bg-surface-subtle hover:text-foreground disabled:opacity-50",
-  danger: "bg-danger text-on-accent shadow-sm hover:bg-red-700 disabled:opacity-50",
+  danger: "bg-danger text-on-accent hover:bg-danger-strong disabled:opacity-50",
   dangerOutline:
     "border border-danger/30 bg-surface text-danger hover:bg-danger-soft disabled:opacity-50",
   link: "text-brand underline-offset-4 hover:underline disabled:opacity-50",

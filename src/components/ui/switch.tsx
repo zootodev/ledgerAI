@@ -35,7 +35,7 @@ export const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         >
           <span
             className={cn(
-              "inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow-sm transition-transform",
+              "inline-block h-4.5 w-4.5 transform rounded-full bg-surface transition-transform",
               checked ? "translate-x-[18px]" : "translate-x-0.5",
             )}
           />

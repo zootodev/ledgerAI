@@ -11,9 +11,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          "rounded-card border border-border bg-surface shadow-card",
+          "rounded-card border border-border bg-surface",
           interactive &&
-            "transition-shadow hover:shadow-card-hover hover:border-border-strong",
+            "transition-colors hover:border-border-strong hover:bg-surface-hover",
           className,
         )}
         {...props}
@@ -29,7 +29,7 @@ export const CardHeader = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={cn("flex flex-col gap-1 px-5 pt-5", className)}
+      className={cn("flex flex-col gap-0.5 px-4 pt-4", className)}
       {...props}
     />
   );
@@ -42,7 +42,7 @@ export const CardTitle = React.forwardRef<
   return (
     <h3
       ref={ref}
-      className={cn("text-base font-semibold text-foreground", className)}
+      className={cn("text-[15px] font-semibold tracking-[-0.01em] text-foreground", className)}
       {...props}
     />
   );
@@ -66,7 +66,7 @@ export const CardContent = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement>
 >(function CardContent({ className, ...props }, ref) {
   return (
-    <div ref={ref} className={cn("px-5 pb-5 pt-4", className)} {...props} />
+    <div ref={ref} className={cn("px-4 pb-4 pt-3", className)} {...props} />
   );
 });
 
@@ -78,7 +78,7 @@ export const CardFooter = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "flex items-center gap-2 border-t border-border px-5 py-4",
+        "flex items-center gap-2 border-t border-border px-4 py-3",
         className,
       )}
       {...props}

@@ -11,8 +11,8 @@ export interface ErrorStateProps {
 }
 
 export function ErrorState({
-  title = "Something went wrong",
-  description = "We couldn't load this content. Please try again.",
+  title = "This page did not load",
+  description = "The server did not send the data. Try again. If it keeps failing, sign out and back in.",
   onRetry,
   className,
 }: ErrorStateProps) {
@@ -20,20 +20,25 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        "flex flex-col items-center justify-center rounded-card border border-danger/30 bg-danger-soft py-14 px-6 text-center",
+        "rounded-card border border-danger/30 bg-danger-soft px-5 py-6",
         className,
       )}
     >
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-danger">
-        <AlertTriangle className="h-6 w-6" aria-hidden="true" />
+      <div className="flex items-start gap-3">
+        <AlertTriangle
+          className="mt-0.5 h-4 w-4 shrink-0 text-danger"
+          aria-hidden="true"
+        />
+        <div className="min-w-0">
+          <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
+          <p className="mt-1 max-w-xl text-sm leading-6 text-secondary">{description}</p>
+          {onRetry && (
+            <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
+              Try again
+            </Button>
+          )}
+        </div>
       </div>
-      <h3 className="text-base font-semibold text-foreground">{title}</h3>
-      <p className="mt-1.5 max-w-md text-sm text-secondary">{description}</p>
-      {onRetry && (
-        <Button variant="outline" size="sm" onClick={onRetry} className="mt-5">
-          Try again
-        </Button>
-      )}
     </div>
   );
 }

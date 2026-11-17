@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils/cn";
+import { LedgerMark } from "@/components/brand/wordmark";
 
 export function Logo({
   className,
@@ -8,11 +9,13 @@ export function Logo({
   showText?: boolean;
 }) {
   return (
-    <span className={cn("flex items-center gap-2", className)}>
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-sm font-bold text-on-accent">
-        L
-      </span>
-      {showText && <span className="font-semibold text-foreground">LedgerAI</span>}
+    <span className={cn("flex items-center gap-2.5", className)}>
+      <LedgerMark className="h-6 w-6 text-brand" />
+      {showText && (
+        <span className="text-[17px] font-semibold tracking-[-0.02em] text-foreground">
+          Ledger<span className="text-brand">AI</span>
+        </span>
+      )}
     </span>
   );
 }

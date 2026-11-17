@@ -2,62 +2,56 @@
 
 /* ============================================================
    LedgerAI Design Tokens
-   Restrained fintech/SaaS visual language: clean, trustworthy,
-   premium, calm, data-focused. No glassmorphism, minimal
-   animation, finance-appropriate trust signals.
+   A warm paper ledger: one deep green ink, clay for money out,
+   restrained credit green for money in, and rules instead of
+   floating cards. Shadows belong to overlays only.
    ============================================================ */
 
 :root {
   /* Surfaces */
-  --background: #f8fafc;
-  --surface: #ffffff;
-  --surface-subtle: #f1f5f9;
-  --surface-hover: #f8fafc;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --background: #f4f0e7;
+  --surface: #fffdf8;
+  --surface-subtle: #ebe5d9;
+  --surface-hover: #f7f2e8;
+  --border: #d8cfbf;
+  --border-strong: #b6a995;
 
   /* Text */
-  --foreground: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-  --text-subtle: #94a3b8;
-  --text-on-accent: #ffffff;
+  --foreground: #1d211c;
+  --text-secondary: #454f45;
+  --text-muted: #586253;
+  --text-subtle: #5f695b;
+  --text-on-accent: #fffdf8;
 
   /* Brand */
-  --brand: #2563eb;
-  --brand-hover: #1d4ed8;
-  --brand-soft: #eff6ff;
-  --brand-strong: #1e40af;
+  --brand: #1c4b36;
+  --brand-hover: #143928;
+  --brand-soft: #e6eee7;
+  --brand-strong: #103725;
 
   /* Semantic */
-  --success: #16a34a;
-  --success-soft: #f0fdf4;
-  --danger: #dc2626;
-  --danger-soft: #fef2f2;
-  --warning: #d97706;
-  --warning-soft: #fffbeb;
-  --info: #0284c7;
-  --info-soft: #f0f9ff;
-  /* Darker shades for semantic TEXT on soft/white surfaces: the base
-     success/danger/warning/info colours are tuned for fills and icons, and
-     fall below the WCAG AA 4.5:1 contrast ratio at body/label sizes. */
-  --success-strong: #15803d;
-  --danger-strong: #b91c1c;
-  --warning-strong: #b45309;
-  --info-strong: #0369a1;
+  --success: #2f6b4f;
+  --success-soft: #e6efe9;
+  --danger: #a8342a;
+  --danger-soft: #f7e7e3;
+  --warning: #8a5a0b;
+  --warning-soft: #f7edda;
+  --info: #315c7c;
+  --info-soft: #e8eff4;
+  /* Darker shades for semantic text on soft surfaces. */
+  --success-strong: #23543d;
+  --danger-strong: #89251e;
+  --warning-strong: #6f4808;
+  --info-strong: #254862;
 
-  /* Chart palette (accessible, distinguishable) */
-  --chart-1: #2563eb;
-  --chart-2: #16a34a;
-  --chart-3: #ea580c;
-  --chart-4: #7c3aed;
-  --chart-5: #0891b2;
-  --chart-6: #475569;
-  --chart-grid: #e2e8f0;
-}
-
-.theme-ledgerai {
-  --brand: #2563eb;
+  /* Chart palette: ink, clay, olive, ochre, blue-grey */
+  --chart-1: #2f6b4f;
+  --chart-2: #a05a2c;
+  --chart-3: #315c7c;
+  --chart-4: #6f7d3c;
+  --chart-5: #8a5a0b;
+  --chart-6: #7a6f61;
+  --chart-grid: #ded5c6;
 }
 
 @theme inline {
@@ -101,28 +95,29 @@
   --color-chart-6: var(--chart-6);
   --color-chart-grid: var(--chart-grid);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
     "Liberation Mono", monospace;
 
-  --radius-card: 0.75rem;
-  --radius-field: 0.5rem;
-  --radius-button: 0.5rem;
+  --radius-card: 0.375rem;
+  --radius-field: 0.25rem;
+  --radius-button: 0.25rem;
 
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 3px rgb(15 23 42 / 0.1);
-  --shadow-card-hover: 0 4px 6px -1px rgb(15 23 42 / 0.07),
-    0 2px 4px -2px rgb(15 23 42 / 0.05);
-  --shadow-popover: 0 10px 15px -3px rgb(15 23 42 / 0.1),
-    0 4px 6px -4px rgb(15 23 42 / 0.05);
-  --shadow-modal: 0 20px 25px -5px rgb(15 23 42 / 0.2),
-    0 8px 10px -6px rgb(15 23 42 / 0.1);
+  --shadow-card: none;
+  --shadow-card-hover: none;
+  --shadow-popover: 0 10px 24px -8px rgb(29 33 28 / 0.18),
+    0 2px 6px -2px rgb(29 33 28 / 0.1);
+  --shadow-modal: 0 24px 48px -12px rgb(29 33 28 / 0.24),
+    0 8px 16px -8px rgb(29 33 28 / 0.14);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-optical-sizing: auto;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-size: 0.9375rem;

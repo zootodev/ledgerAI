@@ -29,7 +29,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
         className={cn(
           "flex h-6 w-6 shrink-0 items-center justify-center rounded border",
           (checked || indeterminate)
-            ? "border-brand bg-brand text-on-accent shadow-sm ring-2 ring-brand/25"
+            ? "border-brand bg-brand text-on-accent ring-2 ring-brand/25"
             : "border-border-strong bg-surface",
           "transition-colors",
           "group-focus-within:ring-2 group-focus-within:ring-brand/40",

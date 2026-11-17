@@ -22,39 +22,37 @@ describe("StatCard delta tones", () => {
     }
   });
 
-  it("shows a rising delta as success with an up arrow", () => {
+  it("shows a rising delta as success", () => {
     const html = renderToStaticMarkup(<StatCard label="Revenue" value="₦1,000.00" delta="+12%" />);
-    expect(html).toContain("text-success");
-    expect(html).toContain("lucide-trending-up");
+    expect(html).toContain("text-success-strong");
+    expect(html).toContain("+12%");
   });
 
-  it("shows a falling delta as danger with a down arrow", () => {
+  it("shows a falling delta as danger", () => {
     const html = renderToStaticMarkup(<StatCard label="Revenue" value="₦1,000.00" delta="-3%" />);
-    expect(html).toContain("text-danger");
-    expect(html).toContain("lucide-trending-down");
+    expect(html).toContain("text-danger-strong");
+    expect(html).toContain("-3%");
   });
 
   it("flips the tone for metrics where up is bad", () => {
     const html = renderToStaticMarkup(<StatCard label="Expenses" value="₦400.00" delta="+20%" invertDelta />);
-    expect(html).toContain("text-danger");
-    expect(html).toContain("lucide-trending-up");
+    expect(html).toContain("text-danger-strong");
+    expect(html).toContain("+20%");
   });
 
   it("flips the tone for falling expenses", () => {
     const html = renderToStaticMarkup(<StatCard label="Expenses" value="₦400.00" delta="-20%" invertDelta />);
-    expect(html).toContain("text-success");
-    expect(html).toContain("lucide-trending-down");
+    expect(html).toContain("text-success-strong");
+    expect(html).toContain("-20%");
   });
 
-  it("renders an em dash label neutrally, with no arrow and no percent sign", () => {
-    const html = renderToStaticMarkup(<StatCard label="Revenue" value="₦0.00" delta="—" />);
-    expect(html).toContain(">—<");
+  it("renders a No change label neutrally, with no percent sign", () => {
+    const html = renderToStaticMarkup(<StatCard label="Revenue" value="₦0.00" delta="No change" />);
+    expect(html).toContain(">No change<");
     expect(html).toContain("text-muted");
-    expect(html).not.toContain("—%");
-    expect(html).not.toContain("lucide-trending-up");
-    expect(html).not.toContain("lucide-trending-down");
-    expect(html).not.toContain("text-success");
-    expect(html).not.toContain("text-danger");
+    expect(html).not.toContain("No change%");
+    expect(html).not.toContain("text-success-strong");
+    expect(html).not.toContain("text-danger-strong");
   });
 
   it("renders a New label neutrally, without appending a percent sign", () => {
