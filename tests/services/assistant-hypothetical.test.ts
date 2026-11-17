@@ -174,7 +174,7 @@ describe("hypothetical: resolvable fragments in a conversation", () => {
     expect(outcome.kind).toBe("answer");
     // "that" → Rent (from OUR deterministic answer, never user text).
     expect(outcome.text).toContain("Reducing your spending on rent reduces your total expenses");
-    expect(outcome.text).toContain("spending ₦50,000 less would take them to ₦750,000");
+    expect(outcome.text).toContain("A change of ₦50,000 less would take them to ₦750,000");
     // The context read is bounded to the tenant's conversation.
     expect(mockFindLastUserQuestion).toHaveBeenCalledWith(mockPrisma, "biz-a", "c1");
   });
@@ -225,7 +225,7 @@ describe("hypothetical: resolvable fragments in a conversation", () => {
       mockPrisma,
       "biz-a",
       "c1",
-      "Rent spending — July 2026",
+      "Rent spending · July 2026",
       "What about before?",
       outcome.text,
     );

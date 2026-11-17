@@ -61,7 +61,7 @@ export async function askAssistant(
     }
     return {
       kind: "error",
-      text: "Sorry — I couldn't look into that right now. Please try again.",
+      text: "We couldn't check your books just now. Try again.",
     };
   }
 }

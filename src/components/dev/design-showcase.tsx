@@ -48,7 +48,7 @@ const TRANSACTIONS = [
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h2 className="border-b border-border pb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+      <h2 className="border-b border-border pb-2 text-sm font-semibold text-muted">
         {title}
       </h2>
       {children}
@@ -155,9 +155,9 @@ export function DesignShowcase() {
             </Field>
             <Field label="Base currency">
               <Select defaultValue="NGN">
-                <option value="NGN">NGN — Nigerian Naira</option>
-                <option value="USD">USD — US Dollar</option>
-                <option value="GHS">GHS — Ghanaian Cedi</option>
+                <option value="NGN">NGN (Nigerian Naira)</option>
+                <option value="USD">USD (US Dollar)</option>
+                <option value="GHS">GHS (Ghanaian Cedi)</option>
               </Select>
             </Field>
             <Field label="Notes" className="sm:col-span-2">
@@ -165,8 +165,8 @@ export function DesignShowcase() {
             </Field>
             <div className="flex flex-col gap-3 sm:col-span-2">
               <div className="flex flex-wrap items-center gap-6 pt-1">
-                <Checkbox label="Enable automatic categorization" />
-                <Checkbox label="Enable automatic categorization" defaultChecked />
+                <Checkbox label="Enable automatic categorisation" />
+                <Checkbox label="Enable automatic categorisation" defaultChecked />
                 <Checkbox label="Permission group (some selected)" indeterminate defaultChecked />
               </div>
               <Switch checked={true} onCheckedChange={() => {}} label="Send weekly summary email" />
@@ -349,7 +349,7 @@ export function DesignShowcase() {
             <Alert tone="info" title="Heads up">A new import is available for review.</Alert>
             <Alert tone="success" title="Import complete">184 transactions imported, 8 flagged for review.</Alert>
             <Alert tone="warning" title="Low confidence">Some transactions need review before saving.</Alert>
-            <Alert tone="danger" title="Upload failed" onDismiss={() => {}}>The file format wasn’t recognized. Try CSV or XLSX.</Alert>
+            <Alert tone="danger" title="Upload failed" onDismiss={() => {}}>The file format wasn’t recognised. Try CSV or XLSX.</Alert>
             <div className="flex flex-wrap items-center gap-4 rounded-card border border-border bg-surface p-4">
               <Spinner />
               <Skeleton className="w-48" height={16} />

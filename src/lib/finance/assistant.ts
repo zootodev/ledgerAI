@@ -134,7 +134,7 @@ export const UNSUPPORTED_ANSWER =
   "I’m focused on your business finances, so I can’t help with that. I can analyze your income, expenses, profit, balance, transactions, and spending by category.";
 /** Shown when the question is financial but too vague to answer without guidance. */
 export const CLARIFICATION_ANSWER =
-  "Could you clarify what you'd like to know — your revenue, expenses, profit, or balance?";
+  "Could you clarify what you'd like to know: your revenue, expenses, profit, or balance?";
 /**
  * Shown when the question is about "savings". "Save" is ambiguous without
  * context (spend-reduction vs money-left-after-expenses), so we ask which
@@ -541,13 +541,13 @@ export function answerFromMetrics(
       if (netProfit >= 0) {
         return {
           kind: "answer",
-          text: `Net profit in ${period.label} was ${money(netProfit)}${profitMargin !== null ? ` — a ${formatPercent(profitMargin)} margin` : ""}. Revenue was ${money(revenue)} against expenses ${money(expenses)}.`,
+          text: `Net profit in ${period.label} was ${money(netProfit)}${profitMargin !== null ? ` (a ${formatPercent(profitMargin)} margin)` : ""}. Revenue was ${money(revenue)} against expenses ${money(expenses)}.`,
           data: { netProfit, profitMargin, revenue, expenses, period: period.label },
         };
       }
       return {
         kind: "answer",
-        text: `You ran at a loss of ${money(-netProfit)} in ${period.label}${profitMargin !== null ? ` (margin ${formatPercent(profitMargin)})` : ""} — revenue ${money(revenue)} against expenses ${money(expenses)}.`,
+        text: `You ran at a loss of ${money(-netProfit)} in ${period.label}${profitMargin !== null ? ` (margin ${formatPercent(profitMargin)})` : ""}. Revenue was ${money(revenue)} against expenses ${money(expenses)}.`,
         data: { netProfit, profitMargin, revenue, expenses, period: period.label },
       };
     }
@@ -559,7 +559,7 @@ export function answerFromMetrics(
       const { revenue, expenses, netProfit, profitMargin } = metrics.summary;
       return {
         kind: "answer",
-        text: `Your profit margin in ${period.label} was ${formatPercent(profitMargin)} — ${money(netProfit)} profit on ${money(revenue)} revenue (against ${money(expenses)} expenses).`,
+        text: `Your profit margin in ${period.label} was ${formatPercent(profitMargin)}: ${money(netProfit)} profit on ${money(revenue)} revenue (against ${money(expenses)} expenses).`,
         data: { profitMargin, netProfit, revenue, expenses, period: period.label },
       };
     }
@@ -573,7 +573,7 @@ export function answerFromMetrics(
           : 0;
       return {
         kind: "answer",
-        text: `Your top expense category in ${period.label} was ${cap(top.categoryName)} at ${money(top.amount)} — ${formatPercent(share)} of all expenses.`,
+        text: `Your top expense category in ${period.label} was ${cap(top.categoryName)} at ${money(top.amount)}, ${formatPercent(share)} of all expenses.`,
         data: { categoryName: top.categoryName, amount: top.amount, shareOfExpenses: round(share, 1), period: period.label },
       };
     }
@@ -648,14 +648,14 @@ export function answerFromMetrics(
       if (amount === 0) {
         return {
           kind: "answer",
-          text: `No spending on ${lower(target)} was recorded in ${period.label} — ${formatPercent(share)} of ${period.label} spending.`,
+          text: `No spending on ${lower(target)} was recorded in ${period.label}. That is ${formatPercent(share)} of ${period.label} spending.`,
           data: { categoryName: target, amount: 0, shareOfExpenses: share, period: period.label },
         };
       }
       const tail = metrics.priorSummary ? categoryDeltaTail(targetTotal, money) : "";
       return {
         kind: "answer",
-        text: `Spending on ${lower(target)} in ${period.label} was ${money(amount)} — ${formatPercent(share)} of ${period.label} spending.${tail}`,
+        text: `Spending on ${lower(target)} in ${period.label} was ${money(amount)}, ${formatPercent(share)} of ${period.label} spending.${tail}`,
         data: { categoryName: target, amount, shareOfExpenses: share, period: period.label },
       };
     }
@@ -665,7 +665,7 @@ export function answerFromMetrics(
       const n = metrics.count.income + metrics.count.expenses + metrics.count.transfers;
       return {
         kind: "answer",
-        text: `There were ${n} transactions in ${period.label} — ${metrics.count.income} income, ${metrics.count.expenses} expenses, ${metrics.count.transfers} transfer${metrics.count.transfers === 1 ? "" : "s"}.`,
+        text: `There were ${n} transactions in ${period.label}: ${metrics.count.income} income, ${metrics.count.expenses} expenses, ${metrics.count.transfers} transfer${metrics.count.transfers === 1 ? "" : "s"}.`,
         data: { ...metrics.count, total: n, period: period.label },
       };
     }
@@ -682,7 +682,7 @@ export function answerFromMetrics(
       const { revenue, expenses, netProfit } = metrics.summary;
       const contributors = topContributors(metrics.categoryTotals, 3);
       let text =
-        `Spending doesn’t reduce your revenue — revenue is what you earned, while expenses are subtracted from it to give profit. ` +
+        `Spending doesn’t reduce your revenue. Revenue is what you earned, while expenses are subtracted from it to give profit. ` +
         `In ${period.label} you earned ${money(revenue)} and spent ${money(expenses)}, leaving ${money(netProfit)} profit.`;
       if (contributors.length > 0) {
         const combined = contributors.reduce((sum, c) => sum + c.amount, 0);
@@ -690,7 +690,7 @@ export function answerFromMetrics(
         const listing = contributors
           .map((c) => `${cap(c.categoryName)} (${money(c.amount)})`)
           .join(", ");
-        text += ` The biggest drivers were ${listing} — together ${formatPercent(share)} of your spending.`;
+        text += ` The biggest drivers were ${listing}, together ${formatPercent(share)} of your spending.`;
       }
       if (metrics.priorSummary) {
         const delta = percentChange(revenue, metrics.priorSummary.revenue);
@@ -910,7 +910,7 @@ function hypotheticalImpactAnswer(
           categoryTotal
             ? ` (${money(categoryTotal.amount)} on ${lower(query.category)})`
             : ""
-        } — spending ${money(amount)} ${fall ? "less" : "more"} would take them to ${money(
+        } A change of ${money(amount)} ${fall ? "less" : "more"} would take them to ${money(
           Math.max(shifted, 0),
         )}.`,
         data: { expenses, shifted, effectGoal: goal, period: period.label },
@@ -932,7 +932,7 @@ function hypotheticalImpactAnswer(
   if (goal === "income") {
     return {
       kind: "answer",
-      text: `Spending ${operation === "decrease" ? "less" : "more"} doesn't change your revenue — revenue is what customers pay you, and it isn't affected by what you spend. It does change profit: spending ${
+      text: `Spending ${operation === "decrease" ? "less" : "more"} doesn't change your revenue. Revenue is what customers pay you, and it isn't affected by what you spend. It does change profit: spending ${
         operation === "decrease" ? "less" : "more"
       } ${operation === "decrease" ? "adds to" : "takes away from"} profit by the amount of the change.`,
       data: { revenue, expenses, netProfit, effectGoal: goal, period: period.label },
@@ -946,7 +946,7 @@ function hypotheticalImpactAnswer(
     const shifted = round(netProfit + (rise ? amount : -amount), 2);
     return {
       kind: "answer",
-      text: `Yes — spending ${rise ? "less" : "more"}${subject} would ${
+      text: `Yes. Spending ${rise ? "less" : "more"}${subject} would ${
         rise ? "increase" : "reduce"
       } your profit by the amount of the change, as long as your income stays the same. In ${period.label} your profit is ${money(
         netProfit,
@@ -970,7 +970,7 @@ function hypotheticalImpactAnswer(
 
   return {
     kind: "answer",
-    text: `${rise ? "Yes — spending less" : "Spending more"}${subject} would ${
+    text: `${rise ? "Yes. Spending less" : "Spending more"}${subject} would ${
       rise ? "increase your profit by exactly the amount you save, as long as your income stays the same"
       : "reduce your profit by the amount you spend extra, as long as your income stays the same"
     }.${
@@ -1099,7 +1099,7 @@ export function conversationTitle(query: AssistantQuery): string {
   }
 
   const period = periodTitle(query.period);
-  const title = period ? `${topic} — ${period}` : topic;
+  const title = period ? `${topic} · ${period}` : topic;
   return title.length > 60 ? `${title.slice(0, 57)}…` : title;
 }
 
@@ -1245,17 +1245,17 @@ function complementNarration(
   if (members.length === 0) {
     text =
       excluded === null
-        ? `There were no remaining categories — your ${periodLabel} spending was fully covered by the categories listed.`
+        ? `There were no remaining categories. Your ${periodLabel} spending was fully covered by the categories listed.`
         : `There were no remaining categories apart from ${excluded} in ${periodLabel}.`;
   } else if (members.length <= DISTRIBUTION_DISPLAY_LIMIT) {
     const named = joinList(members.map((c) => cap(c.categoryName)));
     const totalBit = `${money(computed.totalAmount)} in total, ${formatPercent(computed.totalShare)} of your ${periodLabel} spending`;
     text =
       excluded === null
-        ? `The remaining categories were ${named} — ${totalBit}.`
-        : `Apart from ${excluded}, the remaining categories were ${named} — ${totalBit}.`;
+        ? `The remaining categories were ${named}: ${totalBit}.`
+        : `Apart from ${excluded}, the remaining categories were ${named}: ${totalBit}.`;
   } else {
-    const totalBit = `${money(computed.totalAmount)} — ${formatPercent(computed.totalShare)} of your ${periodLabel} spending`;
+    const totalBit = `${money(computed.totalAmount)} in total, ${formatPercent(computed.totalShare)} of your ${periodLabel} spending`;
     text =
       excluded === null
         ? `The remaining categories totaled ${totalBit}.`

@@ -174,14 +174,14 @@ function readProfit(text: string): Partial<ReportedFigures> | null {
 }
 
 function readProfitMargin(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(RE("profit margin in ([^()]+?) was .+? — ¤([\\d,]+) profit on"));
+  const m = text.match(RE("profit margin in ([^()]+?) was .+?[;:\\u2014] ¤([\\d,]+) profit on"));
   return m
     ? { metric: "profit", total: toNumber(m[2]), periodLabel: m[1].trim() }
     : null;
 }
 
 function readTopCategory(text: string): Partial<ReportedFigures> | null {
-  const m = text.match(RE("top expense category in ([^()]+?) was ([^—–]+?) at ¤([\\d,]+)"));
+  const m = text.match(RE("top expense category in ([^()]+?) was ([^;\\u2014\\u2013]+?) at ¤([\\d,]+)"));
   if (!m) return null;
   return {
     metric: "category",

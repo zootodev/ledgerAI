@@ -141,7 +141,7 @@ describe("browser QA issue 1: amount reference + conversation context", () => {
     expect(outcome.text).toContain("the ₦187,600 you asked about");
     expect(outcome.text).toContain("Software");
     expect(mockFindLastUserQuestion).toHaveBeenCalledWith(mockPrisma, "biz-a", "c1");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown — August 2026");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown · August 2026");
   });
 
   it("clarifies when the user's cited amount does not match our own total", async () => {
@@ -216,7 +216,7 @@ describe("browser QA issue 2: category-spending is a breakdown, not an impact le
     expect(outcome.text).toContain("Software");
     expect(outcome.text).toContain("Rent");
     expect(outcome.text).not.toContain("revenue");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown — August 2026");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown · August 2026");
   });
 });
 
@@ -248,7 +248,7 @@ describe("browser QA issue 4: conversational amount re-anchoring flows", () => {
     expect(outcome.kind).toBe("answer");
     expect(outcome.text).toContain("the ₦187,600 you asked about");
     expect(outcome.text).toContain("Software");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown — August 2026");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown · August 2026");
   });
 
   it("re-anchors the same figure even after our own breakdown narration", async () => {
@@ -281,7 +281,7 @@ describe("browser QA issue 4: conversational amount re-anchoring flows", () => {
 
     expect(outcome.kind).toBe("answer");
     expect(outcome.text).toContain("the ₦187,600 you asked about");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown — August 2026");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown · August 2026");
   });
 
   it("walks back through our own clarification to re-anchor a bare figure continuation", async () => {
@@ -319,7 +319,7 @@ describe("browser QA issue 4: conversational amount re-anchoring flows", () => {
     expect(outcome.kind).toBe("answer");
     expect(outcome.text).toContain("the ₦187,600 you asked about");
     expect(mockFindRecentExchanges).toHaveBeenCalledWith(mockPrisma, "biz-a", "c1");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown — August 2026");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown · August 2026");
   });
 
   it("does not resolve a register continuation when nothing owned cites a figure", async () => {
@@ -364,7 +364,7 @@ describe("browser QA issue 5: no-amount category breakdown", () => {
     expect(outcome.text).toContain("your ₦187,600 spending");
     expect(outcome.text).toContain("Software");
     expect(outcome.text).not.toContain("revenue");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown — August 2026");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown · August 2026");
   });
 
   it("answers 'How was my August spending divided by category?' as a breakdown", async () => {
@@ -418,7 +418,7 @@ describe("browser QA: savings both-readings are explicit and honest", () => {
     expect(outcome.text).toContain("spent ₦80,000 less than in July 2026");
     expect(outcome.text).toContain("the amount you saved under this reading");
     expect(outcome.text).not.toContain("nothing to report as money you spent less");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Savings — both readings");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Savings: both readings");
   });
 
   it("states plainly when spending rose instead of claiming a saving", async () => {
@@ -462,7 +462,7 @@ describe("browser QA: savings both-readings are explicit and honest", () => {
     expect(outcome.text).toContain("spent £80,000 less than in July 2026");
     expect(outcome.text).not.toContain("₦");
     expect(outcome.text).not.toContain("NGN");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Savings — both readings");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Savings: both readings");
   });
 });
 
@@ -493,7 +493,7 @@ describe("browser QA issue 3: clarification selection (The two / Both)", () => {
     expect(outcome.text).toContain("expenses");
     expect(outcome.text).toContain("profit");
     expect(mockFindLastUserQuestion).toHaveBeenCalledWith(mockPrisma, "biz-a", "c1");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Savings — both readings");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Savings: both readings");
   });
 
   it("resolves 'Both' the same way", async () => {
@@ -509,7 +509,7 @@ describe("browser QA issue 3: clarification selection (The two / Both)", () => {
     const outcome = await askAssistantQuestion("Both", "c1", NOW);
 
     expect(outcome.kind).toBe("answer");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Savings — both readings");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Savings: both readings");
   });
 
   it("does NOT interpret 'Both' without a preceding owned savings clarification", async () => {

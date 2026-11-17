@@ -122,7 +122,7 @@ describe("askAssistantQuestion (persistent pipeline)", () => {
       mockPersistExchange.mock.calls[0];
     expect(businessId).toBe(businessA.id);
     expect(conversationId).toBeNull();
-    expect(title).toBe("Income — June 2026");
+    expect(title).toBe("Income · June 2026");
     expect(question).toBe("How much income in June 2026?");
     expect(answerText).toContain("1,000,000");
     expect(prisma as unknown).toBe(mockPrisma);
@@ -144,7 +144,7 @@ describe("askAssistantQuestion (persistent pipeline)", () => {
 
     await askAssistantQuestion("How much did I spend on rent?", null, NOW);
 
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Rent spending — This month");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Rent spending · This month");
   });
 
   it("continues an existing conversation when an id is given", async () => {

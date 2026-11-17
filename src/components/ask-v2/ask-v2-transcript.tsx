@@ -9,7 +9,7 @@
 // ============================================================
 
 import * as React from "react";
-import { Bot, Loader2, Sparkles } from "lucide-react";
+import { Bot, Loader2 } from "lucide-react";
 import { ASK_V2_SUGGESTIONS, type AskV2ChatMessage } from "@/lib/ask-v2/chat-state";
 
 export interface AskV2TranscriptProps {
@@ -38,17 +38,14 @@ export function AskV2Transcript({
       className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto"
     >
       {!hasMessages && !pending ? (
-        <div className="m-auto max-w-2xl space-y-6 px-4 py-8 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-subtle">
-            <Sparkles className="h-5 w-5 text-brand" aria-hidden="true" />
-          </div>
+        <div className="m-auto max-w-2xl space-y-5 px-4 py-8 text-center">
           <div className="space-y-1">
             <p className="text-lg font-semibold tracking-tight text-foreground">
-              Ask about your business finances.
+              Ask about your books
             </p>
             <p className="mx-auto max-w-md text-sm text-muted">
-              Every answer is computed from your verified records and validated
-              before it is served — LedgerAI never guesses.
+              Answers use your recorded transactions. Figures are checked
+              before they are shown.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2.5">
@@ -91,7 +88,7 @@ export function AskV2Transcript({
               </div>
               <div className="flex items-center gap-2 text-sm text-muted">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                Analyzing your books…
+                Checking your records…
               </div>
             </div>
           )}

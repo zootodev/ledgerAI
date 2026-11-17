@@ -35,10 +35,9 @@ describe("AskV2Chat", () => {
         onSignOut={vi.fn()}
       />,
     );
-    expect(html).toContain("Ask LedgerAI (v2)");
-    expect(html).toContain("Ask questions about your business finances");
     expect(html).toContain("Acme Studio");
     expect(html).toContain("USD");
+    expect(html).not.toContain("Ask LedgerAI (v2)");
   });
 
   it("renders the chat workspace, composer, and a new-conversation control", () => {
@@ -52,7 +51,7 @@ describe("AskV2Chat", () => {
     );
     expect(html).toContain("New conversation");
     expect(html).toContain('id="ask-v2-message"');
-    expect(html).toContain("Ask about your business finances.");
+    expect(html).toContain("Ask about your books");
   });
 
   it("exposes the transcript as an accessible live region", () => {

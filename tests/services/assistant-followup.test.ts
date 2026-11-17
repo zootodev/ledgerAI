@@ -119,7 +119,7 @@ describe("conversational follow-ups", () => {
       mockPrisma,
       "biz-a",
       "c1",
-      "Rent spending — Last month",
+      "Rent spending · Last month",
       "What about last month?",
       outcome.text,
     );
@@ -145,7 +145,7 @@ describe("conversational follow-ups", () => {
       mockPrisma,
       "biz-a",
       "c1",
-      "Cash balance — Last year",
+      "Cash balance · Last year",
       "And last year?",
       expect.any(String),
     );

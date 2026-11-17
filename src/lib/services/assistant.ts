@@ -604,7 +604,7 @@ async function answerSavingsBothReadings(
     prisma,
     businessId,
     conversationId,
-    "Savings — both readings",
+    "Savings: both readings",
     question,
     text,
   );

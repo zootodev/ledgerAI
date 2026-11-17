@@ -49,7 +49,7 @@ export function AskHistoryList({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <p className="shrink-0 px-2 pb-1.5 text-xs font-medium uppercase tracking-wide text-subtle">
+      <p className="shrink-0 px-2 pb-1.5 text-xs font-medium text-subtle">
         Conversations
       </p>
       <div className="mb-3 shrink-0">
@@ -88,16 +88,15 @@ export function AskHistoryList({
           </div>
         ) : conversations.length === 0 ? (
           <div className="px-2 py-6 text-center">
-            <MessageSquareText
-              className="mx-auto h-5 w-5 text-subtle"
-              aria-hidden="true"
-            />
-            <p className="mt-2 text-sm text-muted">No conversations yet.</p>
+            <p className="text-sm text-muted">No conversations yet.</p>
+            <p className="mt-1 text-xs text-subtle">
+              Ask a question about your books to start one.
+            </p>
           </div>
         ) : (
           groups.map((group) => (
             <div key={group.label} className="mb-2">
-              <p className="px-2 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-muted">
+              <p className="px-2 pb-1 pt-2 text-xs font-medium text-muted">
                 {group.label}
               </p>
               <ul className="space-y-0.5">

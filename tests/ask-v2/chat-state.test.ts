@@ -181,10 +181,10 @@ describe("ASK_V2_SUGGESTIONS", () => {
     for (const s of ASK_V2_SUGGESTIONS) expect(s.trim().length).toBeGreaterThan(0);
     const joined = ASK_V2_SUGGESTIONS.join(" ");
     // Supported capabilities only — no remainder, no search_transactions.
-    expect(joined).toContain("biggest expense category");
+    expect(joined).toContain("biggest expense");
     expect(joined).toContain("compare");
-    expect(joined).toContain("recent spending");
-    expect(joined).toMatch(/spend last month/i);
+    expect(joined).toContain("income");
+    expect(joined).toMatch(/spend last week/i);
     expect(joined).not.toMatch(/remainder/i);
     expect(joined).not.toMatch(/search_transactions/i);
   });

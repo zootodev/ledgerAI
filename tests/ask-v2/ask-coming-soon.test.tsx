@@ -15,15 +15,14 @@ vi.mock("next/link", () => ({
 }));
 
 describe("AskComingSoon", () => {
-  it("presents the Coming Soon announcement in the authenticated app layout", () => {
+  it("states the preview is switched off inside the authenticated app layout", () => {
     const html = renderToStaticMarkup(
       <AskComingSoon userName="Ada Lovelace" userEmail="ada@example.com" onSignOut={vi.fn()} />,
     );
-    expect(html).toContain("Ask LedgerAI");
-    expect(html).toContain("Coming Soon");
-    expect(html).toContain("Ask is coming soon");
-    expect(html).toContain("smarter way to help you understand your business finances");
-    expect(html).toContain("Ask will let you explore your finances using natural language.");
+    expect(html).toContain("Ask isn&#x27;t open yet");
+    expect(html).toContain("This preview is switched off.");
+    expect(html).toContain("Go to overview");
+    expect(html).toContain("Ada");
   });
 
   it("never renders an interactive composer or submit surface", () => {
@@ -40,9 +39,9 @@ describe("AskComingSoon", () => {
     const html = renderToStaticMarkup(
       <AskComingSoon userName="Ada Lovelace" userEmail="ada@example.com" />,
     );
-    // The header/sidebar chrome is the normal app shell; the announcement
-    // itself must not surface the internal v2 label, feature flag, or ids.
-    expect(html).toContain("Ask LedgerAI");
+    // The header/sidebar chrome is the normal app shell; the notice itself
+    // must not surface the internal v2 label, feature flag, or ids.
+    expect(html).toContain("This preview is switched off.");
     expect(html).not.toContain("Ask LedgerAI (v2)");
     for (const key of [
       "ASK_V2_ENABLED",

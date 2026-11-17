@@ -13,7 +13,7 @@ describe("AskV2Composer", () => {
     );
     expect(html).toContain('id="ask-v2-message"');
     expect(html).toContain("<label"); // sr-only keeps it in the a11y tree
-    expect(html).toContain("Ask about your business finances");
+    expect(html).toContain("Ask about your books");
     expect(html).toContain(`maxLength="${ASK_V2_MESSAGE_MAX_LENGTH}"`);
   });
 
@@ -45,7 +45,7 @@ describe("AskV2Composer", () => {
     );
     expect(empty).not.toContain("Enter to send");
     expect(empty).not.toContain("Shift+Enter");
-    expect(empty).toContain("LedgerAI never guesses");
+    expect(empty).toContain("Answers use your recorded transactions.");
 
     const full = renderToStaticMarkup(
       <AskV2Composer value="hi" onChange={vi.fn()} onSubmit={vi.fn()} pending={false} />,

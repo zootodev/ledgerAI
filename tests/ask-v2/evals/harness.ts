@@ -179,7 +179,7 @@ export function createScriptedRuntime() {
 
 function unsupportedText(reason: "not_financial" | "not_supported"): string {
   return reason === "not_supported"
-    ? "LedgerAI can analyze your income, expenses, profit, balance, transactions, and spending by category — but cannot search raw transaction text in this phase."
+    ? "LedgerAI can analyse your income, expenses, profit, balance, transactions, and spending by category, but cannot search raw transaction text in this phase."
     : UNSUPPORTED_ANSWER;
 }
 

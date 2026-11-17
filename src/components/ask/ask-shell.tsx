@@ -41,10 +41,10 @@ import { resolveAskFirstPaintState } from "@/lib/ask/ask-first-state";
 import type { ConversationMessage, ConversationSummary } from "@/lib/types/assistant";
 
 const SUGGESTIONS = [
-  "What's my balance?",
-  "What were my expenses last month?",
+  "How much did I spend last month?",
   "Did I make a profit this month?",
-  "What was my top expense category?",
+  "What was my biggest expense?",
+  "Show my POS settlements this week.",
 ];
 
 const COMPOSER_MAX_HEIGHT = 176;
@@ -275,7 +275,7 @@ export function AskShell({
       }
       answer = {
         kind: "error",
-        text: "Sorry — I couldn't look into that right now. Please try again.",
+        text: "We couldn't check your books just now. Try again.",
       };
     } finally {
       setIsAsking(false);
@@ -423,7 +423,7 @@ export function AskShell({
     <AppShell
       onSignOut={onSignOut}
       header={{
-        title: "Ask LedgerAI",
+        title: "Ask",
         user: userName ? { name: userName, email: userEmail } : null,
       }}
     >
@@ -437,7 +437,7 @@ export function AskShell({
         <div className="flex min-w-0 flex-1 flex-col gap-5">
           <div className="flex shrink-0 items-center justify-between gap-2">
             <p className="min-w-0 truncate text-sm text-muted">
-              Ask questions about your business finances · {businessName} · {currency}
+              {businessName} · {currency}
             </p>
             <Button
               variant="outline"
@@ -462,9 +462,12 @@ export function AskShell({
                 {messages.length === 0 &&
                   transient.length === 0 &&
                   !loadingMessages && (
-                    <div className="m-auto max-w-2xl space-y-6 px-4 text-center">
+                    <div className="m-auto max-w-2xl space-y-4 px-4 text-center">
                       <p className="text-lg font-semibold tracking-tight text-foreground">
-                        Ask about your business finances.
+                        Ask about your books
+                      </p>
+                      <p className="text-sm text-muted">
+                        Answers use your recorded transactions.
                       </p>
                       <div className="flex flex-wrap items-center justify-center gap-2.5">
                         {SUGGESTIONS.map((s) => (
@@ -524,7 +527,7 @@ export function AskShell({
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                      Analyzing your books…
+                      Checking your records…
                     </div>
                   </div>
                 )}
@@ -563,7 +566,7 @@ export function AskShell({
                 </div>
                 <div className="mt-2 hidden items-center justify-between gap-4 px-1 text-xs text-subtle sm:flex">
                   <p>
-                    Every answer is computed from your verified data — LedgerAI never guesses.
+                    Answers use your recorded transactions.
                   </p>
                   {input.trim() && (
                     <p className="shrink-0">Enter to send · Shift+Enter for a new line</p>
@@ -574,12 +577,11 @@ export function AskShell({
           ) : (
             <div className="flex flex-1 items-center justify-center px-4 py-16">
               <div className="max-w-md space-y-6 text-center">
-                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                  Start a conversation with LedgerAI
+                <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                  No conversation open
                 </h2>
-                <p className="mx-auto max-w-sm text-muted">
-                  Ask about your business finances and get precise answers from your
-                  recorded transactions.
+                <p className="mx-auto max-w-sm text-sm text-muted">
+                  Open one from history, or start a new chat.
                 </p>
                 <Button
                   size="lg"

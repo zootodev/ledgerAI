@@ -192,7 +192,7 @@ describe("real-world QA: bare-pronoun passive follow-up after our own narration"
       expect(outcome.text).not.toContain("September 2026");
       expect(outcome.text).not.toBe(INSUFFICIENT_ANSWER);
       expect(mockFindLastUserQuestion).toHaveBeenCalledWith(mockPrisma, "biz-a", "c1");
-      expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown — Last month");
+      expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown · Last month");
     },
   );
 
@@ -392,7 +392,7 @@ describe("real-world QA: older-frame recall and period disambiguation", () => {
     expect(outcome.kind).toBe("answer");
     expect(outcome.text).toContain("the ₦300,000 you asked about");
     expect(outcome.text).toContain("July 2026");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown — July 2026");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown · July 2026");
   });
 
   it("clarifies when the same figure was narrated in DIFFERENT periods (#17)", async () => {
@@ -452,7 +452,7 @@ describe("real-world QA: older-frame recall and period disambiguation", () => {
 
     expect(outcome.kind).toBe("answer");
     expect(outcome.text).toContain("the ₦187,600 you asked about");
-    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown — August 2026");
+    expect(mockPersistExchange.mock.calls[0][3]).toBe("Spending breakdown · August 2026");
   });
 });
 

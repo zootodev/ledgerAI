@@ -41,9 +41,9 @@ export function AskV2Composer({ value, onChange, onSubmit, pending }: AskV2Compo
         if (value.trim() && !pending) onSubmit();
       }}
     >
-      <div className="flex items-end gap-2.5 rounded-field border border-border-strong bg-surface p-2.5 transition-colors focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/30">
+      <div className="flex flex-wrap items-end gap-2.5 rounded-field border border-border-strong bg-surface p-2.5 transition-colors focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/30">
         <Label htmlFor="ask-v2-message" className="sr-only">
-          Ask about your business finances
+          Ask about your books
         </Label>
         <textarea
           ref={inputRef}
@@ -58,7 +58,7 @@ export function AskV2Composer({ value, onChange, onSubmit, pending }: AskV2Compo
           }}
           rows={1}
           maxLength={ASK_V2_MESSAGE_MAX_LENGTH}
-          placeholder="Ask about your finances…"
+          placeholder="Ask about your books…"
           disabled={pending}
           className="min-h-[44px] max-h-[176px] min-w-0 flex-1 resize-none bg-transparent px-2 py-2.5 text-base leading-6 text-foreground placeholder:text-sm placeholder:text-subtle focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:placeholder:text-base"
         />
@@ -73,7 +73,7 @@ export function AskV2Composer({ value, onChange, onSubmit, pending }: AskV2Compo
         </Button>
       </div>
       <div className="mt-2 hidden items-center justify-between gap-4 px-1 text-xs text-subtle sm:flex">
-        <p>Every answer is computed from your verified data — LedgerAI never guesses.</p>
+        <p>Answers use your recorded transactions.</p>
         {value.trim() && !pending && (
           <p className="shrink-0">Enter to send · Shift+Enter for a new line</p>
         )}

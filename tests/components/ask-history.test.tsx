@@ -25,7 +25,7 @@ function isoDaysAgo(daysAgo: number): string {
 function conversation(overrides: Partial<ConversationSummary> & { id: string }): ConversationSummary {
   return {
     id: overrides.id,
-    title: overrides.title ?? "Profit — Last month",
+    title: overrides.title ?? "Profit · Last month",
     updatedAt: overrides.updatedAt ?? isoDaysAgo(0),
   };
 }
@@ -72,8 +72,8 @@ describe("AskHistoryList (presentational)", () => {
 
   it("splits conversations into Today / Yesterday / Earlier buckets", () => {
     const conversations = [
-      conversation({ id: "c-earlier", title: "Spending — June", updatedAt: isoDaysAgo(5) }),
-      conversation({ id: "c-yesterday", title: "Income — Yesterday", updatedAt: isoDaysAgo(1) }),
+      conversation({ id: "c-earlier", title: "Spending · June", updatedAt: isoDaysAgo(5) }),
+      conversation({ id: "c-yesterday", title: "Income · Yesterday", updatedAt: isoDaysAgo(1) }),
       conversation({ id: "c-today", title: "Balance — Today", updatedAt: isoDaysAgo(0) }),
     ];
     const { html } = render({ conversations });
@@ -82,20 +82,20 @@ describe("AskHistoryList (presentational)", () => {
     expect(html).toContain("Yesterday");
     expect(html).toContain("Earlier");
     // Items are rendered in the given (newest-first) order.
-    expect(html.indexOf("Balance — Today")).toBeLessThan(html.indexOf("Income — Yesterday"));
-    expect(html.indexOf("Income — Yesterday")).toBeLessThan(html.indexOf("Spending — June"));
+    expect(html.indexOf("Balance — Today")).toBeLessThan(html.indexOf("Income · Yesterday"));
+    expect(html.indexOf("Income · Yesterday")).toBeLessThan(html.indexOf("Spending · June"));
   });
 
   it("marks the active conversation and exposes per-item actions with labels", () => {
     const conversations = [
-      conversation({ id: "c1", title: "Profit — Last month" }),
-      conversation({ id: "c2", title: "Income — This month" }),
+      conversation({ id: "c1", title: "Profit · Last month" }),
+      conversation({ id: "c2", title: "Income · This month" }),
     ];
     const { html } = render({ conversations, activeId: "c2" });
 
     expect(html).toContain("aria-current=\"true\"");
-    expect(html).toContain('aria-label="Rename Profit — Last month"');
-    expect(html).toContain('aria-label="Delete Profit — Last month"');
+    expect(html).toContain('aria-label="Rename Profit · Last month"');
+    expect(html).toContain('aria-label="Delete Profit · Last month"');
     expect(html).toContain("Delete all conversations");
   });
 

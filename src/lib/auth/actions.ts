@@ -170,7 +170,7 @@ export async function signupAction(
     if (result.alreadyExists) {
       return {
         info:
-          "No account changes were made. If you just signed up, check your inbox for a confirmation link — if you already have an account, sign in below.",
+          "No account changes were made. If you just signed up, check your inbox for a confirmation link. If you already have an account, sign in below.",
       };
     }
     // A session means confirmation is disabled — go straight to the dashboard.

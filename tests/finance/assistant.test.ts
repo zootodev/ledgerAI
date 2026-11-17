@@ -431,7 +431,7 @@ describe("answerFromMetrics", () => {
       expect(a.kind).toBe("answer");
       // 120,000 / 413,300 = 29.03% -> 29%; 87,000 / 413,300 = 21.05% -> 21%.
       expect(a.text).toBe(
-        "Spending on rent in July 2026 was ₦120,000 — 29% of July 2026 spending. That's +43% vs the prior period (₦120,000 now vs ₦84,000 before).",
+        "Spending on rent in July 2026 was ₦120,000, 29% of July 2026 spending. That's +43% vs the prior period (₦120,000 now vs ₦84,000 before).",
       );
       expect(a.data.amount).toBe(120_000);
       expect(a.data.shareOfExpenses).toBe(29.0);
@@ -465,7 +465,7 @@ describe("answerFromMetrics", () => {
       );
       expect(a.kind).toBe("answer");
       // Share = 21%; the delta tail is a separate "+43%" relation.
-      expect(a.text).toContain("— 21% of July 2026 spending.");
+      expect(a.text).toContain(", 21% of July 2026 spending.");
       expect(a.text).toContain("+43% vs the prior period");
     });
 
@@ -645,7 +645,7 @@ describe("answerFromMetrics — Phase 15 category complement", () => {
     );
     expect(a.kind).toBe("answer");
     expect(a.text).toBe(
-      "The remaining categories were Food, Transport and Other — ₦80,000 in total, 14% of your 2026 spending.",
+      "The remaining categories were Food, Transport and Other: ₦80,000 in total, 14% of your 2026 spending.",
     );
     expect(complementData(a)).toEqual({
       kind: "aggregate",
@@ -676,7 +676,7 @@ describe("answerFromMetrics — Phase 15 category complement", () => {
     expect(a.kind).toBe("answer");
     // 7 distinct members exceed the display limit → bulk total-only narration.
     expect(a.text).toBe(
-      "Apart from Rent, your remaining spending totaled ₦480,000 — 80% of your July 2026 spending.",
+      "Apart from Rent, your remaining spending totaled ₦480,000 in total, 80% of your July 2026 spending.",
     );
     const comp = complementData(a);
     expect(comp.excludedCategory).toBe("Rent");
@@ -716,7 +716,7 @@ describe("answerFromMetrics — Phase 15 category complement", () => {
     );
     expect(a.kind).toBe("answer");
     expect(a.text).toBe(
-      "The remaining categories were Fuel — ₦20,000 in total, 3% of your 2026 spending.",
+      "The remaining categories were Fuel: ₦20,000 in total, 3% of your 2026 spending.",
     );
   });
 
@@ -747,7 +747,7 @@ describe("answerFromMetrics — Phase 15 category complement", () => {
     );
     expect(a.kind).toBe("answer");
     expect(a.text).toBe(
-      "There were no remaining categories — your 2026 spending was fully covered by the categories listed.",
+      "There were no remaining categories. Your 2026 spending was fully covered by the categories listed.",
     );
     const comp = complementData(a);
     expect(comp.categories).toEqual([]);
@@ -801,43 +801,43 @@ describe("answerFromMetrics — Phase 15 category complement", () => {
 describe("conversationTitle", () => {
   it("derives a deterministic title for each intent", () => {
     expect(conversationTitle(parse("What is my cash balance?")!)).toBe(
-      "Cash balance — This month",
+      "Cash balance · This month",
     );
     expect(conversationTitle(parse("How much income did I earn this year?")!)).toBe(
-      "Income — This year",
+      "Income · This year",
     );
     expect(conversationTitle(parse("How much did I spend last month?")!)).toBe(
-      "Spending — Last month",
+      "Spending · Last month",
     );
     expect(conversationTitle(parse("Did I make a profit?")!)).toBe(
-      "Profit — This month",
+      "Profit · This month",
     );
     expect(conversationTitle(parse("What was my top expense category?")!)).toBe(
-      "Top expense category — This month",
+      "Top expense category · This month",
     );
     expect(
       conversationTitle(parse("Which category did I spend the least on?")!),
-    ).toBe("Lowest expense category — This month");
+    ).toBe("Lowest expense category · This month");
     expect(conversationTitle(parse("How many transactions were there in June 2026?")!)).toBe(
-      "Transaction count — June 2026",
+      "Transaction count · June 2026",
     );
   });
 
   it("title-cases the category name", () => {
     expect(conversationTitle(parse("How much did I spend on software?")!)).toBe(
-      "Software spending — This month",
+      "Software spending · This month",
     );
   });
 
   it("titles a category share with the category", () => {
     expect(
       conversationTitle({ intent: "categoryShare", category: "Inventory", period: { kind: "thisYear" } }),
-    ).toBe("Inventory spending share — This year");
+    ).toBe("Inventory spending share · This year");
   });
 
   it("names the all-time window plainly", () => {
     expect(conversationTitle(parse("How much did I spend overall?")!)).toBe(
-      "Spending — All time",
+      "Spending · All time",
     );
   });
 

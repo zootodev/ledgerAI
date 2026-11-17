@@ -16,7 +16,8 @@ describe("AskV2Transcript", () => {
     const html = renderToStaticMarkup(
       <AskV2Transcript messages={[]} pending={false} onExample={vi.fn()} />,
     );
-    expect(html).toContain("Ask about your business finances.");
+    expect(html).toContain("Ask about your books");
+    expect(html).toContain("Answers use your recorded transactions.");
     for (const example of ASK_V2_SUGGESTIONS) {
       expect(html).toContain(example);
     }
@@ -44,7 +45,7 @@ describe("AskV2Transcript", () => {
     const html = renderToStaticMarkup(
       <AskV2Transcript messages={[]} pending={true} onExample={vi.fn()} />,
     );
-    expect(html).toContain("Analyzing your books…");
+    expect(html).toContain("Checking your records…");
   });
 
   it("expects example clicks to hand text to the parent composer", () => {

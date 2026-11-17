@@ -98,7 +98,7 @@ type AskV2AskInput = z.infer<typeof askV2AskInputSchema>;
 /** Stable, honest message for capabilities the engine does not yet expose. */
 function unsupportedText(reason: "not_financial" | "not_supported"): string {
   if (reason === "not_supported") {
-    return "LedgerAI can analyze your income, expenses, profit, balance, transactions, and spending by category — but cannot search raw transaction text in this phase.";
+    return "LedgerAI can analyse your income, expenses, profit, balance, transactions, and spending by category, but cannot search raw transaction text in this phase.";
   }
   return UNSUPPORTED_ANSWER;
 }
@@ -293,7 +293,7 @@ export async function askV2Ask(input: AskV2AskInput): Promise<AskV2Response> {
     return {
       disposition: "unsupported",
       reason: "not_financial",
-      text: "LedgerAI could not read that request — try rephrasing it.",
+      text: "LedgerAI could not read that request. Try rephrasing it.",
       conversationId: null,
     };
   }
@@ -619,7 +619,7 @@ export async function askV2Turn(input: AskV2Request): Promise<AskV2Response> {
     return {
       disposition: "unsupported",
       reason: "not_financial",
-      text: "LedgerAI could not read that request — try rephrasing it.",
+      text: "LedgerAI could not read that request. Try rephrasing it.",
       conversationId: null,
     };
   }

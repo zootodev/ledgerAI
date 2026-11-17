@@ -67,14 +67,14 @@ beforeEach(() => {
 describe("listConversations", () => {
   it("lists the business's conversations newest first", async () => {
     mockConversations.findMany.mockResolvedValueOnce([
-      { id: "c2", title: "Profit — Last month", updatedAt: new Date("2026-08-10T10:00:00.000Z") },
-      { id: "c1", title: "Income — This month", updatedAt: new Date("2026-08-01T10:00:00.000Z") },
+      { id: "c2", title: "Profit · Last month", updatedAt: new Date("2026-08-10T10:00:00.000Z") },
+      { id: "c1", title: "Income · This month", updatedAt: new Date("2026-08-01T10:00:00.000Z") },
     ]);
 
     const result = await listConversations();
     expect(result).toEqual([
-      { id: "c2", title: "Profit — Last month", updatedAt: "2026-08-10T10:00:00.000Z" },
-      { id: "c1", title: "Income — This month", updatedAt: "2026-08-01T10:00:00.000Z" },
+      { id: "c2", title: "Profit · Last month", updatedAt: "2026-08-10T10:00:00.000Z" },
+      { id: "c1", title: "Income · This month", updatedAt: "2026-08-01T10:00:00.000Z" },
     ]);
 
     const [args] = mockConversations.findMany.mock.calls[0];
@@ -87,7 +87,7 @@ describe("getConversationWithMessages", () => {
   it("returns the transcript ordered oldest-first", async () => {
     mockConversations.findFirst.mockResolvedValueOnce({
       id: "c1",
-      title: "Income — This month",
+      title: "Income · This month",
     });
     mockMessages.findMany.mockResolvedValueOnce([
       { id: "m1", role: "user", content: "How much income?", createdAt: new Date("2026-08-01T08:00:00.000Z") },
@@ -97,7 +97,7 @@ describe("getConversationWithMessages", () => {
     const result = await getConversationWithMessages("c1");
     expect(result).toEqual({
       id: "c1",
-      title: "Income — This month",
+      title: "Income · This month",
       messages: [
         { id: "m1", role: "user", content: "How much income?", createdAt: "2026-08-01T08:00:00.000Z" },
         { id: "m2", role: "assistant", content: "Income was ₦1,000,000.", createdAt: "2026-08-01T08:00:01.000Z" },
@@ -171,7 +171,7 @@ describe("deleteAllConversations", () => {
 
 describe("persistAssistantExchange", () => {
   it("creates a conversation and two messages atomically for a fresh chat", async () => {
-    mockConversations.create.mockResolvedValueOnce({ id: "c-new", title: "Profit — Last month" });
+    mockConversations.create.mockResolvedValueOnce({ id: "c-new", title: "Profit · Last month" });
     mockMessages.create.mockResolvedValueOnce({ id: "m-user" });
     mockMessages.create.mockResolvedValueOnce({ id: "m-assistant" });
     mockConversations.update.mockResolvedValueOnce({});
@@ -180,7 +180,7 @@ describe("persistAssistantExchange", () => {
       mockPrisma as never,
       businessA.id,
       null,
-      "Profit — Last month",
+      "Profit · Last month",
       "Did I make a profit?",
       "Net profit was ₦400,000.",
     );
@@ -193,7 +193,7 @@ describe("persistAssistantExchange", () => {
     });
 
     expect(mockConversations.create).toHaveBeenCalledWith({
-      data: { businessId: businessA.id, title: "Profit — Last month" },
+      data: { businessId: businessA.id, title: "Profit · Last month" },
       select: { id: true, title: true },
     });
     // Both messages land on the SAME conversation.
@@ -208,14 +208,14 @@ describe("persistAssistantExchange", () => {
     // Ordering touch bump.
     expect(mockConversations.update).toHaveBeenCalledWith({
       where: { id: "c-new" },
-      data: { title: "Profit — Last month" },
+      data: { title: "Profit · Last month" },
     });
     // One transaction covers the whole exchange — no partial writes.
     expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it("continues an existing owned conversation", async () => {
-    mockConversations.findFirst.mockResolvedValueOnce({ id: "c1", title: "Profit — Last month" });
+    mockConversations.findFirst.mockResolvedValueOnce({ id: "c1", title: "Profit · Last month" });
     mockMessages.create.mockResolvedValueOnce({ id: "m-user" });
     mockMessages.create.mockResolvedValueOnce({ id: "m-assistant" });
     mockConversations.update.mockResolvedValueOnce({});
@@ -224,7 +224,7 @@ describe("persistAssistantExchange", () => {
       mockPrisma as never,
       businessA.id,
       "c1",
-      "Profit — Last month",
+      "Profit · Last month",
       "And last month?",
       "Net profit in July was ₦300,000.",
     );
@@ -252,7 +252,7 @@ describe("persistAssistantExchange", () => {
         mockPrisma as never,
         businessA.id,
         "c-foreign",
-        "Spending — This month",
+        "Spending · This month",
         "Spending?",
         "Spending was ₦500,000.",
       ),
@@ -263,7 +263,7 @@ describe("persistAssistantExchange", () => {
   });
 
   it("serializes the conversation through one transaction even for continues", async () => {
-    mockConversations.findFirst.mockResolvedValueOnce({ id: "c1", title: "Spending — This month" });
+    mockConversations.findFirst.mockResolvedValueOnce({ id: "c1", title: "Spending · This month" });
     mockMessages.create.mockResolvedValueOnce({ id: "m-user" });
     mockMessages.create.mockResolvedValueOnce({ id: "m-assistant" });
     mockConversations.update.mockResolvedValueOnce({});
@@ -272,7 +272,7 @@ describe("persistAssistantExchange", () => {
       mockPrisma as never,
       businessA.id,
       "c1",
-      "Spending — This month",
+      "Spending · This month",
       "Spending?",
       "Spending was ₦500,000.",
     );

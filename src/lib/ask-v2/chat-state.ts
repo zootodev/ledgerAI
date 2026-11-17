@@ -139,13 +139,13 @@ export function isAuthError(error: unknown): boolean {
 
 /** Safe, non-internal copy shown when the server action itself fails. */
 export const ASK_V2_GENERIC_ERROR_TEXT =
-  "Sorry — I couldn't look into that right now. Please try again.";
+  "We couldn't check your books just now. Try again.";
 
 /** Example prompts. Pure examples: filling them in still sends through the
  * server pipeline on submit — the browser never interprets or answers. */
 export const ASK_V2_SUGGESTIONS: readonly string[] = [
-  "What did I spend last month?",
-  "What was my biggest expense category?",
+  "What did I spend last week?",
+  "What was my biggest expense?",
   "How does this month compare with last month?",
-  "Show me my recent spending.",
+  "What was my income last month?",
 ];

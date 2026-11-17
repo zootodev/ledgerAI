@@ -164,7 +164,7 @@ function deriveKeyInsight(input: InsightsInput): DerivedInsight | null {
   return {
     kind: "key",
     title: "Period snapshot",
-    description: `Revenue ${money(summary.revenue)} against expenses ${money(summary.expenses)} — ${marginNote}${revDelta !== null ? ` (${formatSignedPercent(revDelta)} vs prior period)` : ""}.`,
+    description: `Revenue ${money(summary.revenue)} against expenses ${money(summary.expenses)}. ${marginNote}${revDelta !== null ? ` (${formatSignedPercent(revDelta)} vs prior period)` : ""}.`,
     metadata: {
       revenue: summary.revenue,
       expenses: summary.expenses,

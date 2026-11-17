@@ -128,7 +128,7 @@ describe("askAssistant (server action)", () => {
     mockAskAssistantQuestion.mockRejectedValue(new Error("db exploded"));
     const result = await askAssistant("How much income?");
     expect(result.kind).toBe("error");
-    expect(result.text).toContain("try again");
+    expect(result.text).toContain("Try again");
     expect("conversationGone" in result ? result.conversationGone : undefined).toBeUndefined();
   });
 
@@ -168,12 +168,12 @@ describe("askAssistant (server action)", () => {
 describe("conversation list/get actions", () => {
   it("lists conversations newest first", async () => {
     mockListConversations.mockResolvedValue([
-      { id: "c2", title: "Profit — Last month", updatedAt: new Date().toISOString() },
+      { id: "c2", title: "Profit · Last month", updatedAt: new Date().toISOString() },
     ]);
     const result = await listConversationsAction();
     expect(result).toEqual({
       ok: true,
-      conversations: [{ id: "c2", title: "Profit — Last month", updatedAt: expect.any(String) }],
+      conversations: [{ id: "c2", title: "Profit · Last month", updatedAt: expect.any(String) }],
     });
   });
 
@@ -191,7 +191,7 @@ describe("conversation list/get actions", () => {
   it("returns a full transcript for an owned conversation", async () => {
     mockGetConversation.mockResolvedValue({
       id: "c1",
-      title: "Income — This month",
+      title: "Income · This month",
       messages: [
         { id: "m1", role: "user", content: "How much income?", createdAt: "2026-08-01T08:00:00.000Z" },
         { id: "m2", role: "assistant", content: "Income was ₦1,000,000.", createdAt: "2026-08-01T08:00:01.000Z" },

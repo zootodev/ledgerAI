@@ -87,14 +87,14 @@ export function AskV2Chat({
     <AppShell
       onSignOut={onSignOut}
       header={{
-        title: "Ask LedgerAI (v2)",
+        title: "Ask",
         user: userName ? { name: userName, email: userEmail } : null,
       }}
     >
       <div className="mx-auto flex min-w-0 max-w-3xl flex-col gap-5 xl:h-[calc(100dvh-6.5rem)] xl:min-h-[30rem]">
         <div className="flex shrink-0 items-center justify-between gap-2">
           <p className="min-w-0 truncate text-sm text-muted">
-            Ask questions about your business finances · {businessName} · {currency}
+            {businessName} · {currency}
           </p>
           <Button
             variant="outline"
