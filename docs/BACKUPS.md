@@ -89,7 +89,7 @@ you can recover it later with
 
 | Secret | Value |
 | --- | --- |
-| `DIRECT_URL` | Supabase **session pooler** connection string, **port 5432** (*Connect → Session pooler*), or the direct database connection. This is the same value the app uses for `prisma migrate`/`db`. Append `?sslmode=require` if it is not already there. |
+| `DIRECT_URL` | Supabase **session pooler** connection string, **port 5432** (*Connect → Session pooler*), or the direct database connection. This is the same value the app uses for `prisma migrate`/`db`. The workflow adds `sslmode=require` automatically if it is missing. |
 | `BACKUP_AGE_RECIPIENT` | The `age1…` public key from step (a). |
 
 Notes:
@@ -99,7 +99,10 @@ Notes:
   transaction pooler rejects. The app's runtime `DATABASE_URL` is normally the
   transaction pooler, so it is not a substitute here.
 - The URL is passed to each step through an environment variable and is never
-  echoed, so it does not appear in the logs.
+  echoed, so it does not appear in the logs. Each step runs the value through
+  `.github/scripts/normalize-direct-url.sh` first: it trims spaces/newlines,
+  removes one pair of wrapping quotes and a leading `DIRECT_URL=`, rejects
+  non-PostgreSQL URLs and port 6543, and adds `sslmode=require` when absent.
 - Consider a dedicated role for backups. The default `postgres` role works and
   can read both dumped schemas, but a narrower role limits what a leaked secret
   could do.
@@ -281,7 +284,9 @@ the application's own configuration.
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `pg_dump: error: server version: 18.x; pg_dump version: 17.x` | Server was upgraded | Bump `PG_CLIENT_MAJOR` in the workflow |
-| `The DIRECT_URL secret is not set` | Secret missing/renamed | Add it per §2b |
+| `could not translate host name`, `connection timed out`, or another socket error from `psql`/`pg_dump` | Malformed secret (quotes, newlines, a `DIRECT_URL=` prefix, or the wrong scheme), or the transaction pooler was used | Re-paste the bare session-pooler URL per §2b. The workflow now validates it before connecting and fails with a specific message instead. |
+| `::error::DIRECT_URL is not a postgresql:// URL. Re-paste it without quotes.` | Secret contains quotes, a `DIRECT_URL=` prefix, stray whitespace/newlines, or is missing | Re-paste only the `postgresql://…` (or `postgres://…`) URL as the secret value, with no quotes or label. |
+| `::error::DIRECT_URL points at the transaction pooler (6543). Backups need the session pooler (5432) or the direct connection.` | The transaction-pooler connection string was pasted into `DIRECT_URL` | Use *Connect → Session pooler* (port 5432) or the direct connection. The app's runtime transaction-pooler URL is not a substitute. |
 | `The BACKUP_AGE_RECIPIENT secret is not set` | Secret missing/renamed | Add the `age1…` public key |
 | `checksum did not match` | Corrupted or substituted age download | Re-run; if it persists, check the pinned values against the age release page |
 | `permission denied for table …` while dumping `auth` | Role cannot read the auth schema | Use a role that can, or drop `--schema=auth` (accepting that auth data is then not backed up) |

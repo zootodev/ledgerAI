@@ -30,7 +30,7 @@ concurrency:
 jobs:
   backup:
     name: Dump public + auth, encrypt, upload
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       # Pinned age release (https://github.com/FiloSottile/age). The checksum is
@@ -80,14 +80,14 @@ jobs:
       # features pg_dump needs.
       - name: Check the client matches the server
         env:
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DIRECT_URL_RAW: ${{ secrets.DIRECT_URL }}
         run: |
           set -euo pipefail
-          if [ -z "${DIRECT_URL:-}" ]; then
-            echo "::error::The DIRECT_URL secret is not set. See docs/BACKUPS.md."
-            exit 1
-          fi
-          # The URL is used, never printed.
+          # Normalise and validate the secret through the shared helper. The
+          # URL is used, never printed.
+          # shellcheck disable=SC1091
+          . .github/scripts/normalize-direct-url.sh
+          normalize_direct_url
           server_version="$(psql --no-password -At -c "select current_setting('server_version')" "$DIRECT_URL")"
           server_major="${server_version%%.*}"
           client_major="$(pg_dump --version | sed -E 's/^.* ([0-9]+)\..*$/\1/')"
@@ -99,9 +99,12 @@ jobs:
 
       - name: Dump the database
         env:
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DIRECT_URL_RAW: ${{ secrets.DIRECT_URL }}
         run: |
           set -euo pipefail
+          # shellcheck disable=SC1091
+          . .github/scripts/normalize-direct-url.sh
+          normalize_direct_url
           # public = the application's Prisma schema and RLS policies,
           # auth = Supabase's user/identity tables. No roles: pg_dump never
           # dumps cluster roles (that is pg_dumpall), and --no-owner
@@ -117,9 +120,12 @@ jobs:
 
       - name: Write a schema-only SQL reference file
         env:
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DIRECT_URL_RAW: ${{ secrets.DIRECT_URL }}
         run: |
           set -euo pipefail
+          # shellcheck disable=SC1091
+          . .github/scripts/normalize-direct-url.sh
+          normalize_direct_url
           # Plain text, roles-free, for eyeballing/review. It is deleted with
           # the dump below and never uploaded.
           pg_dump "$DIRECT_URL" \
