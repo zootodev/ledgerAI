@@ -15,7 +15,7 @@ export default function NotFound() {
       <div className="mx-auto w-full max-w-md">
         <p className="text-xs font-medium tabular-nums text-muted">404</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-          Page not found
+          Page not found | LedgerAI
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-secondary">
           The address is wrong or the page has moved. Check the link, or go back

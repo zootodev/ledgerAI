@@ -755,22 +755,39 @@ export function ImportWizard({
                   </>
                 ) : (
                   <>
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
-                      <UploadCloud className="h-6 w-6" aria-hidden="true" />
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          inputRef.current?.click();
+                        }
+                      }}
+                      className={`flex flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed border-border-strong bg-surface-subtle/30 px-6 py-12 text-center transition-colors cursor-pointer ${
+                        working
+                          ? "opacity-80"
+                          : "hover:border-brand/50 hover:bg-brand-soft/20"
+                      }`}
+                    >
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+                        <UploadCloud className="h-6 w-6" aria-hidden="true" />
+                      </div>
+                      <p className="font-medium text-foreground">
+                        Drop a statement file here
+                      </p>
+                      <p className="text-sm text-muted">
+                        Statements from Moniepoint, OPay, Kuda, GTBank, Access and
+                        similar exports work best. Column names are detected
+                        automatically and can be corrected next.
+                      </p>
                     </div>
-                    <p className="font-medium text-foreground">
-                      Drop a statement file here
-                    </p>
-                    <p className="text-sm text-muted">
-                      Statements from Moniepoint, OPay, Kuda, GTBank, Access and
-                      similar exports work best. Column names are detected
-                      automatically and can be corrected next.
-                    </p>
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => inputRef.current?.click()}
                       leftIcon={<FileUp className="h-4 w-4" aria-hidden="true" />}
+                      className="mt-2"
                     >
                       Browse files
                     </Button>

@@ -8,6 +8,7 @@ import { listAccounts } from "@/lib/services";
 import { reportPeriodLabel } from "@/lib/services/reports";
 import { analyticsQuerySchema, type AnalyticsQuery } from "@/lib/validation/index";
 import { resolveAccountScope, urlWithoutAccountId } from "@/lib/validation/account-scope";
+import { startOfMonth, startOfQuarter, startOfYear, subDays, format } from "date-fns";
 import { AnalyticsRangeControl } from "@/components/dashboard/analytics-range-control";
 import { ReportsView } from "@/components/reports/reports-view";
 import { ReportsAccountFilter } from "@/components/reports/reports-account-filter";
@@ -91,8 +92,33 @@ function singleParam(value: string | string[] | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+/** Map a preset id to its dateFrom/dateTo, or return undefined for "all". */
+function presetToRange(preset: string | undefined): { dateFrom: string | undefined; dateTo: string | undefined } {
+  const today = new Date();
+  if (preset === "all" || !preset) return { dateFrom: undefined, dateTo: undefined };
+  // Map preset id to from/to dates using format for ISO strings
+  const presetMap: Record<string, { dateFrom: string; dateTo: string }> = {
+    "last7": { dateFrom: format(subDays(today, 6), "yyyy-MM-dd"), dateTo: format(today, "yyyy-MM-dd") },
+    "last30": { dateFrom: format(subDays(today, 29), "yyyy-MM-dd"), dateTo: format(today, "yyyy-MM-dd") },
+    "last90": { dateFrom: format(subDays(today, 89), "yyyy-MM-dd"), dateTo: format(today, "yyyy-MM-dd") },
+    "month": { dateFrom: format(startOfMonth(today), "yyyy-MM-dd"), dateTo: format(today, "yyyy-MM-dd") },
+    "quarter": { dateFrom: format(startOfQuarter(today), "yyyy-MM-dd"), dateTo: format(today, "yyyy-MM-dd") },
+    "year": { dateFrom: format(startOfYear(today), "yyyy-MM-dd"), dateTo: format(today, "yyyy-MM-dd") },
+  };
+  const mapped = presetMap[preset as string];
+  return { dateFrom: mapped?.dateFrom, dateTo: mapped?.dateTo };
+}
+
 /** Validate/normalize the page range once. Invalid/missing ranges fall back to all time. */
 function parseReportRange(search: ReportsSearchParams): AnalyticsQuery | undefined {
+  // Read explicit preset first (e.g. ?preset=last30), then fall back to from/to.
+  const preset = singleParam(search.preset);
+  if (preset) {
+    const { dateFrom, dateTo } = presetToRange(preset);
+    const parsed = analyticsQuerySchema.safeParse({ dateFrom, dateTo });
+    if (parsed.success) return parsed.data;
+    return undefined;
+  }
   const parsed = analyticsQuerySchema.safeParse({
     dateFrom: singleParam(search.from),
     dateTo: singleParam(search.to),
