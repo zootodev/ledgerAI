@@ -15,6 +15,7 @@ import {
   earliestAmrTimestampMs,
   LAST_SEEN_COOKIE,
   lastSeenCookieOptions,
+  lastSeenForSession,
   resolveSessionLimits,
   sessionExpiryReason,
   shouldRefreshLastSeen,
@@ -241,12 +242,16 @@ export async function proxy(request: NextRequest) {
 
     if (limits.secret) {
       const cookieValue = request.cookies.get(LAST_SEEN_COOKIE)?.value;
-      lastSeenAt = cookieValue
-        ? await verifyLastSeen(limits.secret, user.id, cookieValue)
-        : null;
+      lastSeenAt = lastSeenForSession(
+        cookieValue
+          ? await verifyLastSeen(limits.secret, user.id, cookieValue)
+          : null,
+        signedInAt,
+      );
 
       if (lastSeenAt === null) {
-        // Missing/tampered cookies count as activity now, once. The freshly
+        // Missing, tampered or previous-session cookies count as activity
+        // now, once. The freshly
         // written cookie is enforced from the next request onward.
         lastSeenAt = now;
         lastSeenRefreshAt = now;

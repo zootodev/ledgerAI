@@ -26,6 +26,7 @@ import {
   DEFAULT_SESSION_IDLE_MINUTES,
   DEFAULT_SESSION_MAX_AGE_HOURS,
   LAST_SEEN_COOKIE,
+  lastSeenForSession,
   resolveSessionLimits,
   signLastSeen,
   verifyLastSeen,
@@ -333,5 +334,60 @@ describe("proxy() session limits", () => {
     expect(mocks.signOut).not.toHaveBeenCalled();
     expect(mocks.redirect).not.toHaveBeenCalled();
     expect(mocks.next).toHaveBeenCalled();
+  });
+});
+
+describe("fresh sign-in is never treated as expired", () => {
+  it("ignores a last-seen value from before the current sign-in", () => {
+    const signedInAt = NOW - 60 * 1000;
+    expect(lastSeenForSession(NOW - 3 * HOUR, signedInAt)).toBeNull();
+    expect(lastSeenForSession(NOW - 30 * 1000, signedInAt)).toBe(NOW - 30 * 1000);
+    expect(lastSeenForSession(NOW - 3 * HOUR, null)).toBe(NOW - 3 * HOUR);
+    expect(lastSeenForSession(null, signedInAt)).toBeNull();
+  });
+
+  it("lands on /overview when a stale last-seen cookie survives a fresh sign-in", async () => {
+    // Cookie left over from a session that ended three hours ago, same user.
+    const stale = await signLastSeen(SECRET, "u-1", NOW - 3 * HOUR);
+    mocks.getClaims.mockResolvedValue(claimsAt(NOW - 5 * 1000));
+
+    await proxy(requestFor("/overview", { [LAST_SEEN_COOKIE]: stale }));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.signOut).not.toHaveBeenCalled();
+    const write = lastResponse?.cookies.set.mock.calls.find(
+      ([name]) => name === LAST_SEEN_COOKIE,
+    );
+    expect(write).toBeDefined();
+    await expect(verifyLastSeen(SECRET, "u-1", write?.[1] ?? "")).resolves.toBe(NOW);
+  });
+
+  it("does not absolute-expire a fresh sign-in", async () => {
+    mocks.getClaims.mockResolvedValue({
+      data: {
+        claims: {
+          amr: [
+            { method: "password", timestamp: Math.floor((NOW - 2000) / 1000) },
+            { method: "totp", timestamp: Math.floor((NOW - 1000) / 1000) },
+          ],
+          iat: Math.floor((NOW - 1000) / 1000),
+        },
+      },
+      error: null,
+    });
+
+    await proxy(requestFor("/overview"));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.signOut).not.toHaveBeenCalled();
+  });
+
+  it("still enforces idle expiry for a cookie written during this session", async () => {
+    mocks.getClaims.mockResolvedValue(claimsAt(NOW - 2 * HOUR));
+    const lastSeen = await signLastSeen(SECRET, "u-1", NOW - 31 * 60 * 1000);
+
+    await proxy(requestFor("/overview", { [LAST_SEEN_COOKIE]: lastSeen }));
+
+    expect(lastRedirect?.url.toString()).toContain("expiry=idle");
   });
 });

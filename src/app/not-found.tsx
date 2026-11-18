@@ -1,5 +1,5 @@
 import Link from "next/link";
-export const metadata = { title: "Page not found | LedgerAI" };
+export const metadata = { title: "Page not found" };
 
 /**
  * Branded 404.

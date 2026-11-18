@@ -20,6 +20,7 @@ import {
 } from "@/lib/services/mfa";
 import { deleteUserAccount } from "@/lib/services/account";
 import { getCurrentUser } from "@/lib/auth/server";
+import { clearLastSeenCookie } from "@/lib/auth/last-seen-cookie";
 import { resolvePostAuthRedirect } from "@/lib/auth/redirect";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
 import {
@@ -98,6 +99,8 @@ export async function loginAction(
       }
     } else {
       mfaRequired = Boolean(result.mfaRequired);
+      // A fresh sign-in starts a fresh idle window.
+      await clearLastSeenCookie();
     }
   } catch (e) {
     return {
@@ -192,6 +195,7 @@ export async function signupAction(
 
 export async function signOutAction(): Promise<void> {
   await signOut();
+  await clearLastSeenCookie();
   redirect("/login");
 }
 

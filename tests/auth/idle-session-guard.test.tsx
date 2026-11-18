@@ -76,6 +76,17 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("first mount", () => {
+  it("does not time out right after start", () => {
+    const h = harness();
+    h.controller.start();
+    vi.advanceTimersByTime(1000);
+    expect(h.timeout).not.toHaveBeenCalled();
+    expect(h.latest()?.warningOpen).toBe(false);
+    h.controller.stop();
+  });
+});
+
 describe("IdleSessionGuard", () => {
   it("uses the agreed warning and action copy", () => {
     expect(IDLE_WARNING_COPY).toBe(

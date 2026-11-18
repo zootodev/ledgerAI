@@ -76,7 +76,9 @@ export default async function LoginPage({
   const sessionExpiredMessage =
     expiry === "absolute"
       ? `You were signed out after ${maxAgeHours} hours. Please sign in again.`
-      : `You were signed out after ${idleMinutes} minutes of inactivity. Please sign in again.`;
+      : expiry === "idle"
+        ? `You were signed out after ${idleMinutes} minutes of inactivity. Please sign in again.`
+        : "Your session ended. Please sign in again.";
 
   return (
     <>
