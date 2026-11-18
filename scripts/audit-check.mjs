@@ -1,66 +1,66 @@
 #!/usr/bin/env node
 /**
- * Temporary audit allowlist script.
- * Runs `npm audit --omit=dev --json`, ignores GHSA-fc5q-39xc-vjpf (picomatch ReDoS,
- * no upstream patch as of 2026-11-18, build-time only) until a real fix is available.
+ * Production dependency audit with a temporary allowlist.
+ * Reads npm v7+ audit JSON (the "vulnerabilities" object).
+ * Fails on any high/critical advisory not in ALLOWLIST.
+ * Temp test: remove GHSA-FC5Q-39XC-VJPF from ALLOWLIST to verify failure.
  */
+import { spawnSync } from "node:child_process";
 
-import { execSync } from "child_process";
+const ALLOWLIST = new Set([
+  // picomatch ReDoS, no upstream patch as of 2026-11-18, build-time only (via @sentry/nextjs). Remove once fixed.
+  "GHSA-FC5Q-39XC-VJPF",
+]);
 
-// --- Allowlist ---
-const ALLOWLIST = [
-  "GHSA-fc5q-39xc-vjpf", // picomatch ReDoS, no upstream patch as of 2026-11-18, build-time only, remove once fixed
-];
+const run = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
+  encoding: "utf8",
+  shell: process.platform === "win32",
+});
 
-// --- Run audit ---
-let stdout, stderr;
+let report;
 try {
-  stdout = execSync("npm audit --omit=dev --json", { encoding: "utf8" });
-} catch (e) {
-  stdout = e.stdout || "";
-  stderr = e.stderr || "";
-}
-
-// Parse JSON output (npm audit --json outputs a JSON object on success, or error data)
-let auditData;
-try {
-  auditData = JSON.parse(stdout);
+  report = JSON.parse(run.stdout);
 } catch {
-  console.error("❌ Failed to parse npm audit JSON output");
-  console.error("stdout:", stdout.substring(0, 500));
-  console.error("stderr:", stderr.substring(0, 500));
+  console.error("Audit check failed: could not parse npm audit output.");
   process.exit(1);
 }
 
-// Collect high/critical vulnerabilities
-const vulnerabilities = auditData.advisories || [];
-const highCritical = [];
-
-for (const [id, details] of Object.entries(vulnerabilities)) {
-  const severity = (details.severity || "").toLowerCase();
-  if (severity === "high" || severity === "critical") {
-    highCritical.push({ id, ...details });
-  }
-}
-
-// Check each high/critical advisory against allowlist
-let failed = false;
-for (const vuln of highCritical) {
-  const advisoryId = vuln.id;
-  if (ALLOWLIST.includes(advisoryId)) {
-    // allowlisted — skip
-    continue;
-  }
-  // Not allowlisted — fail
-  failed = true;
-  console.error(`❌ High/Critical advisory not allowlisted: ${advisoryId}`);
-  console.error(`   URL: ${vuln.url || "unknown"}`);
-}
-
-// Report result
-if (failed) {
+// npm 7+ format: report.vulnerabilities is an object keyed by package name
+const vulnsByPkg = report.vulnerabilities;
+if (!vulnsByPkg || typeof vulnsByPkg !== "object") {
+  console.error("Audit check failed: no vulnerabilities object in npm audit output.");
   process.exit(1);
-} else {
-  console.log(`✅ OK — all high/critical advisories allowlisted (${ALLOWLIST.length} entry${ALLOWLIST.length > 1 ? "s" : ""})`);
-  process.exit(0);
 }
+
+const blocking = [];
+
+for (const [pkg, info] of Object.entries(vulnsByPkg)) {
+  const entries = info.via ?? [];
+  for (const v of entries) {
+    const severity = String(v.severity ?? "").toLowerCase();
+    if (severity !== "high" && severity !== "critical") continue;
+
+    // Extract GHSA ID from the url
+    const url = v.url ?? "";
+    const ghsaMatch = url.match(/GHSA-[0-9a-z-]+/i);
+    if (!ghsaMatch) continue;
+    const ghsaId = ghsaMatch[0].toUpperCase();
+
+    if (ALLOWLIST.has(ghsaId)) continue;
+
+    const title = v.title ?? "unknown";
+    blocking.push({ severity, pkg, title, ghsaId });
+  }
+}
+
+if (blocking.length > 0) {
+  console.error("Audit check failed: " + blocking.length + " high/critical advisory(ies) not allowlisted:");
+  for (const b of blocking) {
+    console.error(`  - ${b.severity} ${b.pkg}: ${b.title} (${b.ghsaId})`);
+  }
+  process.exit(1);
+}
+
+const note = "";
+console.log("Audit OK: no blocking high/critical advisories" + note);
+process.exit(0);
