@@ -288,7 +288,7 @@ export function IdleSessionGuard({ idleMs }: IdleSessionGuardProps) {
   }, []);
 
   const handleTimeout = React.useCallback(() => {
-    router.replace("/login?reason=session_expired");
+    router.replace("/login?reason=session_expired&expiry=idle");
   }, [router]);
 
   const handleSignOut = React.useCallback(() => {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clearLastSeenCookie } from "@/lib/auth/last-seen-cookie";
 import { getAppBaseUrl } from "@/lib/auth/app-url";
 import { parseEmailOtpType } from "@/lib/auth/email-otp";
 import { resolvePostVerificationTarget } from "@/lib/auth/post-auth";
@@ -70,6 +71,9 @@ export async function GET(request: Request) {
   if (error) {
     return NextResponse.redirect(linkError("auth_failed"));
   }
+
+  // A fresh session starts a fresh idle window.
+  await clearLastSeenCookie();
 
   const target = await resolvePostVerificationTarget(rawNext, baseUrl, {
     user: data.user,

@@ -131,6 +131,22 @@ export function sessionExpiryReason(input: {
   return null;
 }
 
+/**
+ * A last-seen value written before the current session's sign-in belongs to
+ * an earlier session (the cookie survives a normal sign-out and lives for the
+ * absolute window). It must never count as idle time for a fresh sign-in, so
+ * treat it as missing. `signedInAt` has one-second resolution (amr timestamps
+ * are whole seconds), so compare against the start of that second.
+ */
+export function lastSeenForSession(
+  lastSeenAt: number | null,
+  signedInAt: number | null,
+): number | null {
+  if (lastSeenAt === null) return null;
+  if (signedInAt !== null && lastSeenAt < signedInAt) return null;
+  return lastSeenAt;
+}
+
 export function shouldRefreshLastSeen(
   lastSeenAt: number,
   now: number,

@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   // Ask is opt-in and disabled by default; when off the surface 404s with a
   // title that matches the global 404 page so bookmarks don't show a mismatched
   // product name in browser tabs.
-  title: "Page not found | LedgerAI",
+  title: "Page not found",
   robots: { index: false, follow: false },
 };
 

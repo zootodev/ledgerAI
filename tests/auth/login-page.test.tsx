@@ -109,8 +109,19 @@ describe("login page", () => {
     expect(html).toContain("Email sign-in isn&#x27;t available right now");
   });
 
-  it("explains an idle session-expired sign-out", async () => {
+  it("shows a generic message when the expiry kind is unknown", async () => {
     const html = await render(undefined, { reason: "session_expired" });
+
+    expect(html).toContain("Signed out for security");
+    expect(html).toContain("Your session ended. Please sign in again.");
+    expect(html).not.toContain("minutes of inactivity");
+  });
+
+  it("explains an idle session-expired sign-out", async () => {
+    const html = await render(undefined, {
+      reason: "session_expired",
+      expiry: "idle",
+    });
 
     expect(html).toContain("Signed out for security");
     expect(html).toContain(
