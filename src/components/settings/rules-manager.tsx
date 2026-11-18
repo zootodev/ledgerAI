@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { deleteCategoryRuleAction } from "@/lib/actions/rules";
 import type { CategoryRuleDto } from "@/types";
 import { countPhrase } from "@/lib/utils/pluralise";
+import { formatIsoDate } from "@/lib/utils/dates"; 
 
 export interface RulesManagerProps {
   rules: CategoryRuleDto[];

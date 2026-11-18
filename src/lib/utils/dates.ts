@@ -1,5 +1,7 @@
 /** Date display helpers. Stored values stay ISO; only presentation changes. */
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 const DATE_FORMAT = new Intl.DateTimeFormat("en-NG", {
   day: "numeric",
   month: "short",
@@ -15,8 +17,6 @@ const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-NG", {
   minute: "2-digit",
 });
 
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
-
 /** "2026-10-01" -> "1 Oct 2026". Invalid values pass through unchanged. */
 export function formatIsoDate(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -29,6 +29,14 @@ export function formatIsoDate(iso: string | null | undefined): string {
 export function formatIsoDateTime(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : DATE_TIME_FORMAT.format(date);
+}
+
+/** "Sep 2026" for chart axes. */
+export function formatIsoMonth(iso: string | null | undefined): string {
+  if (!iso) return "";
+  if (!ISO_DAY.test(iso)) return iso;
+  const date = new Date(`${iso}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? iso : DATE_FORMAT.format(date).replace(/^\d+ /, "");
 }
 
 /** ISO day for a text input: "2026-10-01" -> "01/10/2026". */
