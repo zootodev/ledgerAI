@@ -19,21 +19,21 @@ export default function NotFound() {
           Page not found
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-secondary">
-          The address is wrong or the page has moved. Check the link, or go back
-          to your overview.
+          The address is wrong or the page has moved. Check the link, or go
+          back to the home page.
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Link
-            href="/overview"
+            href="/"
             className="inline-flex h-10 items-center gap-2 rounded-button bg-brand px-4 text-sm font-medium text-on-accent transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
           >
-            Go to overview
+            Back to home
           </Link>
           <Link
-            href="/"
+            href="/overview"
             className="inline-flex h-10 items-center gap-2 rounded-button border border-border-strong bg-surface px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
           >
-            Back to home
+            Go to overview
           </Link>
         </div>
         <p className="mt-6 text-sm text-muted">

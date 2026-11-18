@@ -190,7 +190,7 @@ export function SecuritySettings({ mfaEnabled, factorName }: SecuritySettingsPro
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <LogOut className="h-4 w-4 text-brand" aria-hidden="true" />
-            Active sessions
+            Sign out everywhere
           </CardTitle>
           <CardDescription>
             Signed in somewhere you don&apos;t recognise, or on a shared device?

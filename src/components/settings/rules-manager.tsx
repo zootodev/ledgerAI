@@ -71,7 +71,7 @@ export function RulesManager({ rules }: RulesManagerProps) {
                         {rule.categoryName || "Uncategorised"}
                       </Badge>
                       <span className="text-xs tabular-nums text-muted">
-                        {rule.createdAt.slice(0, 10)}
+                        {formatIsoDate(rule.createdAt)}
                       </span>
                       <Button
                         variant="ghost"

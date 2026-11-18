@@ -227,7 +227,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section id="security" className="border-b border-border">
+        <section id="security" className="border-b border-border scroll-mt-20">
           <div className={`${section} grid gap-8 py-12 sm:py-14 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16`}>
             <h2 className={heading}>Your statements stay yours.</h2>
             <div className="max-w-2xl space-y-4 text-[15px] leading-7 text-secondary">

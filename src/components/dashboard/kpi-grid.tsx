@@ -38,7 +38,7 @@ export interface KpiGridProps {
  *   compute a percentage from, but the activity is genuinely new.
  * - otherwise the signed percentage ("+12%", "-3%").
  */
-function changeBadge(current: number, prior: number | null | undefined): string | null {
+function changeBadge(current: number, prior: number | null | undefined, currency: string): string | null {
   if (prior === null || prior === undefined) return null;
   if (prior === 0) return current === 0 ? "No change" : "New";
   if (prior < 0) return null;
@@ -46,6 +46,11 @@ function changeBadge(current: number, prior: number | null | undefined): string 
   if (delta === null) return null;
   const rounded = round(delta, 0);
   if (rounded === 0) return "0%";
+  if (Math.abs(rounded) > 100) {
+    // Show naira difference instead of percentage when change is > 100%
+    const diff = Math.round(current - prior);
+    return `${rounded > 0 ? "+" : "-"}${formatAmount(diff, currency)} vs last period`;
+  }
   return `${rounded > 0 ? "+" : "-"}${Math.abs(rounded)}%`;
 }
 
@@ -86,9 +91,10 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
 
   const hasRange = Boolean(range?.dateFrom || range?.dateTo);
   const prior = summary.prior;
-  const revenueDelta = changeBadge(summary.revenue, prior?.revenue);
-  const expensesDelta = changeBadge(summary.expenses, prior?.expenses);
-  const profitDelta = changeBadge(summary.netProfit, prior?.netProfit);
+  const cashBalanceHint = hasRange ? "All time" : undefined;
+  const revenueDelta = changeBadge(summary.revenue, prior?.revenue, currency);
+  const expensesDelta = changeBadge(summary.expenses, prior?.expenses, currency);
+  const profitDelta = changeBadge(summary.netProfit, prior?.netProfit, currency);
 
   return (
     <>
@@ -118,7 +124,7 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
         <StatCard
           label="Cash balance"
           value={formatAmount(summary.cashBalance, currency)}
-          hint={CASH_BALANCE_HELP}
+          hint={cashBalanceHint || CASH_BALANCE_HELP}
           href={reportsHref(summary.period)}
           compactOnMobile
         />

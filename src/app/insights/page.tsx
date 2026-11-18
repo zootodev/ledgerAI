@@ -6,6 +6,7 @@ import { requireAuthContext, AuthorizationError } from "@/lib/services/auth-cont
 import { signOutAction } from "@/lib/auth/actions";
 import { getInsights } from "@/lib/services/insights";
 import { analyticsQuerySchema, type AnalyticsQuery } from "@/lib/validation/index";
+import { resolvePresetRange } from "@/lib/date-presets";
 import { InsightsShell } from "@/components/insights/insights-shell";
 import { AnalyticsRangeControl } from "@/components/dashboard/analytics-range-control";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -125,6 +126,16 @@ function singleParam(value: string | string[] | undefined): string | undefined {
  * undefined (all time), matching the Overview behavior and picker presets.
  */
 function parseInsightsRange(search: InsightsSearchParams): AnalyticsQuery | undefined {
+  // Read explicit preset first (e.g. ?preset=last30), then fall back to from/to.
+  const preset = singleParam(search.preset);
+  if (preset) {
+    const range = resolvePresetRange(preset);
+    if (range) {
+      const parsed = analyticsQuerySchema.safeParse(range);
+      if (parsed.success) return parsed.data;
+    }
+  }
+
   const parsed = analyticsQuerySchema.safeParse({
     dateFrom: singleParam(search.from),
     dateTo: singleParam(search.to),
