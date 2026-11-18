@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { ensureOnboarding } from "@/lib/services/auth";
 import { requireAuthContext } from "@/lib/services/auth-context";
 import { signOutAction } from "@/lib/auth/actions";
+import { startOfMonth, startOfQuarter, startOfYear, subDays } from "date-fns";
 import { analyticsQuerySchema, type AnalyticsQuery } from "@/lib/validation/index";
 import { OverviewShell } from "@/components/dashboard/overview-shell";
 import { AnalyticsKpiGrid, KpiGridFallback } from "@/components/dashboard/kpi-grid";
@@ -33,6 +34,8 @@ export default async function OverviewPage({
   // Single source of truth: one validated range drives BOTH the KPIs and the
   // charts below. Invalid ranges degrade to the useful default (last 90 days,
   // so older-but-recent imports are visible); ?range=all selects all time.
+  // A explicit ?preset= takes priority over date matching, so two presets
+  // that share a window can never both claim the highlight.
   const range = parseOverviewRange(raw);
 
   return (
@@ -69,13 +72,40 @@ function singleParam(value: string | string[] | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-/**
- * Resolve the Overview range. An explicit ?range=all keeps all time; a valid
+/** Return dateFrom/dateTo for a preset, or undefined when the preset is "all". */
+function presetToOverviewRange(preset: string | undefined): { dateFrom: string | undefined; dateTo: string | undefined } | undefined {
+  if (!preset || preset === "all") return undefined;
+  const today = new Date();
+  const iso = (d: Date) => d.toISOString().split("T")[0];
+  const presetMap: Record<string, { dateFrom: string; dateTo: string }> = {
+    "last7": { dateFrom: iso(subDays(today, 6)), dateTo: iso(today) },
+    "last30": { dateFrom: iso(subDays(today, 29)), dateTo: iso(today) },
+    "last90": { dateFrom: iso(subDays(today, 89)), dateTo: iso(today) },
+    "month": { dateFrom: iso(startOfMonth(today)), dateTo: iso(today) },
+    "quarter": { dateFrom: iso(startOfQuarter(today)), dateTo: iso(today) },
+    "year": { dateFrom: iso(startOfYear(today)), dateTo: iso(today) },
+  };
+  const mapped = presetMap[preset];
+  return mapped ? { dateFrom: mapped.dateFrom, dateTo: mapped.dateTo } : undefined;
+}
+
+/** Resolve the Overview range. An explicit ?range=all keeps all time; a valid
  * ?from/?to wins (so a user's chosen preset or manual dates always survive);
  * otherwise default to the last 90 days so recent imports are visible instead
- * of an all-zero current month.
+ * of an all-zero current month. A explicit ?preset= takes priority over date
+ * matching, so two presets that share a window can never both claim the highlight.
  */
 function parseOverviewRange(search: OverviewSearchParams): AnalyticsQuery | undefined {
+  // Read explicit preset first (e.g. ?preset=last30), then fall back to from/to.
+  const preset = singleParam(search.preset);
+  if (preset) {
+    const range = presetToOverviewRange(preset);
+    if (range) {
+      const parsed = analyticsQuerySchema.safeParse(range);
+      if (parsed.success) return parsed.data;
+    }
+  }
+
   if (singleParam(search.range) === "all") return undefined;
 
   const parsed = analyticsQuerySchema.safeParse({

@@ -1348,6 +1348,20 @@ export interface ImportCompletePanelProps {
  * exception queue (rows that were not written, with reasons) visible after the
  * transient toast disappears.
  */
+function importStatusLabel(result: ImportCommitServiceResult): string {
+  const { total, imported } = result;
+  if (imported === total) return "All imported";
+  if (imported === 0) return "Nothing imported";
+  return `Partial — ${imported} of ${total} imported`;
+}
+
+function importStatusClass(result: ImportCommitServiceResult) {
+  const { total, imported } = result;
+  if (imported === total) return "bg-success/20 text-success";
+  if (imported === 0) return "bg-error/20 text-error";
+  return "bg-warning/20 text-foreground";
+}
+
 export function ImportCompletePanel({ result, onStartOver }: ImportCompletePanelProps) {
   return (
     <Card>
@@ -1361,6 +1375,9 @@ export function ImportCompletePanel({ result, onStartOver }: ImportCompletePanel
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className={`${importStatusClass(result)} rounded-card border border-border px-4 py-2 text-sm text-foreground mb-4`}>
+          {importStatusLabel(result)}
+        </div>
         {result.exceptions.length > 0 ? (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
