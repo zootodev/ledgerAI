@@ -49,7 +49,7 @@ describe("RulesManager", () => {
     expect(html).toContain("Merchant");
     expect(html).toContain("Learned");
     expect(html).toContain("Marketing");
-    expect(html).toContain("2026-08-15");
+    expect(html).toContain("15 Aug 2026");
   });
 
   it("renders an Uncategorised badge when the target category id is null", () => {

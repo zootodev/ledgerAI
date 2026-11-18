@@ -9,6 +9,15 @@ const DATE_FORMAT = new Intl.DateTimeFormat("en-NG", {
   timeZone: "UTC",
 });
 
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
+const LAGOS_DATE_FORMAT = new Intl.DateTimeFormat("en-NG", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "Africa/Lagos",
+});
+
 const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-NG", {
   day: "numeric",
   month: "short",
@@ -20,9 +29,16 @@ const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-NG", {
 /** "2026-10-01" -> "1 Oct 2026". Invalid values pass through unchanged. */
 export function formatIsoDate(iso: string | null | undefined): string {
   if (!iso) return "";
-  if (!ISO_DAY.test(iso)) return iso;
-  const date = new Date(`${iso}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? iso : DATE_FORMAT.format(date);
+  if (ISO_DAY.test(iso)) {
+    const date = new Date(`${iso}T00:00:00.000Z`);
+    return Number.isNaN(date.getTime()) ? iso : DATE_FORMAT.format(date);
+  }
+  // Full timestamps ("2026-10-20T05:34:12.000Z") show the Lagos calendar day.
+  if (ISO_TIMESTAMP.test(iso)) {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? iso : LAGOS_DATE_FORMAT.format(date);
+  }
+  return iso;
 }
 
 /** "2026-10-01T09:15:00Z" -> "1 Oct 2026, 9:15 am" in en-NG. */
