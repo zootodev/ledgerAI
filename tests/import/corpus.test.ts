@@ -143,6 +143,11 @@ describe("synthetic statement corpus — CSV and XLSX", () => {
     findLayout("uba-first-single-amount"),
     findLayout("odd-columns"),
     findLayout("zero-closing"),
+    findLayout("wema"),
+    findLayout("fcmb"),
+    findLayout("sterling"),
+    findLayout("fidelity"),
+    findLayout("stanbic"),
   ];
 
   for (const layout of tabular) {

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     absolute: "LedgerAI | Simple books for Nigerian small businesses",
   },
   description:
-    "Upload OPay, Kuda, GTBank or Moniepoint statements and keep a clean record of sales, transfers and expenses.",
+    "Upload statements from any Nigerian bank or fintech (CSV, Excel or text PDF) and keep a clean record of sales, transfers and expenses.",
 };
 
 const primaryCta =
@@ -72,7 +72,7 @@ export default async function HomePage() {
                 For Nigerian small businesses
               </p>
               <h1 className="mt-4 text-[38px] font-semibold leading-[1.04] tracking-[-0.045em] text-foreground sm:text-[56px]">
-                Your OPay, Kuda and GTBank records, in one set of books.
+                Your bank statements, in one set of books.
               </h1>
               <p className="mt-5 max-w-lg text-[17px] leading-7 text-secondary">
                 Upload the statements you already get. LedgerAI sorts POS takings,
@@ -129,8 +129,9 @@ export default async function HomePage() {
                 to teach LedgerAI once, then check the rows that matter.
               </p>
               <p className="mt-5 text-sm leading-6 text-muted">
-                Works with the exports you already download from OPay, Kuda, GTBank,
-                Moniepoint, Access and Zenith.
+                Works with statements from any Nigerian bank or fintech (CSV, Excel
+                or text PDF). Supported include OPay, Kuda, Moniepoint, GTBank,
+                Access, Zenith, UBA, First Bank, PalmPay and more.
               </p>
             </div>
 

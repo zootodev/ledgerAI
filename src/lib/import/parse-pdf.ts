@@ -719,7 +719,7 @@ function extractWithLayout(
   text: string,
 ): RawImportRow[] {
   const rows: RawImportRow[] = [];
-  if (layout === "debit-credit") {
+  if (layout === "debit-credit" || hasBalance) {
     rows.push(...extractDebitCreditRows(lines, hasBalance, text));
   } else {
     lines.forEach((line, index) => {

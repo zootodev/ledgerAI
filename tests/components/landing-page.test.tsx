@@ -45,7 +45,7 @@ beforeEach(async () => {
 describe("landing page", () => {
   it("uses five sections, led by a real overview screenshot", () => {
     expect(html.match(/<section/g)?.length).toBe(5);
-    expect(html).toContain("Your OPay, Kuda and GTBank records, in one set of books.");
+    expect(html).toContain("Your bank statements, in one set of books.");
     expect(html).toContain("product-overview.png");
     expect(html).toContain("A sample bakery&#x27;s October, imported from a GTBank CSV.");
     expect(html).toContain("ledgerai-zootodev.vercel.app/overview");
@@ -115,7 +115,7 @@ describe("landing page", () => {
   it("never redirects a signed-in visitor away from the marketing page", async () => {
     const signedIn = await renderSignedIn();
     expect(signedIn).toContain(
-      "Your OPay, Kuda and GTBank records, in one set of books.",
+      "Your bank statements, in one set of books.",
     );
     expect(headerOf(signedIn)).toContain("Open your books");
   });

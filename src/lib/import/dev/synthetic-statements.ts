@@ -275,6 +275,55 @@ const PALMPAY_COLUMNS = columns([
   ["balance", "Balance", 600, "right"],
 ]);
 
+// Wema Bank (ALAT): Posting Date | Transaction Details | Reference | Withdrawals | Deposits | Balance
+const WEMA_COLUMNS = columns([
+  ["date", "Posting Date", 30],
+  ["description", "Transaction Details", 110],
+  ["reference", "Reference", 330],
+  ["debit", "Withdrawals", 430, "right"],
+  ["credit", "Deposits", 510, "right"],
+  ["balance", "Balance", 600, "right"],
+]);
+
+// FCMB: Txn Date | Remarks | Ref No | Money Out | Money In | Balance
+const FCMB_COLUMNS = columns([
+  ["date", "Txn Date", 30],
+  ["description", "Remarks", 110],
+  ["reference", "Ref No", 330],
+  ["debit", "Money Out", 430, "right"],
+  ["credit", "Money In", 510, "right"],
+  ["balance", "Balance", 600, "right"],
+]);
+
+// Sterling Bank: Date | Description | Reference | Credit | Debit | Balance (credit column first)
+const STERLING_COLUMNS = columns([
+  ["date", "Date", 30],
+  ["description", "Description", 110],
+  ["reference", "Reference", 330],
+  ["credit", "Credit", 430, "right"],
+  ["debit", "Debit", 510, "right"],
+  ["balance", "Balance", 600, "right"],
+]);
+
+// Fidelity Bank: Value Date | Narrative | Ref | Type (Dr/Cr) | Amount | Balance
+const FIDELITY_COLUMNS = columns([
+  ["date", "Value Date", 30],
+  ["description", "Narrative", 110],
+  ["reference", "Ref", 330],
+  ["type", "Dr/Cr", 420],
+  ["amount", "Amount", 470, "right"],
+  ["balance", "Balance", 600, "right"],
+]);
+
+// Stanbic IBTC: Date | Description | Debits | Credits | Balance (NO reference column)
+const STANBIC_COLUMNS = columns([
+  ["date", "Date", 30],
+  ["description", "Description", 110],
+  ["debit", "Debits", 430, "right"],
+  ["credit", "Credits", 510, "right"],
+  ["balance", "Balance", 600, "right"],
+]);
+
 function layout(
   id: string,
   name: string,
@@ -864,6 +913,285 @@ export const SYNTHETIC_LAYOUTS: SyntheticLayout[] = [
           },
         ],
       },
+    ],
+  ),
+  layout(
+    "wema",
+    "Wema Bank (ALAT)",
+    WEMA_COLUMNS,
+    [
+      {
+        accountName: "ADA OKAFOR",
+        accountNumber: "0571234567",
+        openingBalance: 40000,
+        rows: [
+          {
+            date: "01 Nov 2026",
+            description: "POS purchase at shop",
+            reference: "WMA-1001",
+            debit: 1500,
+          },
+          {
+            date: "02 Nov 2026",
+            description: "Deposit from customer",
+            reference: "WMA-1002",
+            credit: 3000,
+          },
+          {
+            date: "03 Nov 2026",
+            description: "Airtime purchase",
+            reference: "WMA-1003",
+            debit: 500,
+          },
+          {
+            date: "04 Nov 2026",
+            description: "Transfer to another bank",
+            reference: "WMA-1004",
+            debit: 2000,
+          },
+          {
+            date: "05 Nov 2026",
+            description: "Salary credit",
+            reference: "WMA-1005",
+            credit: 50000,
+          },
+          {
+            date: "06 Nov 2026",
+            description: "POS purchase at market",
+            reference: "WMA-1006",
+            debit: 750,
+          },
+          {
+            date: "07 Nov 2026",
+            description: "Bank charge",
+            reference: "WMA-1007",
+            debit: 100,
+          },
+        ],
+      },
+    ],
+  ),
+  layout(
+    "fcmb",
+    "FCMB",
+    FCMB_COLUMNS,
+    [
+      {
+        accountName: "ADA OKAFOR",
+        accountNumber: "2141234567",
+        openingBalance: 40000,
+        rows: [
+          {
+            date: "01 Nov 2026",
+            description: "POS withdrawal",
+            reference: "FMB-1001",
+            debit: 2000,
+          },
+          {
+            date: "02 Nov 2026",
+            description: "Customer deposit",
+            reference: "FMB-1002",
+            credit: 4500,
+          },
+          {
+            date: "03 Nov 2026",
+            description: "Bank transfer out",
+            reference: "FMB-1003",
+            debit: 1500,
+          },
+          {
+            date: "04 Nov 2026",
+            description: "Salary credit",
+            reference: "FMB-1004",
+            credit: 60000,
+          },
+          {
+            date: "05 Nov 2026",
+            description: "Airtime purchase",
+            reference: "FMB-1005",
+            debit: 800,
+          },
+          {
+            date: "06 Nov 2026",
+            description: "Funds transfer in",
+            reference: "FMB-1006",
+            credit: 10000,
+          },
+          {
+            date: "07 Nov 2026",
+            description: "Card maintenance fee",
+            reference: "FMB-1007",
+            debit: 50,
+          },
+        ],
+      },
+    ],
+  ),
+  layout(
+    "sterling",
+    "Sterling Bank",
+    STERLING_COLUMNS,
+    [
+      {
+        accountName: "ADA OKAFOR",
+        accountNumber: "3151234567",
+        openingBalance: 40000,
+        rows: [
+          {
+            date: "01 Nov 2026",
+            description: "POS purchase",
+            reference: "STL-1001",
+            credit: 2000,  // credit first in Sterling format
+          },
+          {
+            date: "02 Nov 2026",
+            description: "Deposit received",
+            reference: "STL-1002",
+            debit: 500,  // debit after credit
+          },
+          {
+            date: "03 Nov 2026",
+            description: "Transfer out",
+            reference: "STL-1003",
+            debit: 3000,
+          },
+          {
+            date: "04 Nov 2026",
+            description: "Interest credit",
+            reference: "STL-1004",
+            credit: 250,
+          },
+          {
+            date: "05 Nov 2026",
+            description: "POS purchaseat supermarket",
+            reference: "STL-1005",
+            credit: 1500,
+          },
+          {
+            date: "06 Nov 2026",
+            description: "Airtime purchase",
+            reference: "STL-1006",
+            debit: 700,
+          },
+          {
+            date: "07 Nov 2026",
+            description: "Monthly charge",
+            reference: "STL-1007",
+            debit: 150,
+          },
+        ],
+      },
+    ],
+  ),
+  layout(
+    "fidelity",
+    "Fidelity Bank",
+    FIDELITY_COLUMNS,
+    [
+      {
+        accountName: "ADA OKAFOR",
+        accountNumber: "4011234567",
+        openingBalance: 40000,
+        rows: [
+          {
+            date: "01 Nov 2026",
+            description: "POS withdrawal",
+            reference: "FID-1001",
+            type: "Dr",
+            amount: 3000,
+          },
+          {
+            date: "02 Nov 2026",
+            description: "Customer transfer in",
+            reference: "FID-1002",
+            type: "Cr",
+            amount: 8000,
+          },
+          {
+            date: "03 Nov 2026",
+            description: "POS purchase",
+            reference: "FID-1003",
+            type: "Dr",
+            amount: 1200,
+          },
+          {
+            date: "04 Nov 2026",
+            description: "Salary deposit",
+            reference: "FID-1004",
+            type: "Cr",
+            amount: 55000,
+          },
+          {
+            date: "05 Nov 2026",
+            description: "Airtime top-up",
+            reference: "FID-1005",
+            type: "Dr",
+            amount: 400,
+          },
+          {
+            date: "06 Nov 2026",
+            description: "Funds transfer received",
+            reference: "FID-1006",
+            type: "Cr",
+            amount: 15000,
+          },
+          {
+            date: "07 Nov 2026",
+            description: "Bank service charge",
+            reference: "FID-1007",
+            type: "Dr",
+            amount: 30,
+          },
+        },
+    ],
+  ),
+  layout(
+    "stanbic",
+    "Stanbic IBTC",
+    STANBIC_COLUMNS,
+    [
+      {
+        accountName: "ADA OKAFOR",
+        accountNumber: "5311234567",
+        openingBalance: 40000,
+        rows: [
+          {
+            date: "01 Nov 2026",
+            description: "POS withdrawal",
+            debit: 2000,
+          },
+          {
+            date: "02 Nov 2026",
+            description: "Customer deposit",
+            credit: 4500,
+          },
+          {
+            date: "03 Nov 2026",
+            description: "Funds transfer out",
+            debit: 1500,
+          },
+          {
+            date: "04 Nov 2026",
+            description: "Salary credit",
+            credit: 60000,
+          },
+          {
+            date: "05 Nov 2026",
+            description: "Airtime purchase",
+            debit: 800,
+          },
+          {
+            date: "06 Nov 2026",
+            description: "Funds transfer in",
+            credit: 10000,
+          },
+          {
+            date: "07 Nov 2026",
+            description: "Card maintenance fee",
+            debit: 50,
+          },
+        ],
+      ],
     ],
   ),
   layout(
