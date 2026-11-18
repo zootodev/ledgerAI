@@ -95,7 +95,7 @@ describe("review queue copy (the real 75% threshold)", () => {
   it("explains the match score at 75%, not a rounded 80%", () => {
     const html = render({ lowConfidence: "1" });
     expect(html).toContain(
-      "The match score shows how sure LedgerAI was about the category. Anything under 75% lands here.",
+      "How sure LedgerAI is about the category. Below 75% goes to Review.",
     );
     expect(html).not.toContain("80%");
   });

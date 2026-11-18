@@ -80,7 +80,8 @@ const typeTone: Record<string, "success" | "danger" | "default"> = {
  */
 const REVIEW_PERCENT = Math.round(REVIEW_THRESHOLD * 100);
 
-const CONFIDENCE_LEGEND = `The match score shows how sure LedgerAI was about the category. Anything under ${REVIEW_PERCENT}% lands here.`;
+/** Shown once below the transaction list — not per-row. */
+const CONFIDENCE_LEGEND = `How sure LedgerAI is about the category. Below ${REVIEW_PERCENT}% goes to Review.`;
 
 /** Categorization match score, e.g. "92% match". Unknown when null. */
 function aiConfidenceBadge(confidence: number): React.ReactNode {
@@ -92,7 +93,7 @@ function aiConfidenceBadge(confidence: number): React.ReactNode {
         ? "warning"
         : "danger";
   return (
-    <Badge tone={tone} title={CONFIDENCE_LEGEND}>
+    <Badge tone={tone}>
       {pct}% match
     </Badge>
   );
