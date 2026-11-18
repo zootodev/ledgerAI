@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "audit": "npm audit --omit=dev --audit-level=high",
+    "audit": "node scripts/audit-check.mjs",
     "shots:auth": "tsx scripts/save-auth.ts",
     "shots:mobile": "tsx scripts/mobile-shots.ts",
     "db:generate": "prisma generate",
