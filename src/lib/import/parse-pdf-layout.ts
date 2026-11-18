@@ -310,14 +310,14 @@ function headerFieldsForCell(text: string): PdfColumnField[] {
     fields.push("balance");
   }
   if (
-    /\bmoney\s+out\b|\bpaid\s+out\b|\bwithdrawal|\bdebit\b|\bdr\b|\boutflow\b|\bamount\s+out\b|\bout\b/.test(
+    /\bmoney\s+out\b|\bpaid\s+out\b|\bwithdrawal|\bdebits?\b|\bdr\b|\boutflow\b|\bamount\s+out\b|\bout\b/.test(
       normalized,
     )
   ) {
     fields.push("debit");
   }
   if (
-    /\bmoney\s+in\b|\bpaid\s+in\b|\bdeposit|\bcredit\b|\bcr\b|\binflow\b|\bamount\s+in\b|\bin\b/.test(
+    /\bmoney\s+in\b|\bpaid\s+in\b|\bdeposit|\bcredits?\b|\bcr\b|\binflow\b|\bamount\s+in\b|\bin\b/.test(
       normalized,
     )
   ) {
