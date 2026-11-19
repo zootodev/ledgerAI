@@ -60,3 +60,14 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# local-only reports, generated agent notes and one-off output/logs
+/reports/
+/AUDIT-REPORT.md
+/AGENTS.md
+/build-output.txt
+/build.txt
+/test-out.txt
+/test-results.txt
+/test-summary.txt
+/vitest-output.txt
