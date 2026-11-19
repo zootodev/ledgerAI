@@ -21,7 +21,7 @@ import { getAIService } from "@/lib/ai/provider";
 import { categoryMatchesRowType } from "@/lib/ai/rules";
 import type { CategoryRuleDto } from "../../types";
 import { matchDictionary } from "./merchant-dictionary";
-import { normalizeNarration } from "./narration";
+import { normalizeNarration, stripOWealthFundingSource } from "./narration";
 import type {
   ImportCategoryOption,
   ImportSuggestion,
@@ -48,11 +48,56 @@ export interface CategorizeOptions {
   categoryOptions?: ImportCategoryOption[];
 }
 
+/** Learned keys that describe the OWealth funding source, not the payee. */
+const OWEALTH_FUNDING_ONLY_MERCHANT_KEYS: ReadonlySet<string> = new Set([
+  "OWEALTH",
+  "WITHDRAWAL",
+  "OWEALTH WITHDRAWAL",
+]);
+
+/**
+ * Drop learned rules that only describe the OWealth funding wording when the
+ * row has already had that wording stripped. Without this, an old rule learned
+ * from a bare "OWealth Withdrawal" would put a merchant payment straight back
+ * into Savings & Investment.
+ */
+function filterFundingOnlyRules(
+  rules: CategoryRuleDto[] | undefined,
+  strippedDescription: string | null,
+): CategoryRuleDto[] | undefined {
+  if (!rules || !strippedDescription) return rules;
+  const remainder = normalizeNarration(strippedDescription);
+
+  return rules.filter((rule) => {
+    const pattern = rule.pattern?.trim();
+    if (!pattern) return true;
+
+    if (rule.matchType === "merchant") {
+      const key = pattern.replace(/\s+/g, " ").toUpperCase();
+      if (!OWEALTH_FUNDING_ONLY_MERCHANT_KEYS.has(key)) return true;
+      return !remainder.includes(key);
+    }
+
+    let re: RegExp;
+    try {
+      re = new RegExp(pattern, "i");
+    } catch {
+      return true;
+    }
+    if (!re.test("OWealth Withdrawal")) return true;
+    return !re.test(strippedDescription);
+  });
+}
+
 export async function categorizeImportRow(
   row: NormalizedImportRow,
   options: CategorizeOptions = {},
 ): Promise<ImportSuggestion> {
-  const normalized = normalizeNarration(row.description);
+  // OWealth is only the funding source on OPay merchant payments. Strip that
+  // trailing wording for debit rows so the payee drives the category. Bare
+  // savings moves and own-wallet transfers keep the original narration.
+  const fundingStripped = stripOWealthFundingSource(row.description, row.type);
+  const normalized = normalizeNarration(fundingStripped ?? row.description);
 
   // Transfer rows are deliberately not guessed from a person's name. The only
   // thing allowed to promote one is a learned counterparty rule from an
@@ -93,10 +138,9 @@ export async function categorizeImportRow(
     };
   }
 
-  const resolvedRules = resolveRulesForRow(
-    options.businessRules,
-    row.type,
-    options.categoryOptions,
+  const resolvedRules = filterFundingOnlyRules(
+    resolveRulesForRow(options.businessRules, row.type, options.categoryOptions),
+    fundingStripped,
   );
   const { categorizer } = getAIService({ categoryRules: resolvedRules });
   const result = await categorizer.categorize(normalized, row.type);

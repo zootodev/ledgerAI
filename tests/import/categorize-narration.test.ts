@@ -22,6 +22,10 @@ function transferRow(description: string): NormalizedImportRow {
   };
 }
 
+function expenseRow(description: string): NormalizedImportRow {
+  return { ...transferRow(description), type: "expense" };
+}
+
 const learnedRentRule: CategoryRuleDto = {
   id: "rule-rent",
   businessId: "biz-a",
@@ -33,6 +37,21 @@ const learnedRentRule: CategoryRuleDto = {
 };
 
 const rentOption = { id: "rent-id", name: "Rent", type: "expense" as const };
+
+const learnedOWealthRule: CategoryRuleDto = {
+  ...learnedRentRule,
+  id: "rule-owealth",
+  matchType: "merchant",
+  pattern: "OWEALTH",
+  categoryId: "savings-id",
+  categoryName: "Savings & Investment",
+};
+
+const savingsOption = {
+  id: "savings-id",
+  name: "Savings & Investment",
+  type: "expense" as const,
+};
 
 describe("categorizeImportRow — transfer precedence", () => {
   it("keeps an unlearned transfer as Transfer, needing review, with no dictionary guess", async () => {
@@ -81,5 +100,91 @@ describe("categorizeImportRow — transfer precedence", () => {
     });
     expect(withRule.categoryName).toBe("Sales");
     expect(withRule.reason).toContain("learned rule");
+  });
+});
+
+describe("categorizeImportRow — OWealth funding source", () => {
+  it("categorises a merchant by the payee instead of the funding source", async () => {
+    const suggestion = await categorizeImportRow(
+      expenseRow("PASTRIES STORE|MONIE POINT|0000000001 OWealth Withdrawal"),
+    );
+    expect(suggestion.categoryName).toBe("Food");
+    expect(suggestion.confidence).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("categorises Stamp Duty as Banking", async () => {
+    const suggestion = await categorizeImportRow(
+      expenseRow("Stamp Duty OWealth Withdrawal"),
+    );
+    expect(suggestion.categoryName).toBe("Banking");
+  });
+
+  it("never assigns a bare person payment to Savings & Investment", async () => {
+    const suggestion = await categorizeImportRow(
+      expenseRow("MAKANJUOLA|MONIE POINT|0000000002 OWealth Withdrawal"),
+    );
+    expect(suggestion.categoryName).not.toBe("Savings & Investment");
+    expect(suggestion.categoryName).toBe("Other");
+    expect(suggestion.confidence).toBe(0.5);
+    expect(suggestion.needsReview).toBe(true);
+  });
+
+  it("keeps plain OWealth savings moves as Savings & Investment", async () => {
+    for (const description of [
+      "OWealth Deposit",
+      "Auto-save to OWealth",
+      "OWealth Withdrawal",
+      "OWealth Withdrawal to OPay Wallet",
+    ]) {
+      const suggestion = await categorizeImportRow(expenseRow(description));
+      expect(suggestion.categoryName).toBe("Savings & Investment");
+    }
+  });
+
+  it("does not strip OWealth wording from income rows", async () => {
+    const suggestion = await categorizeImportRow({
+      ...expenseRow("PASTRIES STORE|MONIE POINT|0000000001 OWealth Withdrawal"),
+      type: "income",
+    });
+    expect(suggestion.categoryName).toBe("Other Income");
+  });
+
+  it("does not apply a learned OWealth-only merchant rule to a payee-prefixed row", async () => {
+    const suggestion = await categorizeImportRow(
+      expenseRow("PASTRIES STORE|MONIE POINT|0000000001 OWealth Withdrawal"),
+      {
+        businessRules: [learnedOWealthRule],
+        categoryOptions: [savingsOption],
+      },
+    );
+    expect(suggestion.categoryName).toBe("Food");
+    expect(suggestion.businessRule).toBeUndefined();
+  });
+
+  it("does not apply a learned OWealth-only keyword rule to a payee-prefixed row", async () => {
+    const keywordRule: CategoryRuleDto = {
+      ...learnedOWealthRule,
+      id: "rule-owealth-keyword",
+      matchType: "keyword",
+      pattern: "owealth\\s+withdrawal",
+    };
+    const suggestion = await categorizeImportRow(
+      expenseRow("PASTRIES STORE|MONIE POINT|0000000001 OWealth Withdrawal"),
+      {
+        businessRules: [keywordRule],
+        categoryOptions: [savingsOption],
+      },
+    );
+    expect(suggestion.categoryName).toBe("Food");
+    expect(suggestion.businessRule).toBeUndefined();
+  });
+
+  it("still applies a learned OWealth-only rule to a bare savings withdrawal", async () => {
+    const suggestion = await categorizeImportRow(expenseRow("OWealth Withdrawal"), {
+      businessRules: [learnedOWealthRule],
+      categoryOptions: [savingsOption],
+    });
+    expect(suggestion.categoryName).toBe("Savings & Investment");
+    expect(suggestion.businessRule?.categoryId).toBe("savings-id");
   });
 });

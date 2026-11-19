@@ -52,6 +52,16 @@ describe("merchant dictionary — Nigerian expense rules", () => {
     }
   });
 
+  it("categorises food merchants and stores", () => {
+    for (const description of [
+      "PASTRIES STORE",
+      "FASTFOOD AND CONFECTIONERIES",
+      "MAKANJUOLA VENTURES",
+    ]) {
+      expect(matchDictionary(description, "expense")?.categoryName).toBe("Food");
+    }
+  });
+
   it("categorises fuel and ride-hailing", () => {
     expect(matchDictionary("TOTAL ENERGIES FUEL", "expense")?.categoryName).toBe(
       "Transportation",

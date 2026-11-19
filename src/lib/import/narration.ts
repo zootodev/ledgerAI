@@ -19,6 +19,7 @@ import {
   MERCHANT_KEY_STOPWORDS,
   SOFT_TRANSFER_MARKERS,
 } from "@/lib/ai/merchant-key";
+import type { ImportRowType } from "./types";
 
 /** Noise tokens that are safe to drop wherever they appear. */
 const NOISE_TOKENS: ReadonlySet<string> = new Set([
@@ -80,6 +81,18 @@ const PRODUCT_TOKENS: ReadonlySet<string> = new Set([
   "AUTOSAVE",
 ]);
 
+/** OPay can pay a real merchant from OWealth and append this funding wording. */
+const OWEALTH_WITHDRAWAL = /\bowealth\s+withdrawal\b/i;
+const OWEALTH_WITHDRAWAL_ALL = /\bowealth\s+withdrawal\b/gi;
+
+/** Tokens that describe the user's own savings/wallet, not a payee. */
+const OWN_ACCOUNT_REMAINDER_TOKENS: ReadonlySet<string> = new Set([
+  ...PRODUCT_TOKENS,
+  "MY",
+  "OWN",
+  "SELF",
+]);
+
 const PIPE = /\s*[|/]\s*/g;
 const DATE_LIKE = /\b(?:\d{1,2}[A-Z]{3}|[A-Z]{3}\d{1,2}|\d{4}-\d{2}-\d{2}|\d{2}[/-]\d{2}[/-]\d{2,4})\b/gi;
 const REFERENCE_LIKE = /\b(?:[A-Z]{2,}[-/]?\d{3,}|\d{4,}[A-Z]{0,3}|(?=[A-Z0-9]*\d)[A-Z0-9]{8,})\b/g;
@@ -136,6 +149,42 @@ export function normalizeNarration(description: string): string {
     return kept.filter((token) => !PRODUCT_TOKENS.has(token) || token === product).join(" ");
   }
   return kept.join(" ");
+}
+
+/**
+ * Remove the OWealth funding-source wording from a DEBIT narration when a
+ * real payee remains.
+ *
+ * OPay often pays a merchant from OWealth and appends "OWealth Withdrawal" to
+ * the narration. OWealth is only the funding source there; categorising the
+ * row as Savings & Investment hides the merchant. This helper returns the
+ * narration without that phrase so the caller can categorise by the payee.
+ *
+ * Returns null (leave the row untouched) when:
+ *   - the row is not a debit/expense row;
+ *   - the wording is absent;
+ *   - nothing meaningful remains (a bare "OWealth Withdrawal", or a move to
+ *     the user's own wallet/savings) — those are genuine savings moves.
+ */
+export function stripOWealthFundingSource(
+  description: string,
+  type: ImportRowType,
+): string | null {
+  if (type !== "expense") return null;
+  if (!OWEALTH_WITHDRAWAL.test(description)) return null;
+
+  const remainder = description
+    .replace(OWEALTH_WITHDRAWAL_ALL, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (remainder === "") return null;
+
+  const meaningful = normalizeNarration(remainder)
+    .split(" ")
+    .filter((token) => token !== "" && !OWN_ACCOUNT_REMAINDER_TOKENS.has(token));
+  if (meaningful.length === 0) return null;
+
+  return remainder;
 }
 
 /**

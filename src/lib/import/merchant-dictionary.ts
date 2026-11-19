@@ -57,7 +57,7 @@ const EXPENSE_RULES: DictionaryRule[] = [
     reason: "utility/subscription keyword",
   },
   {
-    re: /\b(restaurant|chicken\s*republic|dominos|pizza|burger|eatery|canteen|jollof|suya|bakery|grocery|supermarket|shoprite|spar|market|food|chowdeck|glovo)\b/i,
+    re: /\b(restaurant|chicken\s*republic|dominos|pizza|burger|eatery|canteen|jollof|suya|bakery|pastr(?:y|ies)|confectioner(?:y|ies)|fast\s*food|store|ventures|grocery|supermarket|shoprite|spar|market|food|chowdeck|glovo)\b/i,
     categoryName: "Food",
     confidence: 0.84,
     reason: "food merchant keyword",
