@@ -5,6 +5,11 @@
 export const SYSTEM_CATEGORIES = {
   income: [
     { name: "Sales", type: "income" },
+    { name: "Salary", type: "income" },
+    { name: "Interest", type: "income" },
+    { name: "Refunds", type: "income" },
+    { name: "Cashback", type: "income" },
+    { name: "Loan Disbursement", type: "income" },
     { name: "Other Income", type: "income" },
   ],
   expense: [
@@ -24,6 +29,10 @@ export const SYSTEM_CATEGORIES = {
     { name: "Online Payments", type: "expense" },
     { name: "Betting", type: "expense" },
     { name: "Transfers to People", type: "expense" },
+    { name: "Savings & Investment", type: "expense" },
+    { name: "Shopping", type: "expense" },
+    { name: "Education", type: "expense" },
+    { name: "Insurance", type: "expense" },
     { name: "Other", type: "expense" },
   ],
 } as const;

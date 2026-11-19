@@ -3,6 +3,7 @@ import { parsePdf } from "@/lib/import/parse-pdf";
 import { parseCsv } from "@/lib/import/parse-csv";
 import { parseXlsx } from "@/lib/import/parse-xlsx";
 import { prepareImport } from "@/lib/import/prepare";
+import { categorizeImportRows } from "@/lib/import/categorize";
 import type { ParsedImportFile } from "@/lib/import/types";
 import type { ColumnMapping } from "@/lib/import/types";
 type ParsedLike = Pick<ParsedImportFile, "headers" | "rows" | "sections" | "statement">;
@@ -173,4 +174,50 @@ describe("synthetic statement corpus — CSV and XLSX", () => {
     expect(prepared.reconciliation?.requiresAcknowledgement).toBe(true);
     expect(prepared.reconciliation?.headerMismatches.length).toBeGreaterThan(0);
   });
+});
+
+describe("synthetic statement corpus — categorisation weak-row ceiling", () => {
+  // Weak = unresolved fallback (Other / Other Income) or low confidence.
+  // Person-to-person transfers are intentionally excluded: they resolve to the
+  // Transfer sentinel and stay in review, which is the desired behaviour.
+  const MAX_WEAK_RATIO = 0.4;
+
+  function isWeak(categoryName: string, confidence: number): boolean {
+    return (
+      categoryName === "Other" || categoryName === "Other Income" || confidence < 0.7
+    );
+  }
+
+  for (const layout of SYNTHETIC_LAYOUTS) {
+    it(`${layout.id}: keeps weak categorisations at or below ${MAX_WEAK_RATIO * 100}%`, async () => {
+      const parsed = await parsePdf(statementPdf(layout));
+      let total = 0;
+      let weak = 0;
+
+      for (const section of parsed.sections ?? [parsed]) {
+        const prepared = prepareImport(
+          { ...parsed, fileName: "synthetic", fileType: "pdf" },
+          pdfMappingFor(),
+          {
+            selectedSectionId: "id" in section ? section.id : null,
+            holderName: HOLDER,
+            businessName: HOLDER,
+          },
+        );
+        const rows = prepared.rows.filter(
+          (row) => row.type !== "transfer" && !row.skipped && row.errors.length === 0,
+        );
+        const suggestions = await categorizeImportRows(rows);
+        for (const row of rows) {
+          const suggestion = suggestions.get(row.rowIndex);
+          if (!suggestion) continue;
+          total += 1;
+          if (isWeak(suggestion.categoryName, suggestion.confidence)) weak += 1;
+        }
+      }
+
+      expect(total).toBeGreaterThan(0);
+      expect(weak / total).toBeLessThanOrEqual(MAX_WEAK_RATIO);
+    }, 60000);
+  }
 });

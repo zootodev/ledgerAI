@@ -21,6 +21,7 @@ import { getAIService } from "@/lib/ai/provider";
 import { categoryMatchesRowType } from "@/lib/ai/rules";
 import type { CategoryRuleDto } from "../../types";
 import { matchDictionary } from "./merchant-dictionary";
+import { normalizeNarration } from "./narration";
 import type {
   ImportCategoryOption,
   ImportSuggestion,
@@ -51,11 +52,34 @@ export async function categorizeImportRow(
   row: NormalizedImportRow,
   options: CategorizeOptions = {},
 ): Promise<ImportSuggestion> {
+  const normalized = normalizeNarration(row.description);
+
+  // Transfer rows are deliberately not guessed from a person's name. The only
+  // thing allowed to promote one is a learned counterparty rule from an
+  // earlier explicit correction; dictionary/built-in matches never apply here.
   if (row.type === "transfer") {
+    const transferRules = resolveRulesForRow(
+      options.businessRules,
+      "transfer",
+      options.categoryOptions,
+    );
+    if (transferRules && transferRules.length > 0) {
+      const { categorizer } = getAIService({ categoryRules: transferRules });
+      const learned = await categorizer.categorize(normalized);
+      if (learned.businessRule) {
+        return {
+          categoryName: learned.categoryName,
+          confidence: learned.confidence,
+          needsReview: false,
+          businessRule: learned.businessRule,
+          reason: `learned rule for "${learned.businessRule.categoryName}"`,
+        };
+      }
+    }
     return {
       categoryName: TRANSFER_CATEGORY,
       confidence: 1,
-      needsReview: false,
+      needsReview: true,
       reason: row.transfer?.reason ?? "transfer row",
     };
   }
@@ -75,7 +99,7 @@ export async function categorizeImportRow(
     options.categoryOptions,
   );
   const { categorizer } = getAIService({ categoryRules: resolvedRules });
-  const result = await categorizer.categorize(row.description, row.type);
+  const result = await categorizer.categorize(normalized, row.type);
 
   // A learned correction always wins. If the engine did not use a learned
   // rule, the Nigerian keyword dictionary is more specific than the built-in
@@ -90,7 +114,7 @@ export async function categorizeImportRow(
     };
   }
 
-  const dictionary = matchDictionary(row.description, row.type);
+  const dictionary = matchDictionary(normalized, row.type);
   if (dictionary) {
     return {
       categoryName: dictionary.categoryName,
@@ -160,10 +184,11 @@ export function resolveRulesForRow(
   if (!rules || rules.length === 0) return rules;
   if (!categories) return rules;
 
+  // A transfer normally resolves to no category. When the user has explicitly
+  // corrected the same counterparty before, the learned rule may target ANY
+  // category type, so do not filter the option set by the transfer row type.
   const options = categories.filter(
-    (c) =>
-      (rowType === "income" || rowType === "expense") &&
-      categoryMatchesRowType(c.type, rowType),
+    (c) => rowType === "transfer" || categoryMatchesRowType(c.type, rowType),
   );
   const resolved: CategoryRuleDto[] = [];
   for (const rule of rules) {
@@ -178,10 +203,11 @@ function resolveRuleTarget(
   options: ImportCategoryOption[],
   targetRowType: "income" | "expense" | "transfer",
 ): CategoryRuleDto | null {
+  const typeMatches = (option: ImportCategoryOption) =>
+    targetRowType === "transfer" || categoryMatchesRowType(option.type, targetRowType);
+
   if (rule.categoryId) {
-    const byId = options.find(
-      (o) => o.id === rule.categoryId && categoryMatchesRowType(o.type, targetRowType),
-    );
+    const byId = options.find((o) => o.id === rule.categoryId && typeMatches(o));
     if (byId) {
       return { ...rule, categoryId: byId.id, categoryName: byId.name };
     }
@@ -189,7 +215,7 @@ function resolveRuleTarget(
   if (rule.categoryName) {
     const byName = options.find(
       (o) =>
-        categoryMatchesRowType(o.type, targetRowType) &&
+        typeMatches(o) &&
         o.name.trim().toLowerCase() === rule.categoryName.trim().toLowerCase(),
     );
     if (byName) {

@@ -21,6 +21,11 @@ export interface CategoryInput {
 export const SYSTEM_CATEGORIES: ReadonlyArray<{ name: string; type: "income" | "expense" }> = [
   { name: "Sales", type: "income" },
   { name: "Services", type: "income" },
+  { name: "Salary", type: "income" },
+  { name: "Interest", type: "income" },
+  { name: "Refunds", type: "income" },
+  { name: "Cashback", type: "income" },
+  { name: "Loan Disbursement", type: "income" },
   { name: "Other Income", type: "income" },
   { name: "Transportation", type: "expense" },
   { name: "Banking", type: "expense" },
@@ -38,6 +43,10 @@ export const SYSTEM_CATEGORIES: ReadonlyArray<{ name: string; type: "income" | "
   { name: "Online Payments", type: "expense" },
   { name: "Betting", type: "expense" },
   { name: "Transfers to People", type: "expense" },
+  { name: "Savings & Investment", type: "expense" },
+  { name: "Shopping", type: "expense" },
+  { name: "Education", type: "expense" },
+  { name: "Insurance", type: "expense" },
   { name: "Other", type: "expense" },
 ];
 

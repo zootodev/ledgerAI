@@ -12,6 +12,7 @@ import {
   prepareImport,
 } from "@/lib/import/index";
 import { extractMerchantKey } from "@/lib/ai/merchant-key";
+import { extractCounterpartyKey } from "@/lib/import/narration";
 import { MAX_IMPORT_EXCEPTIONS, NOT_A_TRANSACTION_REASON } from "@/lib/import/types";
 import { parsePdf } from "@/lib/import/parse-pdf";
 import { categoryMatchesRowType } from "@/lib/ai/rules";
@@ -471,7 +472,10 @@ async function resolveCategory(
   row: NormalizedImportRow,
   suggestion: ImportSuggestion,
 ): Promise<ImportCategoryOption | null> {
-  if (row.type === "transfer") return null;
+  // Transfers still have no category UNLESS an earlier explicit correction
+  // learned a rule for this counterparty. That one exception is applied below
+  // through suggestion.businessRule; nothing else may promote a transfer.
+  if (row.type === "transfer" && !suggestion.businessRule) return null;
 
   if (selectedId) {
     const found = options.find(
@@ -480,7 +484,7 @@ async function resolveCategory(
     if (found) return found;
   }
 
-  if (row.category) {
+  if (row.category && row.type !== "transfer") {
     const byFile = matchByName(options, row.category, row.type);
     if (byFile) return byFile;
   }
@@ -490,10 +494,17 @@ async function resolveCategory(
     if (byRule) return byRule;
   }
 
-  if (suggestion.categoryName && suggestion.categoryName !== "Transfer") {
+  if (
+    row.type !== "transfer" &&
+    suggestion.categoryName &&
+    suggestion.categoryName !== "Transfer"
+  ) {
     const bySuggestion = matchByName(options, suggestion.categoryName, row.type);
     if (bySuggestion) return bySuggestion;
   }
+
+  // A transfer whose learned rule did not resolve stays uncategorised.
+  if (row.type === "transfer") return null;
 
   const fallbackName = fallbackCategoryName(row.type);
   return matchByName(options, fallbackName, row.type) ?? null;
@@ -506,13 +517,20 @@ async function resolveCategory(
 function resolveBusinessRuleOption(
   options: ImportCategoryOption[],
   rule: NonNullable<ImportSuggestion["businessRule"]>,
-  type: "income" | "expense",
+  type: "income" | "expense" | "transfer",
 ): ImportCategoryOption | null {
+  const typeMatches = (option: ImportCategoryOption) =>
+    type === "transfer" || categoryMatchesRowType(option.type, type);
+
   if (rule.categoryId) {
-    const byId = options.find(
-      (o) => o.id === rule.categoryId && categoryMatchesRowType(o.type, type),
-    );
+    const byId = options.find((o) => o.id === rule.categoryId && typeMatches(o));
     if (byId) return byId;
+  }
+  if (type === "transfer") {
+    const target = rule.categoryName.trim().toLowerCase();
+    return (
+      options.find((o) => o.name.trim().toLowerCase() === target && typeMatches(o)) ?? null
+    );
   }
   return matchByName(options, rule.categoryName, type);
 }
@@ -545,9 +563,10 @@ async function listCategoryRulesForBusiness(
  * the categorizer's suggestion with a different, valid category:
  *  - a non-null, resolvable review selection that differs from what the
  *    system would have chosen without it,
- *  - the row is not a transfer,
  *  - the suggestion did NOT come from the file's own category column,
- *  - a trustworthy merchant key can be extracted.
+ *  - a trustworthy key can be extracted: a merchant key for ordinary rows,
+ *    a stable counterparty key for transfer narrations (so the correction
+ *    applies to the same person on another bank's statement).
  * Returns null when any condition fails.
  */
 async function collectReviewCorrection(
@@ -558,13 +577,15 @@ async function collectReviewCorrection(
   chosen: ImportCategoryOption,
 ): Promise<{ pattern: string; category: ImportCategoryOption } | null> {
   if (!selectedId) return null;
-  if (row.type === "transfer") return null;
   if (row.category) return null;
 
   const base = await resolveCategory(categoryOptions, null, row, suggestion);
   if (base && base.id === chosen.id) return null;
 
-  const pattern = extractMerchantKey(row.description);
+  const pattern =
+    row.type === "transfer"
+      ? extractCounterpartyKey(row.description)
+      : extractMerchantKey(row.description);
   if (!pattern) return null;
 
   return { pattern, category: chosen };
