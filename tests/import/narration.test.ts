@@ -16,7 +16,7 @@ describe("normalizeNarration", () => {
     expect(
       normalizeNarration("POS TERMINAL 12345678 CHOWDECK SESSION ABC-9981 06NOV2026"),
     ).toBe("POS CHOWDECK");
-    expect(normalizeNarration("VIA OPAY ****1711 1234-5678-9012-3456")).toBe("");
+    expect(normalizeNarration("VIA OPAY ****0000 1234-5678-9012-3456")).toBe("");
   });
 
   it("strips VIA/FROM/TO wrappers but keeps the merchant word", () => {
@@ -34,7 +34,7 @@ describe("normalizeNarration", () => {
 describe("extractCounterpartyKey", () => {
   it("is stable for the same person across different bank wordings", () => {
     const gtbank = extractCounterpartyKey("GTBANK TRF FROM MR JOHN DOE REF 20261119/8871");
-    const opay = extractCounterpartyKey("OPAY NIP CREDIT FROM JOHN DOE ****1711");
+    const opay = extractCounterpartyKey("OPAY NIP CREDIT FROM JOHN DOE ****0000");
     expect(gtbank).toBe("JOHN");
     expect(opay).toBe("JOHN");
     expect(gtbank).toBe(opay);
@@ -42,6 +42,6 @@ describe("extractCounterpartyKey", () => {
 
   it("returns null when only plumbing survives", () => {
     expect(extractCounterpartyKey("NIP TRANSFER REF 12345678")).toBeNull();
-    expect(extractCounterpartyKey("OPAY OWEALTH WALLET ****1711")).toBe("OWEALTH");
+    expect(extractCounterpartyKey("OPAY OWEALTH WALLET ****0000")).toBe("OWEALTH");
   });
 });

@@ -50,7 +50,7 @@ describe("categorizeImportRow — transfer precedence", () => {
       { businessRules: [learnedRentRule], categoryOptions: [rentOption] },
     );
     const opay = await categorizeImportRow(
-      transferRow("OPAY NIP CREDIT FROM JOHN DOE ****1711"),
+      transferRow("OPAY NIP CREDIT FROM JOHN DOE ****0000"),
       { businessRules: [learnedRentRule], categoryOptions: [rentOption] },
     );
 

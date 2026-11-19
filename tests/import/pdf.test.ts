@@ -152,12 +152,12 @@ describe("extractTransactionsFromText — single-amount statements", () => {
 
 describe("extractTransactionsFromText — Moniepoint money-in/out statements", () => {
   const moniepointText = [
-    "IFEOLUWANI JOSHUA OLUFUNMILAYO HOUSE 16, NORTHGATE, IBADAN",
+    "FAKE HOLDER TEST ACCOUNT HOUSE 16, NORTHGATE, IBADAN",
     "Account Number 2034321500",
     "Opening Balance ₦22,035.20",
     "Date/Time Money In Money Out Category To/From Description Balance",
     "08/01/26 06:24:32 ₦2,000.00 outward transfer Squad Checkout/08240 Gtbank Plc data ₦20,035.20",
-    "08/01/26 10:14:07 ₦10,000.00 inward transfer Alexander Olufunmilayo Opay transfer from alexander ₦30,035.20",
+    "08/01/26 10:14:07 ₦10,000.00 inward transfer Alexander Sample Opay transfer from alexander ₦30,035.20",
     "09/01/26 09:35:25 ₦3,000.00 outward transfer Oladele Toyin Fcmb ysushq ₦12,835.20",
     "09/01/26 21:27:42 ₦500.00 outward transfer Timileyin Opay hais ₦7,335.20",
   ].join("\n");
@@ -180,7 +180,7 @@ describe("extractTransactionsFromText — Moniepoint money-in/out statements", (
     });
     expect(rows[1].values).toEqual({
       Date: "2026-01-08",
-      Description: "inward transfer Alexander Olufunmilayo Opay transfer from alexander",
+      Description: "inward transfer Alexander Sample Opay transfer from alexander",
       Debit: "",
       Credit: "10,000.00",
     });
@@ -199,7 +199,7 @@ describe("extractTransactionsFromText — fragmented Moniepoint layout", () => {
   // The deployed PDF text layer breaks every cell onto its own line (~18 chars
   // per line), so no physical line ever holds a date and an amount together.
   const fragmentedText = [
-    "IFEOLUWANI JOSHUA OLUFUNMILAYO",
+    "FAKE HOLDER TEST ACCOUNT",
     "Account Number 2034321500",
     "Opening Balance",
     "₦22,035.20",
@@ -228,7 +228,7 @@ describe("extractTransactionsFromText — fragmented Moniepoint layout", () => {
     "₦10,000.00",
     "inward",
     "transfer",
-    "Alexander Tolani Olufunmilayo",
+    "Alexander Tolani Sample",
     "transfer from alexander",
     "₦30,035.20",
     "09/01/26",
@@ -261,7 +261,7 @@ describe("extractTransactionsFromText — fragmented Moniepoint layout", () => {
       values: {
         Debit: "",
         Credit: "10,000.00",
-        Description: "inward transfer Alexander Tolani Olufunmilayo transfer from alexander",
+        Description: "inward transfer Alexander Tolani Sample transfer from alexander",
       },
     });
     expect(rows[2]).toMatchObject({

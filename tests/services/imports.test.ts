@@ -19,12 +19,15 @@ vi.mock("@/lib/import/parse-pdf", () => ({
 import { getCurrentUser } from "@/lib/auth/server";
 import { getPrismaClient } from "@/lib/db/client";
 import { parsePdf } from "@/lib/import/parse-pdf";
+import { getAnalyticsSummary } from "@/lib/services/analytics";
 import {
   listImportHistory,
   getExistingFingerprints,
   getExistingDateRange,
   commitImport,
 } from "@/lib/services/imports";
+import { getCategoryReport, getReportData } from "@/lib/services/reports";
+import { listTransactions } from "@/lib/services/transactions";
 import { categorizeImportRow } from "@/lib/import/index";
 import type {
   NormalizedImportRow,
@@ -66,6 +69,8 @@ const mockPrisma = {
     findMany: vi.fn(),
     createMany: vi.fn(),
     aggregate: vi.fn(),
+    count: vi.fn(),
+    groupBy: vi.fn(),
   },
   category: { findMany: vi.fn(), findFirst: vi.fn() },
   categoryRule: { findMany: vi.fn(), upsert: vi.fn() },
@@ -1232,6 +1237,191 @@ describe("commitImport", () => {
 
     expect(mockPrisma.transaction.createMany).not.toHaveBeenCalled();
     expect(mockPrisma.import.create).not.toHaveBeenCalled();
+  });
+});
+
+// Minimal in-memory ledger so the SAME committed rows feed the import,
+// dashboard, transaction-list and report aggregations — no canned groupBy
+// results that could hide a transfer leaking into a total.
+interface StoredTransaction extends Record<string, unknown> {
+  id: string;
+  businessId: string;
+  date: Date;
+  type: string;
+  categoryId: string | null;
+  amount: string;
+  fingerprint: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function matchesStoredRow(
+  row: StoredTransaction,
+  where: Record<string, unknown> = {},
+): boolean {
+  for (const [field, raw] of Object.entries(where)) {
+    if (field === "OR") continue; // free-text search is not used by these calls
+    if (field === "date" && raw && typeof raw === "object") {
+      const bounds = raw as { gte?: Date; lte?: Date };
+      if (bounds.gte && row.date < bounds.gte) return false;
+      if (bounds.lte && row.date > bounds.lte) return false;
+      continue;
+    }
+    if (raw && typeof raw === "object" && !(raw instanceof Date)) {
+      const condition = raw as Record<string, unknown>;
+      if ("in" in condition) {
+        if (!(condition.in as unknown[]).includes(row[field])) return false;
+        continue;
+      }
+      if ("not" in condition && row[field] === condition.not) return false;
+    }
+    if (row[field] !== raw) return false;
+  }
+  return true;
+}
+
+function groupStoredRows(
+  rows: StoredTransaction[],
+  by: string[],
+  withCount: boolean,
+): Array<Record<string, unknown>> {
+  const buckets = new Map<
+    string,
+    { fields: Record<string, unknown>; total: number; count: number }
+  >();
+  for (const row of rows) {
+    const key = by
+      .map((field) => (field === "date" ? row.date.toISOString() : String(row[field])))
+      .join("|");
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      const fields: Record<string, unknown> = {};
+      for (const field of by) fields[field] = field === "date" ? row.date : row[field];
+      bucket = { fields, total: 0, count: 0 };
+      buckets.set(key, bucket);
+    }
+    bucket.total += Number(row.amount);
+    bucket.count += 1;
+  }
+  return Array.from(buckets.values()).map(({ fields, total, count }) => ({
+    ...fields,
+    _sum: { amount: { toString: () => total.toFixed(2) } },
+    ...(withCount ? { _count: count } : {}),
+  }));
+}
+
+describe("commitImport — learned-rule transfers never count as income or expense", () => {
+  beforeEach(() => {
+    mockedGetCurrentUser.mockResolvedValue(userA);
+    mockPrisma.business.findFirst.mockResolvedValue(businessA);
+  });
+
+  it("excludes an internal transfer that matched a learned rule from every total", async () => {
+    const stored: StoredTransaction[] = [];
+    mockPrisma.transaction.createMany.mockImplementation(
+      async (args: { data: Array<Record<string, unknown>> }) => {
+        for (const data of args.data) {
+          stored.push({
+            ...data,
+            id: `tx-${stored.length + 1}`,
+            notes: null,
+            fingerprint: (data.fingerprint as string | null) ?? null,
+            createdAt: new Date("2026-11-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-11-01T00:00:00.000Z"),
+          } as unknown as StoredTransaction);
+        }
+        return { count: args.data.length };
+      },
+    );
+    mockPrisma.transaction.findMany.mockImplementation(
+      async (args: { where?: Record<string, unknown>; skip?: number; take?: number } = {}) => {
+        const rows = stored.filter((row) => matchesStoredRow(row, args.where));
+        return typeof args.skip === "number" && typeof args.take === "number"
+          ? rows.slice(args.skip, args.skip + args.take)
+          : rows;
+      },
+    );
+    mockPrisma.transaction.count.mockImplementation(
+      async (args: { where?: Record<string, unknown> }) =>
+        stored.filter((row) => matchesStoredRow(row, args.where)).length,
+    );
+    mockPrisma.transaction.groupBy.mockImplementation(
+      async (args: {
+        by: string[];
+        where?: Record<string, unknown>;
+        _count?: unknown;
+      }) =>
+        groupStoredRows(
+          stored.filter((row) => matchesStoredRow(row, args.where)),
+          args.by,
+          Boolean(args._count),
+        ),
+    );
+    mockPrisma.category.findMany.mockResolvedValue([
+      makeCategoryRow({ id: SYS_OTHER_INCOME, name: "Other Income", type: "income" }),
+      makeCategoryRow({ id: SYS_RENT, name: "Rent" }),
+      makeCategoryRow({ id: SYS_OTHER, name: "Other" }),
+    ]);
+    mockPrisma.category.findFirst.mockResolvedValue({ id: SYS_RENT });
+    mockPrisma.categoryRule.findMany.mockResolvedValue([
+      {
+        id: "rule-john",
+        businessId: businessA.id,
+        matchType: "merchant",
+        pattern: "JOHN",
+        categoryId: SYS_RENT,
+        categoryName: "Rent",
+        createdAt: new Date("2026-10-01T00:00:00.000Z"),
+      },
+    ]);
+    mockPrisma.import.create.mockResolvedValue({ id: "imp-learned-transfer" });
+
+    const result = await commitImport(
+      csvBytes(
+        [
+          "Date,Description,Type,Amount",
+          "2026-11-01,OPAY NIP CREDIT FROM JOHN DOE ****0000,transfer,5000.00",
+        ].join("\n"),
+      ),
+      commitInput({
+        fileName: "learned-transfer.csv",
+        mapping: { date: "Date", description: "Description", type: "Type", amount: "Amount" },
+        selections: [{ rowIndex: 0, include: true, categoryId: null }],
+      }),
+    );
+
+    expect(result.imported).toBe(1);
+    const [written] = mockPrisma.transaction.createMany.mock.calls[0][0]
+      .data as Array<Record<string, unknown>>;
+    expect(written.type).toBe("transfer");
+    expect(written.amount).toBe("5000.00");
+    expect(mockPrisma.categoryRule.findMany).toHaveBeenCalled();
+
+    const range = { dateFrom: "2026-11-01", dateTo: "2026-11-30" };
+
+    // Dashboard KPIs (Overview -> getAnalyticsSummary).
+    const dashboard = await getAnalyticsSummary(range);
+    expect(dashboard.revenue).toBe(0);
+    expect(dashboard.expenses).toBe(0);
+    expect(dashboard.netProfit).toBe(0);
+    expect(dashboard.transfers).toBe(5000);
+
+    // /income and /expenses totals (TransactionsTypePage -> listTransactions).
+    const income = await listTransactions({ ...range, type: "income" });
+    expect(income.totals).toEqual({ income: 0, expense: 0, net: 0, transfer: 0 });
+    const expenses = await listTransactions({ ...range, type: "expense" });
+    expect(expenses.totals).toEqual({ income: 0, expense: 0, net: 0, transfer: 0 });
+
+    // Reports + CSV exports (getReportData -> getCategoryReport/analytics).
+    const report = await getReportData(range);
+    expect(report.category.income).toBe(0);
+    expect(report.category.expenses).toBe(0);
+    expect(report.category.rows).toEqual([]);
+    expect(report.income).toEqual({ total: 0, rows: [] });
+    expect(report.expense).toEqual({ total: 0, rows: [] });
+    expect(report.profit.netProfit).toBe(0);
+    const categoryBreakdown = await getCategoryReport(range);
+    expect(categoryBreakdown.rows).toEqual([]);
   });
 });
 
