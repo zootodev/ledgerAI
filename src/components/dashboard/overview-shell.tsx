@@ -41,9 +41,10 @@ export function OverviewShell({
     >
       <div className="mx-auto min-w-0 max-w-6xl space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {/* The app header already owns the page's single H1 ("Overview"). */}
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
             {businessName}
-          </h1>
+          </h2>
           <span className="text-xs text-muted">
             All accounts · {currency}
           </span>

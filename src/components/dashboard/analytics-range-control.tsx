@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useTransition } from "react";
 import { CalendarRange } from "lucide-react";
 import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
@@ -23,6 +22,31 @@ export interface AnalyticsRangeControlProps {
   params?: Record<string, string | string[] | undefined>;
 }
 
+export interface RangeSelection {
+  from: string;
+  to: string;
+  presetId?: RangePresetId;
+}
+
+/**
+ * Pure URL builder for a range selection. The bounds come from the selection
+ * itself (never from the previously rendered `from`/`to`), so every click
+ * writes its own range instead of the one before it.
+ */
+export function buildRangeHref(
+  current: URLSearchParams | Record<string, string | string[] | undefined> | undefined,
+  pathname: string,
+  selection: RangeSelection,
+): string {
+  const base =
+    current instanceof URLSearchParams
+      ? new URLSearchParams(current)
+      : paramsToSearchParams(current);
+  const next = withRangeSelection(base, selection);
+  const qs = next.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
+}
+
 /**
  * Client date-range control for the Overview/Insights/Reports. Writes
  * ?from=&to= plus ?preset= (or ?range=all) onto the URL so the server page
@@ -36,7 +60,13 @@ export function AnalyticsRangeControl({
 }: AnalyticsRangeControlProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [isPending, startTransition] = useTransition();
+  // Highlight the clicked pill immediately; server props arrive one
+  // navigation later and must not make the click look like it did nothing.
+  const [optimisticPreset, setOptimisticPreset] = React.useState<{
+    id: RangePresetId;
+    /** The applied params this click replaces — discarded once they change. */
+    replaces: string;
+  } | null>(null);
 
   const presets = React.useMemo(() => buildRangePresets(new Date()), []);
 
@@ -46,18 +76,17 @@ export function AnalyticsRangeControl({
 
   /**
    * Push a new selection onto the URL, preserving all unrelated parameters.
-   * A preset click passes its id (recorded as ?preset=); a manual From/To edit
-   * omits it, which clears any stored preset.
+   * Reads the live browser query at click time: the `params` prop is a server
+   * snapshot and can still describe the previous selection while a navigation
+   * is in flight. Pushing immediately (no deferred transition) stops a rapid
+   * second click from applying the first click's range.
    */
   const apply = React.useCallback(
     (nextFrom: string, nextTo: string, presetId?: RangePresetId) => {
-      const next = withRangeSelection(paramsToSearchParams(params), {
-        from: nextFrom,
-        to: nextTo,
-        presetId,
-      });
-      const qs = next.toString();
-      startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
+      const current = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search)
+        : paramsToSearchParams(params);
+      router.push(buildRangeHref(current, pathname, { from: nextFrom, to: nextTo, presetId }));
     },
     [params, pathname, router],
   );
@@ -70,12 +99,15 @@ export function AnalyticsRangeControl({
     presets,
   });
 
+  const appliedKey = `${Array.isArray(params?.preset) ? params?.preset.join(",") : params?.preset ?? ""}|${from ?? ""}|${to ?? ""}`;
+  const displayedPresetId =
+    optimisticPreset?.replaces === appliedKey ? optimisticPreset.id : activePresetId;
+
   return (
     <div
       className={cn(
         "flex w-full min-w-0 flex-col gap-3 rounded-card border border-border bg-surface p-3",
         "lg:flex-row lg:items-end lg:justify-between",
-        isPending && "pointer-events-none opacity-60",
       )}
     >
       {!from && !to ? (
@@ -93,7 +125,10 @@ export function AnalyticsRangeControl({
             </span>
             <DateField
               value={from}
-              onIsoChange={(iso) => apply(iso, to ?? "")}
+              onIsoChange={(iso) => {
+                setOptimisticPreset(null);
+                apply(iso, to ?? "");
+              }}
               className="w-full"
             />
           </label>
@@ -103,7 +138,10 @@ export function AnalyticsRangeControl({
             </span>
             <DateField
               value={to}
-              onIsoChange={(iso) => apply(from ?? "", iso)}
+              onIsoChange={(iso) => {
+                setOptimisticPreset(null);
+                apply(from ?? "", iso);
+              }}
               className="w-full"
             />
           </label>
@@ -112,7 +150,7 @@ export function AnalyticsRangeControl({
 
       <div className="flex flex-wrap items-center gap-1.5">
         {presets.map((preset) => {
-          const active = activePresetId === preset.id;
+          const active = displayedPresetId === preset.id;
           return (
             <Button
               key={preset.id}
@@ -120,7 +158,10 @@ export function AnalyticsRangeControl({
               variant={active ? "secondary" : "ghost"}
               size="sm"
               aria-pressed={active}
-              onClick={() => apply(preset.from, preset.to, preset.id)}
+              onClick={() => {
+                setOptimisticPreset({ id: preset.id, replaces: appliedKey });
+                apply(preset.from, preset.to, preset.id);
+              }}
             >
               {preset.label}
             </Button>

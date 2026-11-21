@@ -11,7 +11,15 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { ChartTooltip, ChartLegend, chartColor, tickStyle, type ChartValueFormatter, compactCurrency } from "@/components/charts/shared";
+import {
+  ChartTooltip,
+  ChartLegend,
+  chartColor,
+  tickStyle,
+  type ChartValueFormatter,
+  compactCurrency,
+  tooltipCurrency,
+} from "@/components/charts/shared";
 import { cn } from "@/lib/utils/cn";
 
 export interface BarSeries {
@@ -22,7 +30,7 @@ export interface BarSeries {
 }
 
 export interface BarChartProps {
-  data: Record<string, number | string>[];
+  data: Record<string, number | string | boolean>[];
   xKey: string;
   series: BarSeries[];
   height?: number;
@@ -44,8 +52,13 @@ export function BarChart({
   currency,
   format = currency ? "currency" : "number",
 }: BarChartProps) {
+  /** Axis ticks stay compact; the tooltip formatter is exact. */
   const valueFormatter: ChartValueFormatter | undefined = React.useMemo(
     () => (v: number) => compactCurrency(v, currency, format),
+    [currency, format],
+  );
+  const tooltipFormatter: ChartValueFormatter | undefined = React.useMemo(
+    () => (v: number) => tooltipCurrency(v, currency, format),
     [currency, format],
   );
   return (
@@ -83,10 +96,14 @@ export function BarChart({
             />
           )}
           <Tooltip
-            content={<ChartTooltip format={valueFormatter} />}
+            content={<ChartTooltip format={tooltipFormatter} />}
             cursor={{ fill: "var(--surface-subtle)" }}
           />
-          {series.length > 1 && <Legend content={<ChartLegend />} />}
+          {series.length > 1 && (
+            <Legend
+              content={<ChartLegend order={series.map((s) => s.key)} />}
+            />
+          )}
           {series.map((s, i) => (
             <Bar
               key={s.key}

@@ -10,8 +10,18 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
 } from "recharts";
-import { ChartTooltip, ChartLegend, chartColor, tickStyle, MONEY_CURVE, type ChartValueFormatter, compactCurrency } from "@/components/charts/shared";
+import {
+  ChartTooltip,
+  ChartLegend,
+  chartColor,
+  tickStyle,
+  MONEY_CURVE,
+  type ChartValueFormatter,
+  compactCurrency,
+  tooltipCurrency,
+} from "@/components/charts/shared";
 import { cn } from "@/lib/utils/cn";
 
 export interface Series {
@@ -22,7 +32,7 @@ export interface Series {
 }
 
 export interface LineChartProps {
-  data: Record<string, number | string>[];
+  data: Record<string, number | string | boolean>[];
   xKey: string;
   series: Series[];
   height?: number;
@@ -31,6 +41,27 @@ export interface LineChartProps {
   currency?: string;
   /** Format to use; defaults to currency when currency is set, else number. */
   format?: "currency" | "number";
+  /** Draw a dashed y=0 reference so loss months read clearly. */
+  zeroLine?: boolean;
+  /** Colour each observation green above zero, red below it. */
+  signDots?: boolean;
+}
+
+/** One observed point, coloured by the sign of its value. */
+function SignDot(props: { cx?: number; cy?: number; value?: number | string }) {
+  const { cx, cy, value } = props;
+  if (typeof cx !== "number" || typeof cy !== "number") return <g />;
+  const amount = typeof value === "number" ? value : Number(value);
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={3.5}
+      fill={amount < 0 ? "var(--danger)" : "var(--success)"}
+      stroke="var(--surface)"
+      strokeWidth={1}
+    />
+  );
 }
 
 export function LineChart({
@@ -41,9 +72,16 @@ export function LineChart({
   className,
   currency,
   format = currency ? "currency" : "number",
+  zeroLine = false,
+  signDots = false,
 }: LineChartProps) {
+  /** Axis ticks stay compact; the tooltip formatter is exact. */
   const valueFormatter: ChartValueFormatter | undefined = React.useMemo(
     () => (v: number) => compactCurrency(v, currency, format),
+    [currency, format],
+  );
+  const tooltipFormatter: ChartValueFormatter | undefined = React.useMemo(
+    () => (v: number) => tooltipCurrency(v, currency, format),
     [currency, format],
   );
   return (
@@ -65,8 +103,13 @@ export function LineChart({
             tick={tickStyle}
             tickFormatter={valueFormatter}
           />
-          <Tooltip content={<ChartTooltip format={valueFormatter} />} cursor={{ stroke: "var(--border-strong)" }} />
-          {series.length > 1 && <Legend content={<ChartLegend />} />}
+          {zeroLine && (
+            <ReferenceLine y={0} stroke="var(--border-strong)" strokeDasharray="4 4" />
+          )}
+          <Tooltip content={<ChartTooltip format={tooltipFormatter} />} cursor={{ stroke: "var(--border-strong)" }} />
+          {series.length > 1 && (
+            <Legend content={<ChartLegend order={series.map((s) => s.key)} />} />
+          )}
           {series.map((s, i) => (
             <Line
               key={s.key}
@@ -76,7 +119,7 @@ export function LineChart({
               stroke={s.color ?? chartColor(i)}
               strokeWidth={2}
               strokeDasharray={s.dashed ? "4 4" : undefined}
-              dot={false}
+              dot={signDots ? <SignDot /> : false}
               activeDot={{ r: 4 }}
             />
           ))}

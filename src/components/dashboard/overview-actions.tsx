@@ -54,7 +54,7 @@ export async function OverviewActionItems() {
         <Alert tone="info" title="Some categories need a second look">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
-              {countPhrase(lowConfidenceCount, "transaction", { verb: ["was", "were"] })}
+              {countPhrase(lowConfidenceCount, "transaction", { verb: ["was", "were"] })}{" "}
               tagged automatically, but the match was weak. Under {reviewPercent}% goes to
               Review. Confirm or correct them so the next import learns the pattern.
             </span>
@@ -79,7 +79,7 @@ export async function OverviewActionItems() {
                   <span className="break-words font-medium text-foreground">
                     {latestImport.filename}
                   </span>
-                </span>
+                </span>{" "}
                 <span className="text-sm text-muted">
                   {latestImport.imported} of {countPhrase(latestImport.found, "row")} imported
                   {latestImport.existingDuplicates > 0

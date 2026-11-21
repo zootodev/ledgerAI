@@ -8,8 +8,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { buttonVariants } from "@/components/ui/button";
 
-/** Help text for the Cash Balance KPI (ledger-derived, not a bank statement). */
-export const CASH_BALANCE_HELP = "From recorded transactions only.";
+/** Cash balance is a point-in-time snapshot, unlike the three flow KPIs. */
+export const CASH_BALANCE_HELP = "All time, not just this range";
 
 /** A fully-zero summary means the business has no recorded transactions yet. */
 export function isEmptySummary(summary: AnalyticsSummary): boolean {
@@ -29,29 +29,88 @@ export interface KpiGridProps {
 }
 
 /**
- * The change badge shown on a KPI card.
- *
- * - `null` when there is no comparison window, or the baseline is negative
- *   (a percentage against a negative baseline is meaningless).
- * - "No change" when both periods are zero, so no percentage is fabricated.
- * - "New" when only the prior period is zero — there is no baseline to
- *   compute a percentage from, but the activity is genuinely new.
- * - otherwise the signed percentage ("+12%", "-3%").
+ * Human label for the comparison window, derived from the applied range so the
+ * badge says "previous 90 days" / "last month" to match what the user picked.
  */
-function changeBadge(current: number, prior: number | null | undefined, currency: string): string | null {
+export function priorPeriodLabel(period: {
+  from: string | null;
+  to: string | null;
+}): string {
+  if (!period.from || !period.to) return "previous period";
+  const from = new Date(`${period.from}T00:00:00.000Z`);
+  const to = new Date(`${period.to}T00:00:00.000Z`);
+  if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || to < from) {
+    return "previous period";
+  }
+  const days = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
+  const monthStart = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1);
+  const monthEnd = Date.UTC(to.getUTCFullYear(), to.getUTCMonth() + 1, 0);
+  const yearStart = Date.UTC(from.getUTCFullYear(), 0, 1);
+  const yearEnd = Date.UTC(to.getUTCFullYear(), 11, 31);
+
+  if (from.getTime() === monthStart && to.getTime() === monthEnd && from.getUTCFullYear() === to.getUTCFullYear()) {
+    return "last month";
+  }
+  if (from.getTime() === yearStart && to.getTime() === yearEnd && from.getUTCFullYear() === to.getUTCFullYear()) {
+    return "last year";
+  }
+  return days === 1 ? "previous day" : `previous ${days} days`;
+}
+
+export interface BadgeContext {
+  /** Comparison window as a phrase, e.g. "previous 90 days". */
+  comparison?: string;
+  /** Profit can cross zero; flow metrics normally cannot. */
+  kind?: "profit" | "flow";
+}
+
+export interface ChangeBadgeParts {
+  /** Short badge text (the percentage or a plain-words comparison). */
+  label: string;
+  /** Small subtitle carrying the prior figure and comparison window. */
+  detail: string;
+}
+
+/**
+ * The change badge shown on a KPI card. Presentation only — every figure
+ * comes from the same analytics summary that produced the tile value.
+ *
+ * - `null` when there is no comparison window at all.
+ * - "No change" when both periods (or the rounded delta) are zero, so a
+ *   fabricated "-100%" can never appear next to a flat-zero tile.
+ * - "New" when only the prior period is zero (no baseline to divide by).
+ * - Plain words when the sign flips or the baseline is negative — a
+ *   percentage against a negative profit is meaningless.
+ * - Otherwise one signed percentage, including changes above 100%.
+ */
+export function changeBadge(
+  current: number,
+  prior: number | null | undefined,
+  currency: string,
+  context: BadgeContext = {},
+): ChangeBadgeParts | null {
   if (prior === null || prior === undefined) return null;
-  if (prior === 0) return current === 0 ? "No change" : "New";
-  if (prior < 0) return null;
+  const comparison = context.comparison ?? "previous period";
+  const priorAmount = formatAmount(prior, currency);
+  const detail = `was ${priorAmount}`;
+
+  if (current === 0 && prior === 0) return { label: "No change", detail };
+  if (prior === 0) return { label: "New", detail };
+
+  const crossedZero = prior < 0 || current < 0;
+  if (crossedZero) {
+    const direction = current > prior ? "Up" : "Down";
+    return { label: `${direction} from ${priorAmount}`, detail };
+  }
+
   const delta = percentChange(current, prior);
   if (delta === null) return null;
   const rounded = round(delta, 0);
-  if (rounded === 0) return "0%";
-  if (Math.abs(rounded) > 100) {
-    // Show naira difference instead of percentage when change is > 100%
-    const diff = Math.round(current - prior);
-    return `${rounded > 0 ? "+" : "-"}${formatAmount(diff, currency)} vs last period`;
-  }
-  return `${rounded > 0 ? "+" : "-"}${Math.abs(rounded)}%`;
+  if (rounded === 0) return { label: "No change", detail };
+  return {
+    label: `${rounded > 0 ? "+" : "-"}${Math.abs(rounded)}% vs ${comparison}`,
+    detail,
+  };
 }
 
 /** Link to the filtered transactions list for a KPI (dates use the transactions schema). */
@@ -91,10 +150,14 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
 
   const hasRange = Boolean(range?.dateFrom || range?.dateTo);
   const prior = summary.prior;
-  const cashBalanceHint = hasRange ? "All time" : undefined;
-  const revenueDelta = changeBadge(summary.revenue, prior?.revenue, currency);
-  const expensesDelta = changeBadge(summary.expenses, prior?.expenses, currency);
-  const profitDelta = changeBadge(summary.netProfit, prior?.netProfit, currency);
+  const comparison = prior ? priorPeriodLabel(summary.period) : undefined;
+  const badgeContext = { comparison, kind: "flow" as const };
+  const revenueBadge = changeBadge(summary.revenue, prior?.revenue, currency, badgeContext);
+  const expensesBadge = changeBadge(summary.expenses, prior?.expenses, currency, badgeContext);
+  const profitBadge = changeBadge(summary.netProfit, prior?.netProfit, currency, {
+    ...badgeContext,
+    kind: "profit",
+  });
 
   return (
     <>
@@ -102,14 +165,16 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
         <StatCard
           label="Revenue"
           value={formatAmount(summary.revenue, currency)}
-          delta={revenueDelta}
+          delta={revenueBadge?.label}
+          detail={revenueBadge?.detail}
           href={transactionsHref("income", summary.period)}
           compactOnMobile
         />
         <StatCard
           label="Expenses"
           value={formatAmount(summary.expenses, currency)}
-          delta={expensesDelta}
+          delta={expensesBadge?.label}
+          detail={expensesBadge?.detail}
           invertDelta
           href={transactionsHref("expense", summary.period)}
           compactOnMobile
@@ -117,14 +182,15 @@ export async function AnalyticsKpiGrid({ currency, range }: KpiGridProps) {
         <StatCard
           label="Net profit"
           value={formatAmount(summary.netProfit, currency)}
-          delta={profitDelta}
+          delta={profitBadge?.label}
+          detail={profitBadge?.detail}
           href={reportsHref(summary.period)}
           compactOnMobile
         />
         <StatCard
           label="Cash balance"
           value={formatAmount(summary.cashBalance, currency)}
-          hint={cashBalanceHint || CASH_BALANCE_HELP}
+          hint={CASH_BALANCE_HELP}
           href={reportsHref(summary.period)}
           compactOnMobile
         />

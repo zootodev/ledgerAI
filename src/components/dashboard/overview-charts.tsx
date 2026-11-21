@@ -4,7 +4,7 @@ import { getAnalyticsTrends, type AnalyticsQuery, type AnalyticsTrends } from "@
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,6 +55,9 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
     revenue: p.revenue,
     expenses: p.expenses,
     netProfit: p.netProfit,
+    // Lets the tooltip say "No transactions recorded" for a zero-filled
+    // bucket instead of showing misleading ₦0 series values.
+    hasTransactions: p.revenue !== 0 || p.expenses !== 0 || p.transfers !== 0,
   }));
 
   // A range whose buckets are all zero would otherwise plot a flat line pinned
@@ -85,6 +88,9 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
       <Card>
         <CardHeader>
           <CardTitle>Money in and out</CardTitle>
+          <CardDescription className="text-xs leading-snug">
+            Revenue vs expenses each month, transfers between your own accounts excluded
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <BarChart
@@ -102,6 +108,9 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
       <Card>
         <CardHeader>
           <CardTitle>Profit over time</CardTitle>
+          <CardDescription className="text-xs leading-snug">
+            Revenue minus expenses each month
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <LineChart
@@ -109,6 +118,8 @@ export async function OverviewCharts({ currency, range }: OverviewChartsProps) {
             height={240}
             data={data}
             currency={currency}
+            zeroLine
+            signDots
             series={[{ key: "netProfit", name: "Net profit" }]}
           />
         </CardContent>

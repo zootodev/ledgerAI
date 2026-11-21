@@ -7,7 +7,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-import { AnalyticsRangeControl } from "@/components/dashboard/analytics-range-control";
+import {
+  AnalyticsRangeControl,
+  buildRangeHref,
+} from "@/components/dashboard/analytics-range-control";
 import {
   buildRangePresets,
   resolveActivePresetId,
@@ -165,5 +168,50 @@ describe("withRangeSelection", () => {
     const next = withRangeSelection(base, { from: "2026-10-01", to: "2026-10-18", presetId: "month" });
     expect(next.get("accountId")).toBe("abc");
     expect(next.get("search")).toBe("rent");
+  });
+});
+
+describe("range preset clicks apply their own bounds immediately", () => {
+  const presets = buildRangePresets(new Date("2026-11-21T12:00:00Z"));
+
+  it("each preset writes its own from/to, not the previously clicked one", () => {
+    let current = new URLSearchParams();
+
+    for (const preset of presets) {
+      const href = buildRangeHref(current, "/overview", {
+        from: preset.from,
+        to: preset.to,
+        presetId: preset.id,
+      });
+      const params = new URLSearchParams(href.split("?")[1] ?? "");
+
+      expect(params.get("preset")).toBe(preset.id);
+      // The all-time preset deliberately omits bounds from the URL.
+      expect(params.get("from") ?? "").toBe(preset.from);
+      expect(params.get("to") ?? "").toBe(preset.to);
+      // Feed the previous selection back in: a stale prop must not win.
+      current = params;
+    }
+  });
+
+  it("a preset click after All time clears range=all", () => {
+    const allTime = buildRangeHref(new URLSearchParams(), "/overview", {
+      from: "",
+      to: "",
+      presetId: "all",
+    });
+    expect(new URLSearchParams(allTime.split("?")[1]).get("range")).toBe("all");
+
+    const thirty = presets.find((p) => p.id === "last30")!;
+    const next = new URLSearchParams(
+      buildRangeHref(new URLSearchParams(allTime.split("?")[1]), "/overview", {
+        from: thirty.from,
+        to: thirty.to,
+        presetId: "last30",
+      }).split("?")[1],
+    );
+    expect(next.get("range")).toBeNull();
+    expect(next.get("from")).toBe(thirty.from);
+    expect(next.get("to")).toBe(thirty.to);
   });
 });

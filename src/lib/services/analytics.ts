@@ -219,11 +219,11 @@ export async function getAnalyticsTrends(
   const points: AnalyticsTrendPoint[] = [];
   if (groupBy === "day") {
     for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
-      points.push(pointFor(cursor, groupBy, byBucket));
+      points.push(pointFor(cursor, groupBy, byBucket, dateFrom, dateTo));
     }
   } else {
     for (let cursor = addMonths(start, 0); cursor <= end; cursor = addMonths(cursor, 1)) {
-      points.push(pointFor(cursor, groupBy, byBucket));
+      points.push(pointFor(cursor, groupBy, byBucket, dateFrom, dateTo));
     }
   }
 
@@ -263,11 +263,44 @@ const MONTH_LABELS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
 
+/** Ordinal day for partial-period labels: 1st, 2nd, 3rd, 4th … 21st. */
+function ordinalDay(day: number): string {
+  const teens = day % 100 >= 11 && day % 100 <= 13;
+  const suffix = teens ? "th" : day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th";
+  return `${day}${suffix}`;
+}
+
+/**
+ * Partial-month qualifier for a bucket that the requested range clips. Labels
+ * only — bucket totals still come from the same whole-month aggregation.
+ */
+function partialMonthSuffix(key: string, from?: string, to?: string): string {
+  const [year, month] = key.split("-").map(Number);
+  const prefix = `${year}-${String(month).padStart(2, "0")}-`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const parts: string[] = [];
+  if (from?.startsWith(prefix)) {
+    const day = Number(from.slice(8, 10));
+    if (day > 1) parts.push(`from ${ordinalDay(day)}`);
+  }
+  if (to?.startsWith(prefix)) {
+    const day = Number(to.slice(8, 10));
+    if (day < lastDay) parts.push(`to ${ordinalDay(day)}`);
+  }
+  return parts.length ? ` (${parts.join(" ")})` : "";
+}
+
 /** Human label for a bucket key, e.g. "2026-03" → "Mar 2026", "2026-03-05" → "Mar 5". */
-function bucketLabel(key: string, groupBy: "day" | "month"): string {
+function bucketLabel(
+  key: string,
+  groupBy: "day" | "month",
+  partialSuffix = "",
+): string {
   const [year, month, day] = key.split("-").map(Number);
   const monthName = MONTH_LABELS[month - 1];
-  return groupBy === "month" ? `${monthName} ${year}` : `${monthName} ${day}`;
+  return groupBy === "month"
+    ? `${monthName} ${year}${partialSuffix}`
+    : `${monthName} ${day}`;
 }
 
 /** Fold one bucket through the finance engine into a chart point. */
@@ -275,12 +308,14 @@ function pointFor(
   cursor: Date,
   groupBy: "day" | "month",
   byBucket: Map<string, ProfitRow[]>,
+  dateFrom?: string,
+  dateTo?: string,
 ): AnalyticsTrendPoint {
   const key = bucketKey(cursor, groupBy);
   const summary = computeSummary(byBucket.get(key) ?? []);
   return {
     key,
-    label: bucketLabel(key, groupBy),
+    label: bucketLabel(key, groupBy, partialMonthSuffix(key, dateFrom, dateTo)),
     revenue: summary.revenue,
     expenses: summary.expenses,
     transfers: summary.transfers,
