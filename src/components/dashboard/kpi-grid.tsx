@@ -79,8 +79,10 @@ export interface ChangeBadgeParts {
  * - "No change" when both periods (or the rounded delta) are zero, so a
  *   fabricated "-100%" can never appear next to a flat-zero tile.
  * - "New" when only the prior period is zero (no baseline to divide by).
- * - Plain words when the sign flips or the baseline is negative — a
- *   percentage against a negative profit is meaningless.
+ * - For profit, a signed currency delta ("+₦50,892.21 vs previous 90 days"):
+ *   percentages are meaningless when the baseline is negative or zero.
+ * - Plain words for flow metrics when the sign flips — a percentage against
+ *   a negative flow is meaningless.
  * - Otherwise one signed percentage, including changes above 100%.
  */
 export function changeBadge(
@@ -95,6 +97,19 @@ export function changeBadge(
   const detail = `was ${priorAmount}`;
 
   if (current === 0 && prior === 0) return { label: "No change", detail };
+
+  // Profit can cross (or start below) zero, so a percentage would be either
+  // meaningless or absurd. Give the actual change in money instead; the sign
+  // alone says whether profit improved, and StatCard colours it accordingly.
+  if (context.kind === "profit") {
+    const difference = round(current - prior, 2);
+    if (difference === 0) return { label: "No change", detail };
+    return {
+      label: `${difference > 0 ? "+" : "-"}${formatAmount(Math.abs(difference), currency)} vs ${comparison}`,
+      detail,
+    };
+  }
+
   if (prior === 0) return { label: "New", detail };
 
   const crossedZero = prior < 0 || current < 0;

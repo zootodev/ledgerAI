@@ -279,7 +279,7 @@ export default async function HomePage() {
       <footer className="border-t border-border">
         <div className={`${section} flex flex-col gap-3 py-6 text-xs text-muted sm:flex-row sm:items-center sm:justify-between`}>
           <p>
-            © {new Date().getFullYear()} {DATA_CONTROLLER}
+            © {new Date().getFullYear()}{" "}{DATA_CONTROLLER}
           </p>
           <div className="flex items-center gap-4">
             <Link href={PRIVACY_PATH} className="hover:text-foreground">

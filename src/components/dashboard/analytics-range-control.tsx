@@ -75,18 +75,24 @@ export function AnalyticsRangeControl({
     rangeParam === "all" || (Array.isArray(rangeParam) && rangeParam.includes("all"));
 
   /**
-   * Push a new selection onto the URL, preserving all unrelated parameters.
-   * Reads the live browser query at click time: the `params` prop is a server
-   * snapshot and can still describe the previous selection while a navigation
-   * is in flight. Pushing immediately (no deferred transition) stops a rapid
-   * second click from applying the first click's range.
+   * Apply a selection without waiting for the App Router's RSC response.
+   *
+   * `router.push` only commits the address bar once the new server tree has
+   * streamed in. On /overview the analytics server components can take long
+   * enough that a fast second click sees the old URL and appears one preset
+   * behind. Writing the native History state first makes the URL (and the
+   * next click's `window.location.search`) correct immediately; `refresh()`
+   * then re-renders the server components for that already-committed URL.
    */
   const apply = React.useCallback(
     (nextFrom: string, nextTo: string, presetId?: RangePresetId) => {
       const current = typeof window !== "undefined"
         ? new URLSearchParams(window.location.search)
         : paramsToSearchParams(params);
-      router.push(buildRangeHref(current, pathname, { from: nextFrom, to: nextTo, presetId }));
+      const href = buildRangeHref(current, pathname, { from: nextFrom, to: nextTo, presetId });
+      if (typeof window === "undefined") return;
+      window.history.pushState(null, "", href);
+      router.refresh();
     },
     [params, pathname, router],
   );

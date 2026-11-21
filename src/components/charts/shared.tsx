@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { formatAmount } from "@/lib/finance/engine";
 
 // Recharts injects tooltip props at runtime; typed loosely to match the
@@ -80,14 +81,17 @@ export function ChartLegend(props: {
   return (
     <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
       {entries?.map((entry, i) => (
-        <span key={i} className="inline-flex items-center gap-1.5 text-sm text-secondary">
-          <span
-            className="h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: entry.color }}
-            aria-hidden="true"
-          />
-          {entry.value ?? entry.dataKey}
-        </span>
+        <React.Fragment key={i}>
+          {i > 0 && <span className="sr-only">, </span>}
+          <span className="inline-flex items-center gap-1.5 text-sm text-secondary">
+            <span
+              className="h-2.5 w-2.5 rounded-sm"
+              style={{ backgroundColor: entry.color }}
+              aria-hidden="true"
+            />
+            {entry.value ?? entry.dataKey}
+          </span>
+        </React.Fragment>
       ))}
     </div>
   );
@@ -162,3 +166,54 @@ export const MONEY_CURVE = "monotone" as const;
 export const tickStyle = { fill: "var(--text-muted)", fontSize: 12 };
 /** Shared axis line style. */
 export const axisStyle = { stroke: "var(--border)" };
+
+type ChartRow = Record<string, number | string | boolean | undefined>;
+
+const MONTHLY_LABEL = /^[A-Za-z]{3} \d{4}(?: \(.*\))?$/;
+
+/** Monthly buckets carry a year in every label; daily buckets do not. */
+export function isMonthlyChartData(data: ChartRow[], xKey: string): boolean {
+  return data.length > 0 && data.every((row) => MONTHLY_LABEL.test(String(row[xKey] ?? "")));
+}
+
+/**
+ * Recharts otherwise drops ticks it thinks will collide — which is how the
+ * first partial month disappears from the profit line while still being
+ * plotted. Force every monthly tick; keep the default for daily buckets.
+ */
+export function chartXAxisInterval(data: ChartRow[], xKey: string): 0 | "preserveStartEnd" {
+  return isMonthlyChartData(data, xKey) ? 0 : "preserveStartEnd";
+}
+
+/** Axis-only short label; tooltips keep the full service-provided label. */
+export function shortMonthTick(value: string): string {
+  return value.replace(/^([A-Za-z]{3}) \d{4}( \(.*\))?$/, "$1$2");
+}
+
+/** Two-line monthly tick so long partial-month labels fit at 390px. */
+export function MonthTick({
+  x = 0,
+  y = 0,
+  payload,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: string | number };
+}) {
+  const full = String(payload?.value ?? "");
+  const match = full.match(
+    /^([A-Za-z]{3}) \d{4}( \((?:from|to) \d{1,2}(?:st|nd|rd|th)?\))?$/,
+  );
+  const month = match?.[1] ?? shortMonthTick(full);
+  const qualifier = match?.[2]?.replace(/^\((.*)\)$/, "$1") ?? "";
+  return (
+    <text x={x} y={y} dy={10} textAnchor="middle" fill="var(--text-muted)" fontSize={12}>
+      <tspan x={x}>{month}</tspan>
+      {qualifier && (
+        <tspan x={x} dy={13} fontSize={10}>
+          {qualifier}
+        </tspan>
+      )}
+    </text>
+  );
+}

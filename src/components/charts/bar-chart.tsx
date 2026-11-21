@@ -19,6 +19,9 @@ import {
   type ChartValueFormatter,
   compactCurrency,
   tooltipCurrency,
+  MonthTick,
+  chartXAxisInterval,
+  isMonthlyChartData,
 } from "@/components/charts/shared";
 import { cn } from "@/lib/utils/cn";
 
@@ -61,6 +64,8 @@ export function BarChart({
     () => (v: number) => tooltipCurrency(v, currency, format),
     [currency, format],
   );
+  const monthlyTicks = React.useMemo(() => isMonthlyChartData(data, xKey), [data, xKey]);
+  const tickInterval = React.useMemo(() => chartXAxisInterval(data, xKey), [data, xKey]);
   return (
     <div className={cn("w-full", className)}>
       <ResponsiveContainer width="100%" height={height}>
@@ -74,7 +79,9 @@ export function BarChart({
               tickLine={false}
               axisLine={{ stroke: "var(--border)" }}
               tickMargin={8}
-              tick={tickStyle}
+              tick={monthlyTicks ? <MonthTick /> : tickStyle}
+              interval={tickInterval}
+              height={monthlyTicks ? 42 : undefined}
             />
           )}
           {horizontal ? (

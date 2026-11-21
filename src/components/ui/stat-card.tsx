@@ -45,18 +45,23 @@ export function StatCard({
   invertDelta = false,
   compactOnMobile = false,
 }: StatCardProps) {
-  // A badge can carry context after the percentage ("-76% vs previous 90
-  // days"), so detect a *leading* signed percentage instead of a trailing %.
-  const percent = delta?.trim().match(/^([+-]?\d+(?:\.\d+)?)%([\s\S]*)$/);
+  // A badge can carry context after its figure ("-76% vs previous 90 days",
+  // "+₦50,892.21 vs previous 90 days"), so detect a *leading* signed figure.
+  const trimmedDelta = delta?.trim() ?? "";
+  const percent = trimmedDelta.match(/^([+-]?\d+(?:\.\d+)?)%([\s\S]*)$/);
   const isPercent = percent != null;
-  const isLabel = delta != null && !isPercent;
+  const signedAmount = isPercent ? null : trimmedDelta.match(/^([+-]\S+)([\s\S]*)$/);
+  const isSignedAmount = signedAmount != null;
+  const isLabel = delta != null && !isPercent && !isSignedAmount;
   const showDelta = !!delta && !loading;
-  const positive = !isLabel && !delta?.trim().startsWith("-");
+  const positive = (isPercent || isSignedAmount) && !trimmedDelta.startsWith("-");
   const unchanged = isPercent && Number(percent?.[1]) === 0;
   const good = invertDelta ? !positive : positive;
 
   const cell = (
     <div
+      role="group"
+      aria-label={`${label}: ${value}${delta ? `. ${delta}` : ""}${detail ? `. ${detail}` : ""}`}
       className={cn(
         "min-w-0 bg-surface px-4 py-3",
         href && "h-full transition-colors hover:bg-surface-hover",
@@ -95,6 +100,7 @@ export function StatCard({
             <span
               className="flex min-w-0 flex-col"
               title={detail ? `${delta} — ${detail}` : undefined}
+              aria-label={detail ? `${delta}. ${detail}` : delta ?? undefined}
             >
               <span
                 className={cn(
@@ -111,6 +117,13 @@ export function StatCard({
                     {percent?.[1]}%
                     {percent?.[2] && (
                       <span className="font-normal text-muted">{percent[2]}</span>
+                    )}
+                  </>
+                ) : isSignedAmount && signedAmount ? (
+                  <>
+                    {signedAmount[1]}
+                    {signedAmount[2] && (
+                      <span className="font-normal text-muted">{signedAmount[2]}</span>
                     )}
                   </>
                 ) : (

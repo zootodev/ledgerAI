@@ -67,7 +67,7 @@ export function AppShell({
             away from anywhere in the app (item 6 of the pre-launch pass). */}
         <footer className="border-t border-border px-4 py-3 sm:px-6 print:hidden">
           <p className="text-xs text-muted">
-            © {new Date().getFullYear()} {DATA_CONTROLLER} ·{" "}
+            © {new Date().getFullYear()}{" "}{DATA_CONTROLLER} ·{" "}
             <Link
               href={PRIVACY_PATH}
               className="underline-offset-4 hover:text-foreground hover:underline"

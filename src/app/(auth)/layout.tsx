@@ -70,7 +70,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               {children}
             </div>
             <footer className="mt-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-muted">
-              <span>© {new Date().getFullYear()} LedgerAI</span>
+              <span>© {new Date().getFullYear()}{" "}LedgerAI</span>
               <span aria-hidden="true">·</span>
               <Link href="/privacy" className="transition-colors hover:text-foreground">
                 Privacy

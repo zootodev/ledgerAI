@@ -59,7 +59,7 @@ export function LegalPage({ title, updated, children }: LegalPageProps) {
           >
             Contact
           </a>
-          <span className="text-muted">© {new Date().getFullYear()} LedgerAI</span>
+          <span className="text-muted">© {new Date().getFullYear()}{" "}LedgerAI</span>
         </div>
       </footer>
     </div>

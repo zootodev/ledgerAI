@@ -29,21 +29,28 @@ describe("changeBadge", () => {
     );
   });
 
-  it("uses plain words when the prior profit was negative", () => {
-    const badge = changeBadge(3_000, -12_000, "NGN", {
+  it("shows the naira improvement when profit crosses from negative to positive", () => {
+    const badge = changeBadge(-4_330, -55_222.21, "NGN", {
       comparison: COMPARISON,
       kind: "profit",
     });
-    expect(badge?.label).toMatch(/^Up from .*12,000/);
-    expect(badge?.label).not.toContain("%");
+    expect(badge?.label).toBe(`+₦50,892.21 vs ${COMPARISON}`);
+    expect(badge?.detail).toBe("was -₦55,222.21");
   });
 
-  it("uses plain words when the sign flips from positive to negative", () => {
+  it("shows a negative delta when profit worsens", () => {
     const badge = changeBadge(-3_000, 3_000, "NGN", {
       comparison: COMPARISON,
       kind: "profit",
     });
-    expect(badge?.label).toBe("Down from ₦3,000.00");
+    expect(badge?.label).toBe(`-₦6,000.00 vs ${COMPARISON}`);
+    expect(badge?.detail).toBe("was ₦3,000.00");
+  });
+
+  it("keeps plain words for flow metrics when the sign flips", () => {
+    expect(
+      changeBadge(-3_000, 3_000, "NGN", { comparison: COMPARISON, kind: "flow" })?.label,
+    ).toBe("Down from ₦3,000.00");
   });
 
   it("keeps a percentage above 100% instead of a naira difference", () => {
