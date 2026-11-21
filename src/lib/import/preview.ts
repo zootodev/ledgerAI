@@ -78,6 +78,7 @@ export function buildImportPreview(
       transfer: row.transfer ?? null,
       time: row.time ?? null,
       sectionId: row.sectionId ?? null,
+      pairedPayee: row.pairedPayee ?? null,
       duplicate: tag.duplicate,
       duplicateOfRow: tag.duplicateOfRow,
       errors: [...row.errors],

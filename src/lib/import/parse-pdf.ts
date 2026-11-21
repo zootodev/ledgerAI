@@ -64,6 +64,8 @@ export interface ParsedPdfResult {
   statement?: StatementHeaderSummary;
   /** Which extraction path produced this result (acceptance diagnostics). */
   extractor?: "pdfjs" | "fallback";
+  /** Detected bank letterhead, when known. */
+  bank?: BankFingerprint | null;
 }
 
 const MONTHS: Record<string, number> = {
@@ -271,7 +273,7 @@ const BANK_PATTERNS: [BankFingerprint, RegExp][] = [
   ["moniepoint", /\bmoniepoint\b/i],
   ["gtbank", /\b(?:gtbank|guaranty trust bank)\b/i],
   ["access", /\baccess bank\b/i],
-  ["opay", /\bopay\b/i],
+  ["opay", /\b(?:opay|owealth)\b/i],
   ["kuda", /\bkuda\b/i],
 ];
 
@@ -306,6 +308,12 @@ export function detectBankFingerprint(text: string): BankFingerprint | null {
   for (const [bank, pattern] of BANK_PATTERNS) {
     if (pattern.test(headerText)) return bank;
   }
+  // Fallback: some OPay statements omit the "OPay" letterhead from extracted
+  // text but include unmistakable OWealth wording near the top. Only accept the
+  // OPay-specific OWealth signal here — other bank names in narration must not
+  // be fingerprinted.
+  const topText = lines.slice(0, 40).join("\n");
+  if (/\bowealth\b/i.test(topText)) return "opay";
   return null;
 }
 
@@ -943,9 +951,9 @@ export async function parsePdf(bytes: Uint8Array): Promise<ParsedPdfResult> {
     chosen = fallback;
   }
 
-  if (chosen && chosen.rows.length > 0) return chosen;
-
   const text = fallbackText || layoutText;
+  const bank = detectBankFingerprint(text);
+  if (chosen && chosen.rows.length > 0) return { ...chosen, bank };
   const compact = text.replace(/\s+/g, " ").trim();
   // Scanned/image-only statements have almost no text layer — no parsing
   // tweak will ever find rows, so say so directly.
@@ -958,7 +966,7 @@ export async function parsePdf(bytes: Uint8Array): Promise<ParsedPdfResult> {
       diag: "v5-layout",
       chars: text.length,
       lines: text.split(/\r?\n|\f/).length,
-      bank: detectBankFingerprint(text),
+      bank,
       layout: detectLayout(text.split(/\r?\n|\f/)),
       hasBalance: detectBalanceColumn(text.split(/\r?\n|\f/)),
       dateLines: text

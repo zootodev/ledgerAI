@@ -158,13 +158,19 @@ export async function categorizeImportRow(
     };
   }
 
-  const dictionary = matchDictionary(normalized, row.type);
+  const pairedPayee = row.pairedPayee ? normalizeNarration(row.pairedPayee) : "";
+  const dictionary =
+    matchDictionary(normalized, row.type) ??
+    (pairedPayee ? matchDictionary(pairedPayee, row.type) : null) ??
+    (pairedPayee ? matchDictionary(`${normalized} ${pairedPayee}`.trim(), row.type) : null);
   if (dictionary) {
     return {
       categoryName: dictionary.categoryName,
       confidence: dictionary.confidence,
       needsReview: dictionary.needsReview,
-      reason: dictionary.reason,
+      reason: pairedPayee
+        ? `${dictionary.reason}; paired payee "${row.pairedPayee}"`
+        : dictionary.reason,
     };
   }
 

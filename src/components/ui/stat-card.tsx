@@ -6,11 +6,13 @@ export interface StatCardProps {
   label: string;
   value: string;
   /**
-   * `StatCard` delta prop: a signed percentage ("+12.5%", "-3.2%") or a
-   * literal label where a percentage is not meaningful ("No change" for a flat
-   * zero, "New" when there is no prior baseline).
+   * `StatCard` delta prop: a signed percentage, optionally followed by its
+   * comparison window ("+12.5% vs previous 30 days"), or a literal label where
+   * a percentage is not meaningful ("No change", "New", "Up from -₦12,000").
    */
   delta?: string | null;
+  /** Small subtitle under the badge, e.g. the prior figure ("was ₦680,000"). */
+  detail?: string | null;
   /** Retained for call-site compatibility. Metrics render without icons. */
   icon?: React.ReactNode;
   hint?: string;
@@ -35,6 +37,7 @@ export function StatCard({
   label,
   value,
   delta,
+  detail,
   hint,
   loading = false,
   className,
@@ -42,11 +45,14 @@ export function StatCard({
   invertDelta = false,
   compactOnMobile = false,
 }: StatCardProps) {
-  const isPercent = delta != null && delta.trim().endsWith("%");
+  // A badge can carry context after the percentage ("-76% vs previous 90
+  // days"), so detect a *leading* signed percentage instead of a trailing %.
+  const percent = delta?.trim().match(/^([+-]?\d+(?:\.\d+)?)%([\s\S]*)$/);
+  const isPercent = percent != null;
   const isLabel = delta != null && !isPercent;
   const showDelta = !!delta && !loading;
-  const positive = !isLabel && delta != null && !delta.startsWith("-");
-  const unchanged = !isLabel && delta != null && /^[-+]?0%$/.test(delta.trim());
+  const positive = !isLabel && !delta?.trim().startsWith("-");
+  const unchanged = isPercent && Number(percent?.[1]) === 0;
   const good = invertDelta ? !positive : positive;
 
   const cell = (
@@ -83,24 +89,43 @@ export function StatCard({
           {value}
         </p>
       )}
-      {(showDelta || hint) && (
+      {(showDelta || detail || hint) && (
         <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           {showDelta && (
             <span
-              className={cn(
-                "text-xs font-medium tabular-nums",
-                unchanged || isLabel
-                  ? "text-muted"
-                  : good
-                    ? "text-success-strong"
-                    : "text-danger-strong",
-              )}
+              className="flex min-w-0 flex-col"
+              title={detail ? `${delta} — ${detail}` : undefined}
             >
-              {isPercent ? `${delta.replace("%", "")}%` : delta}
+              <span
+                className={cn(
+                  "text-xs font-medium tabular-nums break-words",
+                  unchanged || isLabel
+                    ? "text-muted"
+                    : good
+                      ? "text-success-strong"
+                      : "text-danger-strong",
+                )}
+              >
+                {isPercent ? (
+                  <>
+                    {percent?.[1]}%
+                    {percent?.[2] && (
+                      <span className="font-normal text-muted">{percent[2]}</span>
+                    )}
+                  </>
+                ) : (
+                  delta
+                )}
+              </span>
+              {detail && (
+                <span className="text-[11px] leading-tight text-muted break-words">
+                  {detail}
+                </span>
+              )}
             </span>
           )}
           {hint && (
-            <span className="text-xs text-muted">{hint}</span>
+            <span className="text-xs text-muted break-words">{hint}</span>
           )}
         </div>
       )}

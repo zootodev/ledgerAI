@@ -56,10 +56,17 @@ describe("merchant dictionary — Nigerian expense rules", () => {
     for (const description of [
       "PASTRIES STORE",
       "FASTFOOD AND CONFECTIONERIES",
-      "MAKANJUOLA VENTURES",
     ]) {
       expect(matchDictionary(description, "expense")?.categoryName).toBe("Food");
     }
+  });
+
+  it("does not categorise generic business words as Food on their own", () => {
+    expect(
+      matchDictionary("VENTURES - B I D VENTURES|MONIE POINT|0000000003", "expense")
+        ?.categoryName,
+    ).not.toBe("Food");
+    expect(matchDictionary("MAKANJUOLA VENTURES", "expense")?.categoryName).not.toBe("Food");
   });
 
   it("categorises fuel and ride-hailing", () => {

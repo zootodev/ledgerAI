@@ -317,6 +317,7 @@ export function ImportWizard({
         let rows: RawImportRow[];
         let fileSections: ImportSection[] = [];
         let statement: ParsedImportFile["statement"];
+        let bank: string | null = null;
         if (ext === "pdf") {
           // The positioned PDF extractor is Node-only: the PDF is read by the
           // server action, while CSV/XLSX stay on-device. Commit re-parses
@@ -332,6 +333,7 @@ export function ImportWizard({
           rows = res.rows;
           fileSections = res.sections ?? [];
           statement = res.statement;
+          bank = res.bank ?? null;
         } else {
           const arrayBuffer = await next.arrayBuffer();
           const raw =
@@ -355,6 +357,7 @@ export function ImportWizard({
           rows,
           sections: fileSections,
           statement,
+          bank,
         };
 
         const detected = detectColumns(file.headers);

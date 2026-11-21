@@ -36,6 +36,7 @@ export interface PdfParseActionState {
   sections?: ImportSection[];
   statement?: StatementHeaderSummary;
   fileName?: string;
+  bank?: string | null;
 }
 
 const IMPORT_PATHS = ["/transactions", "/income", "/expenses", "/overview", "/import"];
@@ -141,6 +142,7 @@ export async function parsePdfImportAction(
       sections: parsed.sections ?? [],
       statement: parsed.statement,
       fileName: rawFile.name,
+      bank: parsed.bank ?? null,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "This PDF could not be read." };

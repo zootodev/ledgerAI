@@ -83,6 +83,8 @@ export interface ParsedImportFile {
   sections?: ImportSection[];
   /** Statement-level identity/figures (PDF header, CSV summary rows). */
   statement?: StatementHeaderSummary;
+  /** Detected bank letterhead, when known (e.g. "opay"). */
+  bank?: string | null;
 }
 
 /** One raw source row (values keyed by resolved header name). */
@@ -145,6 +147,11 @@ export interface NormalizedImportRow {
   time?: string | null;
   /** Why a row was classified as an internal transfer. */
   transfer?: ImportTransferInfo | null;
+  /**
+   * Payee borrowed from a paired OPay set-aside line (e.g. "Transfer to ..."),
+   * stored so review can explain why the category was chosen.
+   */
+  pairedPayee?: string | null;
 }
 
 export type ImportTransferKind = "mirrored" | "self" | "reversal" | "interest";
@@ -205,6 +212,8 @@ export interface ImportPreviewRow {
   transfer?: ImportTransferInfo | null;
   time?: string | null;
   sectionId?: string | null;
+  /** Payee borrowed from a paired OPay set-aside line, when available. */
+  pairedPayee?: string | null;
   duplicate: DuplicateStatus;
   /** rowIndex (0-based data index) of the first in-file occurrence this
    *  row duplicates. Display numbering is derived (+1) at render time. */

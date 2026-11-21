@@ -81,6 +81,64 @@ function reconcileRows(
   return first;
 }
 
+const POS_TRANSFER_PREFIX = /^pos\s+transfer\s*[-:]?\s*/i;
+
+function extractPairedPayee(description: string): string | null {
+  const match = /\btransfer\s+to\b\s*[:\-]?\s*(.+)$/i.exec(description.trim());
+  if (!match) return null;
+  let value = match[1].replace(POS_TRANSFER_PREFIX, "").trim();
+  value = value.replace(/^[\s:;\-|]+/, "").replace(/[\s:;\-|]+$/, "").trim();
+  return value.length > 0 ? value : null;
+}
+
+/**
+ * OPay records some payments as a set-aside "Transfer to ..." line paired with
+ * the real debit on the same date and amount. Borrow the payee for
+ * categorisation context, but never change amounts/types/dates or unskip the
+ * set-aside row. Only applied to OPay statements.
+ */
+export function applyOpayPairedPayees(
+  rows: NormalizedImportRow[],
+  bank?: string | null,
+): void {
+  if (bank !== "opay") return;
+
+  const usedSetAside = new Set<number>();
+
+  for (const debit of rows) {
+    if (debit.skipped) continue;
+    if (debit.errors.length > 0) continue;
+    if (debit.type !== "expense") continue;
+    if (!debit.date || !debit.amount) continue;
+
+    let best: NormalizedImportRow | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const candidate of rows) {
+      if (candidate === debit) continue;
+      if (!candidate.skipped) continue;
+      if (usedSetAside.has(candidate.rowIndex)) continue;
+      if (candidate.date !== debit.date) continue;
+      if (candidate.amount !== debit.amount) continue;
+
+      const payee = extractPairedPayee(candidate.description);
+      if (!payee) continue;
+
+      const distance = Math.abs(candidate.rowIndex - debit.rowIndex);
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+
+    if (!best) continue;
+    const payee = extractPairedPayee(best.description);
+    if (!payee) continue;
+    debit.pairedPayee = payee;
+    usedSetAside.add(best.rowIndex);
+  }
+}
+
 /** Prepare one file for preview or commit. */
 export function prepareImport(
   parsed: ParsedImportFile,
@@ -104,6 +162,7 @@ export function prepareImport(
       holderName: options.holderName,
       businessName: options.businessName,
     });
+    applyOpayPairedPayees(transfers.rows, parsed.bank);
     return {
       rows: transfers.rows,
       reconciliation: reconciled.summary,
@@ -140,6 +199,7 @@ export function prepareImport(
     businessName: options.businessName,
     sections,
   });
+  applyOpayPairedPayees(transfers.rows, parsed.bank);
 
   // The selected section is stable by id. A missing/stale id falls back to
   // the statement's designated default, never to "import everything".

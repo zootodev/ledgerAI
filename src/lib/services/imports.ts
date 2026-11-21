@@ -328,6 +328,7 @@ export async function commitImport(
       aiCategory: category?.name ?? suggestion.categoryName,
       aiConfidence: suggestion.confidence,
       fingerprint: fp,
+      notes: row.pairedPayee ? `Paired payee: ${row.pairedPayee}` : null,
     });
     committedFingerprints.add(fp);
 
