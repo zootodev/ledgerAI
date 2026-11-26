@@ -114,7 +114,7 @@ export function ReviewView({
       setRemainingAmount(refreshed.totalAmount ?? remainingAmount);
       setDoneCount((count) => Math.max(0, count - 1));
     }
-    success({ title: "Review restored", duration: 5_000 });
+    success({ title: `${result.restored ?? 0} rows restored`, duration: 5_000 });
     router.refresh();
   }
 
@@ -258,9 +258,14 @@ export function ReviewView({
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               Quick category review
             </h1>
-            <p className="text-sm text-muted" aria-live="polite" data-review-progress>
-              {doneCount} of {total} groups done · {remainingRows} rows left ·{" "}
-              {money(remainingAmount)}
+            <p
+              className="text-sm text-muted"
+              aria-live="polite"
+              aria-label={`${doneCount} of ${total} groups done, ${remainingRows} rows left, ${money(remainingAmount)}`}
+              data-review-progress
+            >
+              {doneCount}{" "}of {total} groups done · {remainingRows}{" "}
+              rows left · {money(remainingAmount)}
             </p>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-subtle sm:w-56">
@@ -296,9 +301,13 @@ export function ReviewView({
                 <CardHeader className="gap-2">
                   <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <CardTitle className="break-words">{group.merchant}</CardTitle>
-                      <p className="mt-1 text-xs text-muted">
-                        {group.rowCount} {group.rowCount === 1 ? "row" : "rows"} ·{" "}
+                      <CardTitle className="break-words">{group.label}</CardTitle>
+                      <p
+                        className="mt-1 text-xs text-muted"
+                        aria-label={`${group.rowCount} ${group.rowCount === 1 ? "row" : "rows"}, ${group.typeLabel}, ${shortDate(group.dateFrom)} to ${shortDate(group.dateTo)}, ${money(group.totalAmount)}`}
+                      >
+                        {group.rowCount}{" "}
+                        {group.rowCount === 1 ? "row" : "rows"} · {group.typeLabel} ·{" "}
                         {shortDate(group.dateFrom)}–{shortDate(group.dateTo)} ·{" "}
                         {money(group.totalAmount)}
                       </p>
@@ -328,7 +337,7 @@ export function ReviewView({
                     </Button>
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <Select
-                        aria-label={`Category for ${group.merchant}`}
+                        aria-label={`Category for ${group.label}`}
                         value={selection[group.key] ?? ""}
                         onChange={(event) =>
                           setSelection((current) => ({

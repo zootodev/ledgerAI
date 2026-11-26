@@ -83,6 +83,24 @@ describe("reconcileNormalizedRows", () => {
     expect(fixed[1].warnings).toContain(SIDE_CORRECTED_WARNING);
   });
 
+  it("does not flip a row whose Debit/Credit cell already gave the direction", () => {
+    const rows = [
+      row({ rowIndex: 0, description: "Opening-ish", amount: "500.00", type: "income", balance: "10500.00" }),
+      row({
+        rowIndex: 1,
+        description: "Airtime purchase",
+        amount: "2000.00",
+        type: "income",
+        directionSource: "debit_credit",
+        balance: "8500.00",
+      }),
+    ];
+    const { rows: fixed, summary } = reconcileNormalizedRows(rows);
+    expect(summary.corrected).toBe(0);
+    expect(fixed[1].type).toBe("income");
+    expect(fixed[1].warnings).not.toContain(SIDE_CORRECTED_WARNING);
+  });
+
   it("never tries to correct a multi-row gap it cannot attribute", () => {
     const rows = [
       row({ rowIndex: 0, description: "A", amount: "100.00", type: "expense", balance: "1000.00" }),

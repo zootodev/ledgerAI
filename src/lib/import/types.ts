@@ -121,6 +121,12 @@ export interface NormalizedImportRow {
   description: string;
   amount: string;
   type: ImportRowType;
+  /**
+   * Where the income/expense side came from. Balance reconciliation must not
+   * flip a row whose Debit/Credit cell (or unmistakable spend wording) already
+   * gave an authoritative direction.
+   */
+  directionSource?: "debit_credit" | "type_column" | "amount_sign" | "keyword";
   reference: string | null;
   /** Source-file category text, when a category column was mapped. */
   category: string | null;

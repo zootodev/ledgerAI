@@ -1,13 +1,18 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+export interface ReviewChange {
+  id: string;
+  categoryId: string | null;
+  aiConfidence: string | null;
+}
+
 export interface ReviewUndoPayload {
   businessId: string;
   createdAt: number;
-  changes: Array<{
-    id: string;
-    categoryId: string | null;
-    aiConfidence: string | null;
-  }>;
+  /** Direct targets of the accepted/corrected group. */
+  changes: ReviewChange[];
+  /** Rows a newly learned rule cleared afterwards; restored on undo too. */
+  cascaded?: ReviewChange[];
   rule: {
     pattern: string;
     prior: {
@@ -59,6 +64,7 @@ export function verifyUndoToken(token: string | undefined | null): ReviewUndoPay
     if (
       !payload.businessId ||
       !Array.isArray(payload.changes) ||
+      (payload.cascaded !== undefined && !Array.isArray(payload.cascaded)) ||
       typeof payload.createdAt !== "number" ||
       Date.now() - payload.createdAt > TOKEN_TTL_MS
     ) {

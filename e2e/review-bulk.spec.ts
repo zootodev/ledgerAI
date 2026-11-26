@@ -11,12 +11,16 @@ async function readBannerGroups(page: Page): Promise<number> {
   return Number(match?.[1] ?? 0);
 }
 
-async function waitForOverviewHydration(page: Page) {
-  await page.waitForFunction(() => {
-    const link = document.querySelector('a[href="/review"]');
-    return Boolean(link && Object.keys(link).some((key) => key.startsWith("__reactProps")));
-  }, undefined, { timeout: 60_000 });
-  await page.waitForTimeout(1_000);
+async function expectStartReviewReachable(page: Page) {
+  const link = page.getByRole("link", { name: "Start review" });
+  await expect(link).toBeVisible({ timeout: 60_000 });
+  const hit = await link.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return element === top || element.contains(top);
+  });
+  expect(hit, "no overlay intercepts the Start review link").toBe(true);
+  return link;
 }
 
 async function waitForReviewHydration(page: Page) {
@@ -44,17 +48,19 @@ test("banner → group accept → undo → accept again → lower banner count",
   await expect(banner).toBeVisible({ timeout: 60_000 });
   const initialGroups = await readBannerGroups(page);
   expect(initialGroups, "the seeded tenant has low-confidence groups").toBeGreaterThan(0);
-  await waitForOverviewHydration(page);
-
-  // WebKit/mobile can drop a click while hydration settles; retry the link.
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.getByRole("link", { name: "Start review" }).click();
-    if (page.url().endsWith("/review")) break;
-    await page.waitForTimeout(1_500);
-  }
+  const startReview = await expectStartReviewReachable(page);
+  await startReview.click();
   await expect(page).toHaveURL(/\/review/, { timeout: 30_000 });
   await expect(page.locator("[data-review-group]").first()).toBeVisible({ timeout: 60_000 });
   await expect(page.locator("[data-review-progress]")).toContainText(/0 of \d+ groups done/);
+  await expect(page.locator("[data-review-progress]")).toHaveAttribute(
+    "aria-label",
+    /0 of \d+ groups done, \d+ rows left/,
+  );
+  await expect(page.locator("[data-review-group] p[aria-label]").first()).toHaveAttribute(
+    "aria-label",
+    /\d+ (row|rows), (Income|Expense|Transfer)/,
+  );
   await waitForReviewHydration(page);
 
   await page.getByRole("button", { name: /Accept all \d+/ }).first().click();
@@ -64,7 +70,7 @@ test("banner → group accept → undo → accept again → lower banner count",
 
   // The undo toast is available for ~10 seconds and restores the exact rows.
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(page.getByText("Review restored")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/\d+ rows restored/)).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("[data-review-progress]")).toContainText(/0 of \d+ groups done/);
 
   await page.getByRole("button", { name: /Accept all \d+/ }).first().click();
@@ -75,4 +81,10 @@ test("banner → group accept → undo → accept again → lower banner count",
   await page.goto(`${BASE_URL}/overview`, { waitUntil: "domcontentloaded" });
   await expect(banner).toBeVisible({ timeout: 60_000 });
   expect(await readBannerGroups(page)).toBeLessThan(initialGroups);
+
+  // Keyboard users get the same plain navigation, with no hydration race.
+  const keyboardLink = await expectStartReviewReachable(page);
+  await keyboardLink.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/review/, { timeout: 30_000 });
 });

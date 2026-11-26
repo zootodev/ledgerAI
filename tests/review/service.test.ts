@@ -121,6 +121,29 @@ const prisma = {
           rule.pattern === where.pattern,
       ) ?? null,
     ),
+    upsert: vi.fn(async ({ where, update, create }: {
+      where: { businessId_matchType_pattern: { businessId: string; matchType: string; pattern: string } };
+      update: Record<string, unknown>;
+      create: Record<string, unknown>;
+    }) => {
+      const unique = where.businessId_matchType_pattern;
+      const existing = state.rules.find(
+        (rule) =>
+          rule.businessId === unique.businessId &&
+          rule.matchType === unique.matchType &&
+          rule.pattern === unique.pattern,
+      );
+      if (existing) {
+        Object.assign(existing, update);
+      } else {
+        state.rules.push({
+          ...create,
+          id: `rule-${state.rules.length + 1}`,
+          createdAt: new Date("2026-09-01"),
+        });
+      }
+      return { id: existing?.id ?? `rule-${state.rules.length}` };
+    }),
     updateMany: vi.fn(async ({ where, data }: { where: { id: string; businessId: string }; data: Record<string, unknown> }) => {
       const rule = state.rules.find(
         (r) => r.id === where.id && r.businessId === where.businessId,
@@ -138,6 +161,11 @@ const prisma = {
     }),
   },
 };
+
+const prismaDb = prisma as typeof prisma & {
+  $transaction: (callback: (tx: typeof prisma) => Promise<unknown>) => Promise<unknown>;
+};
+prismaDb.$transaction = vi.fn(async (callback) => callback(prisma));
 
 beforeEach(() => {
   state.businessId = "biz-a";
@@ -166,7 +194,7 @@ describe("grouped review service", () => {
     expect(result.totalGroups).toBe(2);
     expect(result.totalRows).toBe(3);
     expect(result.groups).toHaveLength(1);
-    expect(result.groups[0].merchant).toBe("MTN");
+    expect(result.groups[0].label).toBe("Airtime");
     expect(result.groups[0].rowCount).toBe(1);
   });
 
@@ -233,7 +261,8 @@ describe("grouped review service", () => {
     });
     expect(result.clearedByCascade).toBe(1);
     const cascaded = state.rows.find((row) => row.id === "c");
-    expect(cascaded).toMatchObject({ categoryId: TRANSPORT, aiConfidence: 0.94 });
+    expect(cascaded).toMatchObject({ categoryId: TRANSPORT });
+    expect((cascaded!.aiConfidence as { toString(): string }).toString()).toBe("0.94");
   });
 
   it("undo restores the exact previous category and confidence and removes the rule", async () => {
@@ -261,6 +290,61 @@ describe("grouped review service", () => {
       expect((row.aiConfidence as { toString(): string }).toString()).toBe("0.4000");
     }
     expect(state.rules).toHaveLength(0);
+  });
+
+  it("undo restores targets, cascaded rows and rules to the exact prior state", async () => {
+    state.rules.push({
+      id: "rule-existing",
+      businessId: "biz-a",
+      matchType: "merchant",
+      pattern: "ZOOZ",
+      categoryId: FOOD,
+      categoryName: "Food",
+      createdAt: new Date("2026-09-01"),
+    });
+    state.rows = [
+      makeRow({ id: "a", amount: decimal(10) }),
+      makeRow({ id: "b", amount: decimal(15) }),
+      makeRow({
+        id: "c",
+        description: "ZOOZ COFFEE Tuesday",
+        amount: decimal(30),
+        aiCategory: "Shopping",
+      }),
+    ];
+    const snapshot = () =>
+      state.rows.map((row) => ({
+        id: row.id,
+        categoryId: row.categoryId,
+        aiConfidence:
+          row.aiConfidence === null
+            ? null
+            : (row.aiConfidence as { toString(): string }).toString(),
+      }));
+    const ruleSnapshot = () =>
+      state.rules.map((rule) => ({
+        id: rule.id,
+        categoryId: rule.categoryId,
+        categoryName: rule.categoryName,
+      }));
+    const beforeRows = snapshot();
+    const beforeRules = ruleSnapshot();
+
+    const groupKey = (await listReviewGroups()).groups.find(
+      (group) => group.suggestedCategory === "Food",
+    )!.key;
+    const applied = await applyReviewAction({
+      scope: "group",
+      groupKey,
+      categoryId: TRANSPORT,
+    });
+    expect(applied.affected).toBe(2);
+    expect(applied.clearedByCascade).toBe(1);
+
+    const restored = await undoReviewAction(applied.undoToken);
+    expect(restored, "both targets and the cascaded row are reported").toBe(3);
+    expect(snapshot()).toEqual(beforeRows);
+    expect(ruleSnapshot()).toEqual(beforeRules);
   });
 
   it("never applies another tenant's group or undo token", async () => {

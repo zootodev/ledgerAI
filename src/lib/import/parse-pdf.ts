@@ -28,8 +28,8 @@
 //    PDFs) — money goes in first, the trailing amount is the running balance,
 //    and the outward/inward category word picks the side;
 //  - single-amount: one amount column — sign, accounting parentheses and
-//    Dr/Cr markers choose the side (positive defaults to credit/income,
-//    matching normalize.ts's single-amount convention).
+//    Dr/Cr markers choose the side; with no marker, unmistakable purchase /
+//    stake wording goes to Debit and other positives default to Credit.
 //
 // Known limitations (documented in the UI error text): amounts must have
 // decimals, thousands grouping or a currency symbol, and scanned/image
@@ -53,6 +53,7 @@ import {
   reconcileNormalizedRows,
 } from "./reconcile";
 import { normalizeImportRow } from "./normalize";
+import { looksLikeSpendWithoutDirection } from "./spend-direction";
 
 /** Synthetic header row for the legacy flat-text fallback. */
 export const PDF_IMPORT_HEADERS = ["Date", "Description", "Debit", "Credit"] as const;
@@ -397,6 +398,8 @@ function extractCreditDebitRow(
     debit = lastTrans.value;
   } else if (MONEY_IN_WORDS.test(sideText)) {
     credit = lastTrans.value;
+  } else if (looksLikeSpendWithoutDirection(description)) {
+    debit = lastTrans.value;
   } else {
     credit = lastTrans.value;
   }
@@ -477,6 +480,7 @@ function extractCreditDebitTextRows(text: string): RawImportRow[] {
     const lastTrans = trans[trans.length - 1];
 
     const keywordText = region.slice(hit.index, Math.min(hit.index + 260, segmentEnd));
+    const description = cleanRowNarrative(segment, amounts);
     let debit = "";
     let credit = "";
     if (trans.length >= 2) {
@@ -487,6 +491,8 @@ function extractCreditDebitTextRows(text: string): RawImportRow[] {
       debit = lastTrans.value;
     } else if (MONEY_IN_WORDS.test(keywordText)) {
       credit = lastTrans.value;
+    } else if (looksLikeSpendWithoutDirection(description)) {
+      debit = lastTrans.value;
     } else {
       credit = lastTrans.value;
     }
@@ -495,7 +501,7 @@ function extractCreditDebitTextRows(text: string): RawImportRow[] {
       sourceRow: i + 1,
       values: {
         Date: iso,
-        Description: cleanRowNarrative(segment, amounts),
+        Description: description,
         Debit: debit,
         Credit: credit,
       },
@@ -525,7 +531,7 @@ function extractDebitCreditPositional(
     // never flags "debit value must be positive".
     debit = amounts[0].value;
     credit = amounts[1].value;
-  } else if (first.negative) {
+  } else if (first.negative || looksLikeSpendWithoutDirection(description)) {
     debit = first.value;
   } else {
     credit = first.value;
@@ -608,7 +614,11 @@ function resolveDebitCreditSide(
     }
   }
   const lower = line.toLowerCase();
-  if (negative || /\b(dr|debit|withdrawal|money out|paid out)\b/.test(lower)) {
+  if (
+    negative ||
+    /\b(dr|debit|withdrawal|money out|paid out)\b/.test(lower) ||
+    looksLikeSpendWithoutDirection(draft.description)
+  ) {
     draft.debit = txnValue;
   } else {
     draft.credit = txnValue;
@@ -672,7 +682,11 @@ function extractRow(
   const description = stripLeadingDate(cleanNarrative(line.slice(date.end, first.start)));
   let debit = "";
   let credit = "";
-  if (first.negative || /\b(dr|debit|withdrawal|money out|paid out)\b/.test(lower)) {
+  if (
+    first.negative ||
+    /\b(dr|debit|withdrawal|money out|paid out)\b/.test(lower) ||
+    looksLikeSpendWithoutDirection(description)
+  ) {
     debit = first.value;
   } else {
     credit = first.value;

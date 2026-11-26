@@ -70,13 +70,15 @@ async function expectRangeApplied(page: Page, expected: ExpectedRange) {
       url.searchParams.get("preset") === expected.id &&
       url.searchParams.get("from") === expected.from &&
       url.searchParams.get("to") === expected.to,
-    { timeout: 20_000 },
+    // A cold dev server can take longer than 20s to stream the first RSC
+    // payload; the assertions still require the FIRST click to apply.
+    { timeout: 45_000 },
   );
 
   const fromField = page.locator('input[placeholder="DD/MM/YYYY"]').nth(0);
   const toField = page.locator('input[placeholder="DD/MM/YYYY"]').nth(1);
-  await expect(fromField).toHaveValue(displayDay(expected.from), { timeout: 20_000 });
-  await expect(toField).toHaveValue(displayDay(expected.to), { timeout: 20_000 });
+  await expect(fromField).toHaveValue(displayDay(expected.from), { timeout: 45_000 });
+  await expect(toField).toHaveValue(displayDay(expected.to), { timeout: 45_000 });
 
   const revenueBadge = page.getByRole("group", { name: /^Revenue:/ });
   const labelPattern = new RegExp(

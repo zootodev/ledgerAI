@@ -100,7 +100,7 @@ describe("extractTransactionsFromText — two-column statements", () => {
 describe("extractTransactionsFromText — single-amount statements", () => {
   const rows = extractTransactionsFromText(singleAmountText);
 
-  it("treats positive amounts as credit (income) and keeps balances out", () => {
+  it("defaults unmarked positives to credit but sends purchases to debit", () => {
     expect(rows).toHaveLength(5);
     expect(rows[0].values).toEqual({
       Date: "2026-01-05",
@@ -109,7 +109,12 @@ describe("extractTransactionsFromText — single-amount statements", () => {
       Credit: "2,500.00",
     });
     expect(rows[1].values.Credit).toBe("150,000.00");
-    expect(rows[3].values.Credit).toBe("750.50");
+    expect(rows[3].values).toEqual({
+      Date: "2026-01-12",
+      Description: "POS MTN Airtime",
+      Debit: "750.50",
+      Credit: "",
+    });
   });
 
   it("routes parenthesised negatives to the debit side", () => {
@@ -136,7 +141,7 @@ describe("extractTransactionsFromText — single-amount statements", () => {
       "income",
       "income",
       "expense",
-      "income",
+      "expense",
       "expense",
     ]);
     expect(normalized.every((r) => r.errors.length === 0)).toBe(true);

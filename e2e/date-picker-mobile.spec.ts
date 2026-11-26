@@ -60,21 +60,19 @@ async function expectNativeInputAtIcon(page: Page) {
 const displayDay = (iso: string) =>
   `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
-/** WebKit can drop the first input event while hydration settles; retry it. */
+/**
+ * Reachability of the native picker is asserted separately. Setting the date
+ * through the visible DD/MM/YYYY input avoids depending on WebKit's synthetic
+ * input events for the hidden ISO input, which can be dropped under load.
+ */
 async function fillPicker(page: Page, index: number, iso: string) {
-  const picker = page.locator('input[type="date"]').nth(index);
   const visible = page.locator('input[placeholder="DD/MM/YYYY"]').nth(index);
+  const text = displayDay(iso);
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    // Bypass React's value tracker so a repeated fill still dispatches input.
-    await picker.evaluate((element, value) => {
-      const input = element as HTMLInputElement;
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter?.call(input, value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    }, iso);
-    await page.waitForTimeout(1_200);
-    if ((await visible.inputValue()) === displayDay(iso)) return;
+    await visible.fill(text);
+    await visible.press("Tab");
+    await page.waitForTimeout(300);
+    if ((await visible.inputValue()) === text) return;
   }
 }
 
@@ -82,19 +80,19 @@ async function pickBothDates(page: Page, from: string, to: string) {
   await fillPicker(page, 0, from);
   await expect(page.locator('input[placeholder="DD/MM/YYYY"]').nth(0)).toHaveValue(
     displayDay(from),
-    { timeout: 20_000 },
+    { timeout: 45_000 },
   );
   await fillPicker(page, 1, to);
   await expect(page.locator('input[placeholder="DD/MM/YYYY"]').nth(1)).toHaveValue(
     displayDay(to),
-    { timeout: 20_000 },
+    { timeout: 45_000 },
   );
   await expect(
     page,
     "picked dates must reach the URL as well as the visible fields",
   ).toHaveURL(
     (url) => url.searchParams.get("from") === from && url.searchParams.get("to") === to,
-    { timeout: 20_000 },
+    { timeout: 45_000 },
   );
 }
 

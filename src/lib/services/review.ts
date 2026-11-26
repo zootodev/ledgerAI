@@ -4,19 +4,30 @@
 // Every read and write derives businessId from the session. A client can
 // only name a group key or a category id; the rows themselves are always
 // re-loaded from the tenant-scoped low-confidence queue on the server.
+// Apply, rule learning and cascade share one interactive transaction, and
+// the signed undo snapshot covers both target and cascaded rows.
 // ============================================================
 
 import { requireAuthContext } from "@/lib/services/auth-context";
-import { learnMerchantRule } from "@/lib/services/rules";
 import { extractMerchantKey } from "@/lib/ai/merchant-key";
 import { categorizeByRules, REVIEW_THRESHOLD } from "@/lib/ai/rules";
 import { transactionIdSchema, zErrorMessage } from "@/lib/validation/index";
-import { groupLowConfidenceRows, type ReviewGroup, type ReviewRowInput } from "@/lib/review/groups";
-import { signUndoToken, verifyUndoToken } from "@/lib/review/undo-token";
-import type { PrismaClient } from "@/generated/prisma/client";
+import {
+  groupLowConfidenceRows,
+  type ReviewGroup,
+  type ReviewRowInput,
+} from "@/lib/review/groups";
+import {
+  signUndoToken,
+  verifyUndoToken,
+  type ReviewChange,
+} from "@/lib/review/undo-token";
+import type { Prisma } from "@/generated/prisma/client";
 import type { CategoryRuleDto } from "@/types";
 
 export const REVIEW_PAGE_SIZE = 10;
+
+type ReviewDb = Prisma.TransactionClient;
 
 export interface ReviewListResult {
   groups: ReviewGroup[];
@@ -33,10 +44,10 @@ interface StoredReviewRow extends ReviewRowInput {
 }
 
 async function loadLowConfidenceRows(
-  prisma: PrismaClient,
+  db: ReviewDb,
   businessId: string,
 ): Promise<StoredReviewRow[]> {
-  const rows = await prisma.transaction.findMany({
+  const rows = await db.transaction.findMany({
     where: {
       businessId,
       categoryId: { not: null },
@@ -74,7 +85,7 @@ export async function listReviewGroups(
   pageSize = REVIEW_PAGE_SIZE,
 ): Promise<ReviewListResult> {
   const { prisma, business } = await requireAuthContext();
-  const rows = await loadLowConfidenceRows(prisma, business.id);
+  const rows = await loadLowConfidenceRows(prisma as ReviewDb, business.id);
   const groups = groupLowConfidenceRows(rows);
   const safeOffset = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
   const safeSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.floor(pageSize) : REVIEW_PAGE_SIZE;
@@ -89,7 +100,7 @@ export async function listReviewGroups(
 /** Overview banner count: groups, not individual rows. */
 export async function countReviewGroups(): Promise<number> {
   const { prisma, business } = await requireAuthContext();
-  const rows = await loadLowConfidenceRows(prisma, business.id);
+  const rows = await loadLowConfidenceRows(prisma as ReviewDb, business.id);
   return groupLowConfidenceRows(rows).length;
 }
 
@@ -126,24 +137,36 @@ function ruleDto(businessId: string, row: {
   };
 }
 
+interface CascadeResult {
+  cleared: number;
+  /** Exact prior state of every row the cascade lifted out of Review. */
+  changes: ReviewChange[];
+}
+
 /**
  * Re-run the deterministic rules categorizer over rows still in Review.
- * Newly learned merchant rules lift matching rows out of Review in one pass.
+ * Newly learned merchant rules lift matching rows out in ONE batched write per
+ * (category, confidence) pair, and the prior state of each row is returned so
+ * undo can restore it even if the rule itself is later removed.
  */
 export async function cascadeLearnedRules(
-  prisma: PrismaClient,
+  db: ReviewDb,
   businessId: string,
-): Promise<number> {
+): Promise<CascadeResult> {
   const [rules, categories, pending] = await Promise.all([
-    prisma.categoryRule.findMany({ where: { businessId } }),
-    prisma.category.findMany({
+    db.categoryRule.findMany({ where: { businessId } }),
+    db.category.findMany({
       where: { OR: [{ businessId: null }, { businessId }] },
       select: { id: true, name: true },
     }),
-    loadLowConfidenceRows(prisma, businessId),
+    loadLowConfidenceRows(db, businessId),
   ]);
 
-  let cleared = 0;
+  const batches = new Map<
+    string,
+    { ids: string[]; categoryId: string; aiConfidence: string; previous: ReviewChange[] }
+  >();
+
   for (const row of pending) {
     if (row.type === "transfer") continue;
     const match = categorizeByRules(
@@ -157,13 +180,39 @@ export async function cascadeLearnedRules(
       (c) => c.name.trim().toLowerCase() === match.categoryName.trim().toLowerCase(),
     );
     if (!category) continue;
-    await prisma.transaction.updateMany({
-      where: { id: row.id, businessId },
-      data: { categoryId: category.id, aiConfidence: match.confidence },
-    });
-    cleared += 1;
+
+    const aiConfidence = match.confidence.toString();
+    const key = `${category.id}\u0000${aiConfidence}`;
+    const batch = batches.get(key);
+    const previous: ReviewChange = {
+      id: row.id,
+      categoryId: row.categoryId,
+      aiConfidence: row.aiConfidenceRaw,
+    };
+    if (batch) {
+      batch.ids.push(row.id);
+      batch.previous.push(previous);
+    } else {
+      batches.set(key, {
+        ids: [row.id],
+        categoryId: category.id,
+        aiConfidence,
+        previous: [previous],
+      });
+    }
   }
-  return cleared;
+
+  let cleared = 0;
+  const changes: ReviewChange[] = [];
+  for (const batch of batches.values()) {
+    await db.transaction.updateMany({
+      where: { id: { in: batch.ids }, businessId },
+      data: { categoryId: batch.categoryId, aiConfidence: batch.aiConfidence },
+    });
+    cleared += batch.ids.length;
+    changes.push(...batch.previous);
+  }
+  return { cleared, changes };
 }
 
 interface RuleSnapshot {
@@ -174,7 +223,7 @@ interface RuleSnapshot {
 
 /** Learn a merchant rule exactly as the single-row category edit does. */
 async function learnRuleForCorrection(
-  prisma: PrismaClient,
+  db: ReviewDb,
   businessId: string,
   rows: StoredReviewRow[],
   category: { id: string; name: string },
@@ -189,7 +238,7 @@ async function learnRuleForCorrection(
   const pattern = extractMerchantKey(first.description);
   if (!pattern) return null;
 
-  const priorRow = await prisma.categoryRule.findFirst({
+  const priorRow = await db.categoryRule.findFirst({
     where: { businessId, matchType: "merchant", pattern },
     select: { id: true, categoryId: true, categoryName: true },
   });
@@ -201,13 +250,23 @@ async function learnRuleForCorrection(
       }
     : null;
 
-  await learnMerchantRule({
-    pattern,
-    categoryId: category.id,
-    categoryName: category.name,
+  // Upsert on the same unique key the regular learning path uses, but inside
+  // the caller's transaction so a cascade failure cannot leave a orphan rule.
+  await db.categoryRule.upsert({
+    where: {
+      businessId_matchType_pattern: { businessId, matchType: "merchant", pattern },
+    },
+    update: { categoryId: category.id, categoryName: category.name },
+    create: {
+      businessId,
+      matchType: "merchant",
+      pattern,
+      categoryId: category.id,
+      categoryName: category.name,
+    },
   });
 
-  const current = await prisma.categoryRule.findFirst({
+  const current = await db.categoryRule.findFirst({
     where: { businessId, matchType: "merchant", pattern },
     select: { id: true },
   });
@@ -215,80 +274,86 @@ async function learnRuleForCorrection(
 }
 
 /**
- * Accept a whole group (or every remaining row) in one tenant-scoped write,
- * learning a rule for overrides, then cascading freshly learned rules over
- * the rows still waiting in Review. Returns a signed, server-issued undo
- * token capturing the exact prior state of every changed row.
+ * Accept a whole group (or every remaining row) in one tenant-scoped
+ * transaction: update targets, learn a rule for overrides, then cascade the
+ * freshly learned rules. Returns a signed, server-issued undo token capturing
+ * the exact prior state of every target AND every cascaded row.
  */
 export async function applyReviewAction(
   input: ReviewApplyInput,
 ): Promise<ReviewApplyResult> {
   const { prisma, business } = await requireAuthContext();
-  const rows = await loadLowConfidenceRows(prisma, business.id);
-  let targets: StoredReviewRow[];
 
-  if (input.scope === "all") {
-    targets = rows;
-  } else {
-    if (!input.groupKey) throw new Error("Choose a review group.");
-    const group = groupLowConfidenceRows(rows).find((g) => g.key === input.groupKey);
-    if (!group) throw new Error("That review group is no longer available.");
-    const ids = new Set(group.rows.map((row) => row.id));
-    targets = rows.filter((row) => ids.has(row.id));
-  }
+  return prisma.$transaction(async (tx) => {
+    const rows = await loadLowConfidenceRows(tx, business.id);
+    let targets: StoredReviewRow[];
 
-  if (targets.length === 0) throw new Error("Nothing left to review.");
-
-  let category: { id: string; name: string } | null = null;
-  const categoryId = input.categoryId?.trim() || null;
-  if (categoryId) {
-    const parsed = transactionIdSchema.safeParse(categoryId);
-    if (!parsed.success) throw new Error(zErrorMessage(parsed.error));
-    const found = await prisma.category.findFirst({
-      where: {
-        id: parsed.data,
-        OR: [{ businessId: null }, { businessId: business.id }],
-      },
-      select: { id: true, name: true, type: true },
-    });
-    if (!found) throw new Error("Category not found.");
-    if (targets.some((row) => row.type === "transfer" || row.type !== found.type)) {
-      throw new Error("Choose a category that matches every row in this group.");
+    if (input.scope === "all") {
+      targets = rows;
+    } else {
+      if (!input.groupKey) throw new Error("Choose a review group.");
+      const group = groupLowConfidenceRows(rows).find((g) => g.key === input.groupKey);
+      if (!group) throw new Error("That review group is no longer available.");
+      const ids = new Set(group.rows.map((row) => row.id));
+      targets = rows.filter((row) => ids.has(row.id));
     }
-    category = { id: found.id, name: found.name };
-  }
 
-  const changes = targets.map((row) => ({
-    id: row.id,
-    categoryId: row.categoryId,
-    aiConfidence: row.aiConfidenceRaw,
-  }));
-  const ids = targets.map((row) => row.id);
+    if (targets.length === 0) throw new Error("Nothing left to review.");
 
-  const updated = await prisma.transaction.updateMany({
-    where: { businessId: business.id, id: { in: ids } },
-    data: { ...(category ? { categoryId: category.id } : {}), aiConfidence: null },
+    let category: { id: string; name: string } | null = null;
+    const categoryId = input.categoryId?.trim() || null;
+    if (categoryId) {
+      const parsed = transactionIdSchema.safeParse(categoryId);
+      if (!parsed.success) throw new Error(zErrorMessage(parsed.error));
+      const found = await tx.category.findFirst({
+        where: {
+          id: parsed.data,
+          OR: [{ businessId: null }, { businessId: business.id }],
+        },
+        select: { id: true, name: true, type: true },
+      });
+      if (!found) throw new Error("Category not found.");
+      if (targets.some((row) => row.type === "transfer" || row.type !== found.type)) {
+        throw new Error("Choose a category that matches every row in this group.");
+      }
+      category = { id: found.id, name: found.name };
+    }
+
+    const changes: ReviewChange[] = targets.map((row) => ({
+      id: row.id,
+      categoryId: row.categoryId,
+      aiConfidence: row.aiConfidenceRaw,
+    }));
+    const ids = targets.map((row) => row.id);
+
+    const updated = await tx.transaction.updateMany({
+      where: { businessId: business.id, id: { in: ids } },
+      data: { ...(category ? { categoryId: category.id } : {}), aiConfidence: null },
+    });
+    if (updated.count !== ids.length) {
+      throw new Error("Some rows moved out of Review; refresh and try again.");
+    }
+
+    const rule = category
+      ? await learnRuleForCorrection(tx, business.id, targets, category)
+      : null;
+    const cascade = await cascadeLearnedRules(tx, business.id);
+
+    return {
+      affected: ids.length,
+      clearedByCascade: cascade.cleared,
+      undoToken: signUndoToken({
+        businessId: business.id,
+        createdAt: Date.now(),
+        changes,
+        cascaded: cascade.changes,
+        rule,
+      }),
+    };
   });
-  if (updated.count !== ids.length) {
-    throw new Error("Some rows moved out of Review; refresh and try again.");
-  }
-
-  const rule = category ? await learnRuleForCorrection(prisma, business.id, targets, category) : null;
-  const clearedByCascade = await cascadeLearnedRules(prisma, business.id);
-
-  return {
-    affected: ids.length,
-    clearedByCascade,
-    undoToken: signUndoToken({
-      businessId: business.id,
-      createdAt: Date.now(),
-      changes,
-      rule,
-    }),
-  };
 }
 
-/** Restore category + confidence for every row and remove/restore its rule. */
+/** Restore category + confidence for EVERY altered row and undo the rule. */
 export async function undoReviewAction(token: string | undefined): Promise<number> {
   const payload = verifyUndoToken(token);
   if (!payload) throw new Error("This undo link has expired.");
@@ -296,41 +361,40 @@ export async function undoReviewAction(token: string | undefined): Promise<numbe
   const { prisma, business } = await requireAuthContext();
   if (payload.businessId !== business.id) throw new Error("Not authorised to undo this review.");
 
-  // Rows in a group usually shared one category and confidence. Batch by the
-  // exact previous pair so a 135-row group needs one write, not 135 round trips.
-  const batches = new Map<string, { ids: string[]; categoryId: string | null; aiConfidence: string | null }>();
-  for (const change of payload.changes) {
-    const key = `${change.categoryId ?? "\u0000"}::${change.aiConfidence ?? "\u0000"}`;
-    const batch = batches.get(key);
-    if (batch) batch.ids.push(change.id);
-    else {
-      batches.set(key, {
-        ids: [change.id],
-        categoryId: change.categoryId,
-        aiConfidence: change.aiConfidence,
+  return prisma.$transaction(async (tx) => {
+    const allChanges = [...payload.changes, ...(payload.cascaded ?? [])];
+
+    // Rows usually shared one category and confidence. Batch by the exact
+    // previous pair so a large group needs one write, not one write per row.
+    const batches = new Map<string, ReviewChange[]>();
+    for (const change of allChanges) {
+      const key = `${change.categoryId ?? "\u0000"}::${change.aiConfidence ?? "\u0000"}`;
+      const batch = batches.get(key);
+      if (batch) batch.push(change);
+      else batches.set(key, [change]);
+    }
+    for (const changes of batches.values()) {
+      const first = changes[0];
+      await tx.transaction.updateMany({
+        where: { id: { in: changes.map((change) => change.id) }, businessId: business.id },
+        data: { categoryId: first.categoryId, aiConfidence: first.aiConfidence },
       });
     }
-  }
-  for (const batch of batches.values()) {
-    await prisma.transaction.updateMany({
-      where: { id: { in: batch.ids }, businessId: business.id },
-      data: { categoryId: batch.categoryId, aiConfidence: batch.aiConfidence },
-    });
-  }
 
-  if (payload.rule) {
-    const { pattern, prior, createdId } = payload.rule;
-    if (prior) {
-      await prisma.categoryRule.updateMany({
-        where: { id: prior.id, businessId: business.id },
-        data: { categoryId: prior.categoryId, categoryName: prior.categoryName },
-      });
-    } else if (createdId) {
-      await prisma.categoryRule.deleteMany({
-        where: { id: createdId, businessId: business.id, matchType: "merchant", pattern },
-      });
+    if (payload.rule) {
+      const { pattern, prior, createdId } = payload.rule;
+      if (prior) {
+        await tx.categoryRule.updateMany({
+          where: { id: prior.id, businessId: business.id },
+          data: { categoryId: prior.categoryId, categoryName: prior.categoryName },
+        });
+      } else if (createdId) {
+        await tx.categoryRule.deleteMany({
+          where: { id: createdId, businessId: business.id, matchType: "merchant", pattern },
+        });
+      }
     }
-  }
 
-  return payload.changes.length;
+    return allChanges.length;
+  });
 }

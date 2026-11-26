@@ -54,19 +54,21 @@ export async function OverviewActionItems() {
         <Alert tone="info" title="Some categories need a second look">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
-              {lowConfidenceCount} transactions in {lowConfidenceGroups}{" "}
-              {lowConfidenceGroups === 1 ? "group" : "groups"} need a quick check, about 2
-              minutes. Accept a suggestion or correct a whole group, and the next import
-              learns the pattern. Under {reviewPercent}% goes to Review.
+              {countPhrase(lowConfidenceCount, "transaction")} in{" "}
+              {countPhrase(lowConfidenceGroups, "group")} need a quick check, about 2 minutes.
+              Accept a suggestion or correct a whole group, and the next import learns the
+              pattern. Under {reviewPercent}% goes to Review.
             </span>
             <div className="flex flex-wrap items-center gap-2">
-              <Link
+              {/* Plain anchor: works before hydration and cannot be swallowed by an overlay. */}
+              <a
                 href="/review"
                 className={buttonVariants({ variant: "primary", size: "sm" })}
+                data-start-review
               >
                 <Tag className="h-3.5 w-3.5" aria-hidden="true" />
                 Start review
-              </Link>
+              </a>
               <Link
                 href="/transactions?lowConfidence=1"
                 className={buttonVariants({ variant: "outline", size: "sm" })}

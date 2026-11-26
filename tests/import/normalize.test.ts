@@ -565,7 +565,7 @@ describe("explicit Type column is authoritative over amount sign", () => {
     }
   });
 
-  it("documents precedence: an explicit Type label wins over the Debit/Credit pair", () => {
+  it("treats a populated Debit/Credit cell as authoritative over a conflicting Type label", () => {
     const map: ColumnMapping = {
       date: "Date",
       description: "Description",
@@ -573,17 +573,54 @@ describe("explicit Type column is authoritative over amount sign", () => {
       credit: "Credit",
       type: "Type",
     };
-    // The Credit side is populated but Type explicitly says "expense": the
-    // recognized Type label is authoritative for direction; the amount still
-    // comes from the populated Credit column.
-    const row = normalizeImportRow(
+    const credit = normalizeImportRow(
       RAW({ Date: "2026-01-05", Description: "Sales", Credit: "12000.00", Type: "expense" }),
       map,
       0,
     );
-    expect(row.errors).toEqual([]);
-    expect(row.type).toBe("expense");
-    expect(row.amount).toBe("12000.00");
+    expect(credit.errors).toEqual([]);
+    expect(credit.type).toBe("income");
+    expect(credit.amount).toBe("12000.00");
+    expect(credit.warnings).toContain("type label conflicts with debit/credit column");
+    expect(credit.directionSource).toBe("debit_credit");
+
+    const debit = normalizeImportRow(
+      RAW({
+        Date: "2026-01-05",
+        Description: "AIRTIME AIRTIME PURCHASE 2349018363223",
+        Debit: "750.50",
+        Type: "income",
+      }),
+      map,
+      0,
+    );
+    expect(debit.errors).toEqual([]);
+    expect(debit.type).toBe("expense");
+    expect(debit.warnings).toContain("type label conflicts with debit/credit column");
+  });
+
+  it("books unsigned purchase/stake wording as expense but keeps genuine credits", () => {
+    const map: ColumnMapping = {
+      date: "Date",
+      description: "Description",
+      amount: "Amount",
+      type: "Type",
+    };
+    const stake = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "SPORTYBET STAKE", Amount: "500.00" }),
+      map,
+      0,
+    );
+    expect(stake.type).toBe("expense");
+    expect(stake.directionSource).toBe("keyword");
+
+    const winnings = normalizeImportRow(
+      RAW({ Date: "2026-01-05", Description: "SPORTYBET WINNINGS", Amount: "500.00", Type: "income" }),
+      map,
+      0,
+    );
+    expect(winnings.type).toBe("income");
+    expect(winnings.errors).toEqual([]);
   });
 });
 

@@ -246,8 +246,11 @@ export function reconcileNormalizedRows(
       // A single row that only works with its sides swapped is almost always
       // a debit/credit column mix-up, not a bad statement.
       const correctedDelta = -(movements[0] ?? 0);
-      if (Math.abs(correctedDelta - actualDelta) <= RECONCILE_TOLERANCE) {
-        const swapTarget = span[0];
+      const swapTarget = span[0];
+      const authoritative =
+        swapTarget.directionSource === "debit_credit" ||
+        swapTarget.directionSource === "keyword";
+      if (!authoritative && Math.abs(correctedDelta - actualDelta) <= RECONCILE_TOLERANCE) {
         const original = swapTarget.type;
         swapTarget.type = original === "income" ? "expense" : "income";
         swapTarget.warnings = [...swapTarget.warnings, SIDE_CORRECTED_WARNING];

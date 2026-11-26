@@ -32,6 +32,7 @@ import type {
   RawImportRow,
 } from "./types";
 import { NOT_A_TRANSACTION_REASON } from "./types";
+import { looksLikeSpendWithoutDirection } from "./spend-direction";
 
 interface AmountResult {
   value: string;
@@ -396,17 +397,41 @@ export function normalizeImportRow(
     cell("debit"),
     cell("credit"),
     typeFromLabel,
+    description,
   );
   errors.push(...amountContext.errors);
   warnings.push(...amountContext.warnings);
 
   let type: ImportRowType;
-  if (typeFromLabel) {
+  let directionSource: NormalizedImportRow["directionSource"];
+  if (typeFromLabel === "transfer") {
+    // A mapped transfer column is authoritative; resolveAmount already used
+    // it to choose the amount, and no side flipping is allowed later.
+    type = "transfer";
+    directionSource = "type_column";
+  } else if (amountContext.direction) {
+    // Populated Debit/Credit cells beat a conflicting Type label. This is the
+    // OPay airtime/data/betting case: the label said Credit, the cell said Debit.
+    const directionType: ImportRowType =
+      amountContext.direction === "debit" ? "expense" : "income";
+    if (typeFromLabel && typeFromLabel !== directionType) {
+      warnings.push(
+        amountContext.directionSource === "debit_credit"
+          ? "type label conflicts with debit/credit column"
+          : "type label corrected for a purchase",
+      );
+    }
+    type = directionType;
+    directionSource = amountContext.directionSource ?? "debit_credit";
+  } else if (typeFromLabel) {
     type = typeFromLabel;
+    directionSource = "type_column";
   } else if (amountContext.type) {
     type = amountContext.type;
+    directionSource = amountContext.type === "expense" ? "amount_sign" : undefined;
   } else {
     type = "expense";
+    directionSource = "amount_sign";
     errors.push("cannot determine income or expense type");
   }
 
@@ -424,6 +449,7 @@ export function normalizeImportRow(
     description,
     amount: amountContext.errors.length > 0 ? "" : amountContext.amount,
     type,
+    directionSource,
     reference,
     category: category === "" ? null : category.slice(0, 120),
     balance: balanceResult.value,
@@ -484,6 +510,9 @@ function parseTypeCell(value: string): ImportRowType | null {
 interface AmountContext {
   amount: string;
   type: ImportRowType | null;
+  /** Present when a real Debit/Credit cell (or spend-only fallback) chose the side. */
+  direction?: "debit" | "credit";
+  directionSource?: NormalizedImportRow["directionSource"];
   errors: string[];
   warnings: string[];
 }
@@ -504,6 +533,7 @@ function resolveAmount(
   debitCell: string,
   creditCell: string,
   explicitType: ImportRowType | null,
+  description: string,
 ): AmountContext {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -564,10 +594,24 @@ function resolveAmount(
     }
 
     if (!debitAbsent) {
-      return { amount: debit.value, type: "expense", errors, warnings };
+      return {
+        amount: debit.value,
+        type: "expense",
+        direction: "debit",
+        directionSource: "debit_credit",
+        errors,
+        warnings,
+      };
     }
     if (!creditAbsent) {
-      return { amount: credit.value, type: "income", errors, warnings };
+      return {
+        amount: credit.value,
+        type: "income",
+        direction: "credit",
+        directionSource: "debit_credit",
+        errors,
+        warnings,
+      };
     }
     errors.push("row has no amount");
     return { amount: "", type: null, errors, warnings };
@@ -581,16 +625,34 @@ function resolveAmount(
     }
     const negative = normalizeText(amountCell).startsWith("-") ||
       (normalizeText(amountCell).startsWith("(") && normalizeText(amountCell).endsWith(")"));
-    // With an explicit Type column the type is authoritative: an unsigned
-    // magnitude plus a separate type column is a valid, common export
-    // shape. The ONLY true contradiction is negative income — a negative
-    // amount can never be income — so that alone is flagged. The original
-    // sign check above is evaluated BEFORE the abs value is stored.
+    // With one unsigned Amount column there is no independent direction cell.
+    // A negative sign is authoritative; otherwise unmistakable purchase/stake
+    // wording is the only safe fallback (winnings/refunds stay income).
     if (explicitType === "income" && negative) {
       errors.push("type conflicts with the amount sign");
       return { amount: "", type: "income", errors, warnings };
     }
-    const type: ImportRowType = explicitType ?? (negative ? "expense" : "income");
+    if (negative) {
+      return {
+        amount: parsed.value,
+        type: "expense",
+        direction: "debit",
+        directionSource: "amount_sign",
+        errors,
+        warnings,
+      };
+    }
+    if (looksLikeSpendWithoutDirection(description)) {
+      return {
+        amount: parsed.value,
+        type: "expense",
+        direction: "debit",
+        directionSource: "keyword",
+        errors,
+        warnings,
+      };
+    }
+    const type: ImportRowType = explicitType ?? "income";
     return { amount: parsed.value, type, errors, warnings };
   }
 
