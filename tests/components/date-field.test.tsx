@@ -16,7 +16,7 @@ describe("DateField native picker", () => {
     expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-label="Choose date"/);
   });
 
-  it("renders a hidden ISO picker with bounds and no form name", () => {
+  it("lays the tappable ISO input over a non-interactive icon", () => {
     const html = renderToStaticMarkup(
       createElement(DateField, {
         value: "2026-10-01",
@@ -24,13 +24,16 @@ describe("DateField native picker", () => {
         max: "2026-12-31",
       }),
     );
-    const hiddenPicker = html.match(/<input[^>]*type="date"[^>]*\/>/)?.[0] ?? "";
-    expect(hiddenPicker).toContain('value="2026-10-01"');
-    expect(hiddenPicker).toContain('min="2026-01-01"');
-    expect(hiddenPicker).toContain('max="2026-12-31"');
-    expect(hiddenPicker).toContain('tabindex="-1"');
-    expect(html).toContain('aria-hidden="true"');
+    const picker = html.match(/<input[^>]*type="date"[^>]*\/>/)?.[0] ?? "";
+    expect(picker).toContain('value="2026-10-01"');
+    expect(picker).toContain('min="2026-01-01"');
+    expect(picker).toContain('max="2026-12-31"');
+    expect(picker).toContain('tabindex="-1"');
+    expect(picker).toContain("absolute inset-y-0 right-0 z-10 w-9 cursor-pointer text-base opacity-0");
+    expect(picker).toContain('style="width:2.25rem"');
+    expect(picker).toContain('aria-hidden="true"');
     expect(html).not.toMatch(/<input[^>]*type="date"[^>]*name=/);
+    expect(html).toContain("pointer-events-none absolute inset-y-0 right-0");
   });
 
   it("keeps the visible text input in DD/MM/YYYY order with room for the icon", () => {

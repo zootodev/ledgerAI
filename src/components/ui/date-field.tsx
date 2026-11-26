@@ -129,10 +129,15 @@ export function DateField({
           type="button"
           aria-label="Choose date"
           onClick={openPicker}
-          className="absolute inset-y-0 right-0 flex w-9 items-center justify-center rounded-r-field text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          className="pointer-events-none absolute inset-y-0 right-0 flex w-9 items-center justify-center rounded-r-field text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
         >
           <CalendarRange className="h-4 w-4" aria-hidden="true" />
         </button>
+        {/*
+         * A real date input sits over the icon area. On touch devices the tap
+         * lands on this input itself, so Safari/Android open their native wheel
+         * without relying on showPicker() (which is a no-op on iOS WebKit).
+         */}
         <input
           ref={pickerRef}
           type="date"
@@ -142,7 +147,10 @@ export function DateField({
           onChange={handlePickerChange}
           tabIndex={-1}
           aria-hidden="true"
-          className="sr-only"
+          className="absolute inset-y-0 right-0 z-10 w-9 cursor-pointer text-base opacity-0"
+          // globals.css forces date inputs to width:100%; the inline width
+          // keeps this overlay pinned to the icon box only.
+          style={{ width: "2.25rem" }}
         />
       </div>
       {name && <input type="hidden" name={name} value={iso} readOnly />}

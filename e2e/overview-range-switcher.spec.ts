@@ -73,8 +73,8 @@ async function expectRangeApplied(page: Page, expected: ExpectedRange) {
     { timeout: 20_000 },
   );
 
-  const fromField = page.getByLabel("From", { exact: true });
-  const toField = page.getByLabel("To", { exact: true });
+  const fromField = page.locator('input[placeholder="DD/MM/YYYY"]').nth(0);
+  const toField = page.locator('input[placeholder="DD/MM/YYYY"]').nth(1);
   await expect(fromField).toHaveValue(displayDay(expected.from), { timeout: 20_000 });
   await expect(toField).toHaveValue(displayDay(expected.to), { timeout: 20_000 });
 
@@ -124,7 +124,7 @@ async function expectLastProfitTickFits(page: Page) {
   expect(overflow, "last profit tick is clipped at the card edge").toBeLessThanOrEqual(0);
 }
 
-/** The calendar button must stay inside the field without covering the text. */
+/** The calendar icon must stay inside the field while the date input takes taps. */
 async function expectCalendarButtonsFit(page: Page) {
   const buttons = page.getByRole("button", { name: "Choose date" });
   expect(await buttons.count()).toBeGreaterThanOrEqual(2);
@@ -137,17 +137,26 @@ async function expectCalendarButtonsFit(page: Page) {
         const button = field?.querySelector('button[aria-label="Choose date"]');
         const inputRect = input.getBoundingClientRect();
         const buttonRect = button?.getBoundingClientRect();
+        const centre = buttonRect
+          ? { x: buttonRect.left + buttonRect.width / 2, y: buttonRect.top + buttonRect.height / 2 }
+          : null;
+        const hit = centre ? document.elementFromPoint(centre.x, centre.y) : null;
+        const owner = hit?.closest("input,button");
         return {
           textOverflow: input.scrollWidth - input.clientWidth,
           iconInside: buttonRect
             ? buttonRect.right <= inputRect.right + 1 && buttonRect.left >= inputRect.left
             : false,
+          nativeInputAtIcon:
+            owner?.tagName === "INPUT" && owner.getAttribute("type") === "date",
         };
       },
     ),
   );
   expect(fields.length).toBeGreaterThanOrEqual(2);
-  expect(fields.every((f) => f.textOverflow <= 1 && f.iconInside)).toBe(true);
+  expect(
+    fields.every((f) => f.textOverflow <= 1 && f.iconInside && f.nativeInputAtIcon),
+  ).toBe(true);
 }
 
 test("range presets apply URL, dates and tiles on the first click", async ({ page }) => {
@@ -199,7 +208,7 @@ test("range presets apply URL, dates and tiles on the first click", async ({ pag
 
   // Hard reload so no client-side transition from sign-in is still in flight.
   await page.goto(`${BASE_URL}/overview`, { waitUntil: "load" });
-  await expect(page.getByLabel("From", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('input[placeholder="DD/MM/YYYY"]').nth(0)).toBeVisible({ timeout: 60_000 });
 
   async function clickPreset(expected: ExpectedRange) {
     const pill = page.getByRole("button", { name: expected.label });
@@ -242,11 +251,11 @@ test("range presets apply URL, dates and tiles on the first click", async ({ pag
   // the browser UI: it must update the DD/MM/YYYY field and drive the URL.
   const pickedFrom = "2026-11-20";
   await page.locator('input[type="date"]').first().fill(pickedFrom);
-  await expect(page.getByLabel("From", { exact: true })).toHaveValue(
+  await expect(page.locator('input[placeholder="DD/MM/YYYY"]').nth(0)).toHaveValue(
     displayDay(pickedFrom),
     { timeout: 20_000 },
   );
-  await expect(page.getByLabel("To", { exact: true })).toHaveValue(displayDay(last90.to));
+  await expect(page.locator('input[placeholder="DD/MM/YYYY"]').nth(1)).toHaveValue(displayDay(last90.to));
   await expect(
     page,
     "picked date must be applied to the URL as well as the visible field",
