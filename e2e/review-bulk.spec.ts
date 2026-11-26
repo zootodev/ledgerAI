@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { MUTATION_SKIP_REASON, mutationTargetAllowed } from "./mutation-guard";
 
 const BASE_URL = (process.env.BASE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 const STORAGE_STATE = process.env.REPRO_STORAGE_STATE;
@@ -43,6 +44,9 @@ async function expectNoOverflow(page: Page) {
 }
 
 test("banner → group accept → undo → accept again → lower banner count", async ({ page }) => {
+  // Accepting a group writes to the live review queue: skip unless the target
+  // is explicitly local/safe.
+  test.skip(!mutationTargetAllowed(), MUTATION_SKIP_REASON);
   await page.goto(`${BASE_URL}/overview`, { waitUntil: "domcontentloaded", timeout: 180_000 });
   const banner = page.getByText(/need a quick check/);
   await expect(banner).toBeVisible({ timeout: 60_000 });

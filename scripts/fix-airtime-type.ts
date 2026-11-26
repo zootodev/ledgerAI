@@ -9,11 +9,16 @@
  * The classifier is the same spend-only helper used by the importer. It never
  * touches genuine credits (winnings, refunds, salary) and is idempotent: once
  * a row is Expense it no longer appears. NO DATABASE MIGRATION IS NEEDED.
+ *
+ * Flipping the type is not enough: an income category on an expense row is
+ * still wrong. Both changes are made in one transaction; unconfident rows go
+ * back to Review on the neutral expense category.
  */
 import { config } from "dotenv";
 import path from "node:path";
 import { getPrismaClient } from "../src/lib/db/client";
 import { looksLikeSpendWithoutDirection } from "../src/lib/import/spend-direction";
+import { planAirtimeCategoryReset } from "../src/lib/import/airtime-repair";
 
 config({ path: path.resolve(process.cwd(), ".env.local") });
 config();
@@ -60,26 +65,68 @@ async function main(): Promise<void> {
   });
   if (!business) throw new Error("Business not found for the supplied --business id.");
 
-  const candidates = await prisma.transaction.findMany({
-    where: { businessId: args.businessId, type: "income" },
-    select: { id: true, date: true, description: true, amount: true },
-    orderBy: [{ date: "asc" }, { id: "asc" }],
-  });
-  const affected = candidates.filter((row) =>
-    looksLikeSpendWithoutDirection(row.description),
+  const [candidates, categories, rules] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { businessId: args.businessId, type: "income" },
+      select: { id: true, date: true, description: true, amount: true, categoryId: true },
+      orderBy: [{ date: "asc" }, { id: "asc" }],
+    }),
+    prisma.category.findMany({
+      where: { OR: [{ businessId: null }, { businessId: args.businessId }] },
+      select: { id: true, name: true, type: true },
+    }),
+    prisma.categoryRule.findMany({
+      where: { businessId: args.businessId },
+      select: {
+        id: true,
+        matchType: true,
+        pattern: true,
+        categoryId: true,
+        categoryName: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  const affected = candidates.filter((row) => looksLikeSpendWithoutDirection(row.description));
+  const plans = new Map(
+    affected.map((row) => [
+      row.id,
+      planAirtimeCategoryReset(
+        row,
+        categories,
+        rules.map((rule) => ({
+          id: rule.id,
+          businessId: args.businessId,
+          matchType: rule.matchType === "keyword" ? "keyword" : "merchant",
+          pattern: rule.pattern,
+          categoryId: rule.categoryId,
+          categoryName: rule.categoryName ?? "Other",
+          createdAt: rule.createdAt.toISOString(),
+        })),
+      ),
+    ]),
   );
   const total = affected.reduce((sum, row) => sum + Number(row.amount.toString()), 0);
   const currency = business.currency || "NGN";
+  const recategorised = affected.filter((row) => plans.get(row.id)?.recategorised).length;
+  const toReview = affected.filter((row) => plans.get(row.id)?.toReview).length;
 
   if (!args.summary) {
     for (const row of affected) {
+      const plan = plans.get(row.id)!;
+      const category = categories.find((item) => item.id === plan.categoryId);
       console.log(
-        `${row.date.toISOString().slice(0, 10)} ${row.id} income → expense ${money(Number(row.amount.toString()), currency)} ${row.description}`,
+        `${row.date.toISOString().slice(0, 10)} income → expense ${money(Number(row.amount.toString()), currency)} ` +
+          `category ${row.categoryId ?? "none"} → ${category?.name ?? "none"}` +
+          `${plan.toReview ? " → REVIEW" : ""} ${row.description}`,
       );
     }
   }
 
   console.log(`Rows to change: ${affected.length}`);
+  console.log(`Rows recategorised: ${recategorised}`);
+  console.log(`Rows to Review: ${toReview}`);
   console.log(`Revenue: -${money(total, currency)}`);
   console.log(`Expenses: +${money(total, currency)}`);
   console.log(args.apply ? "Mode: APPLY" : "Mode: DRY RUN (no writes)");
@@ -87,17 +134,22 @@ async function main(): Promise<void> {
   if (!args.apply) return;
 
   const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.transaction.updateMany({
-      where: {
-        businessId: args.businessId,
-        type: "income",
-        id: { in: affected.map((row) => row.id) },
-      },
-      data: { type: "expense" },
-    });
-    return updated.count;
+    let changed = 0;
+    for (const row of affected) {
+      const plan = plans.get(row.id)!;
+      const updated = await tx.transaction.updateMany({
+        where: { businessId: args.businessId, id: row.id, type: "income" },
+        data: {
+          type: "expense",
+          categoryId: plan.categoryId,
+          ...(plan.aiConfidence ? { aiConfidence: plan.aiConfidence } : {}),
+        },
+      });
+      changed += updated.count;
+    }
+    return changed;
   });
-  console.log(`Applied: ${result} rows changed to Expense.`);
+  console.log(`Applied: ${result} rows changed to Expense with type-safe categories.`);
 }
 
 main().catch((error) => {
