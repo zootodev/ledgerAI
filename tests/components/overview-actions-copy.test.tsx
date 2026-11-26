@@ -20,6 +20,7 @@ describe("Overview banner copy", () => {
     vi.mocked(getOverviewActionItems).mockResolvedValue({
       uncategorizedCount: 0,
       lowConfidenceCount: 2,
+      lowConfidenceGroups: 1,
       latestImport: {
         id: "import-1",
         filename: "hark-test-import.csv",
@@ -32,8 +33,11 @@ describe("Overview banner copy", () => {
 
     const html = renderToStaticMarkup(await OverviewActionItems());
 
-    expect(html).toContain("2 transactions were tagged automatically");
-    expect(html).not.toContain("weretagged");
+    expect(html).toContain("2 transactions in 1 group need a quick check");
+    expect(html).toContain('href="/review"');
+    expect(html).toContain("Start review");
+    expect(html).toContain('href="/transactions?lowConfidence=1"');
+    expect(html).toContain("Review row by row");
     expect(html).toContain("hark-test-import.csv");
     expect(html).toContain("1 of 1 row");
     expect(html).not.toContain(".csv1 of 1 row");

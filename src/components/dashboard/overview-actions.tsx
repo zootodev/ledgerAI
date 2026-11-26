@@ -21,7 +21,7 @@ export async function OverviewActionItems() {
     return null;
   }
 
-  const { uncategorizedCount, lowConfidenceCount, latestImport } = items;
+  const { uncategorizedCount, lowConfidenceCount, lowConfidenceGroups, latestImport } = items;
   const hasAnything =
     uncategorizedCount > 0 || lowConfidenceCount > 0 || latestImport !== null;
   if (!hasAnything) return null;
@@ -54,17 +54,26 @@ export async function OverviewActionItems() {
         <Alert tone="info" title="Some categories need a second look">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
-              {countPhrase(lowConfidenceCount, "transaction", { verb: ["was", "were"] })}{" "}
-              tagged automatically, but the match was weak. Under {reviewPercent}% goes to
-              Review. Confirm or correct them so the next import learns the pattern.
+              {lowConfidenceCount} transactions in {lowConfidenceGroups}{" "}
+              {lowConfidenceGroups === 1 ? "group" : "groups"} need a quick check, about 2
+              minutes. Accept a suggestion or correct a whole group, and the next import
+              learns the pattern. Under {reviewPercent}% goes to Review.
             </span>
-            <Link
-              href="/transactions?lowConfidence=1"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              <Tag className="h-3.5 w-3.5" aria-hidden="true" />
-              Review {lowConfidenceCount}
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/review"
+                className={buttonVariants({ variant: "primary", size: "sm" })}
+              >
+                <Tag className="h-3.5 w-3.5" aria-hidden="true" />
+                Start review
+              </Link>
+              <Link
+                href="/transactions?lowConfidence=1"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                Review row by row
+              </Link>
+            </div>
           </div>
         </Alert>
       )}

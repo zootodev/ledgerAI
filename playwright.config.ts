@@ -1,8 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Desktop keeps the range/repro flow; mobile projects verify the native date
- * picker is reachable by a real tap on the icon area.
+ * Desktop covers the range flow and grouped review; mobile projects verify
+ * the native date picker is reachable by a real tap on the icon area and that
+ * grouped review fits a 390px viewport.
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -17,7 +18,7 @@ export default defineConfig({
     {
       name: "chromium-desktop",
       use: { ...devices["Desktop Chrome"] },
-      testMatch: /overview-range-switcher\.spec\.ts/,
+      testMatch: /(overview-range-switcher|review-bulk)\.spec\.ts/,
     },
     {
       name: "webkit-iphone-13",
@@ -28,6 +29,11 @@ export default defineConfig({
       name: "chromium-pixel-7",
       use: { ...devices["Pixel 7"] },
       testMatch: /date-picker-mobile\.spec\.ts/,
+    },
+    {
+      name: "chromium-390-review",
+      use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } },
+      testMatch: /review-bulk\.spec\.ts/,
     },
   ],
 });

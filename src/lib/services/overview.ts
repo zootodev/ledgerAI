@@ -8,6 +8,7 @@
 // ============================================================
 
 import { requireAuthContext } from "@/lib/services/auth-context";
+import { countReviewGroups } from "@/lib/services/review";
 import { REVIEW_THRESHOLD } from "@/lib/ai/rules";
 
 /** AI categorizations below the categorizer's review threshold need a look. */
@@ -28,6 +29,8 @@ export interface OverviewActionItems {
   uncategorizedCount: number;
   /** Categorized transactions whose AI suggestion is low-confidence. */
   lowConfidenceCount: number;
+  /** The same rows collapsed into review groups. */
+  lowConfidenceGroups: number;
   /** Most recent import run, or null when none exists. */
   latestImport: LatestImportOutcome | null;
 }
@@ -36,7 +39,7 @@ export interface OverviewActionItems {
 export async function getOverviewActionItems(): Promise<OverviewActionItems> {
   const { prisma, business } = await requireAuthContext();
 
-  const [uncategorizedCount, lowConfidenceCount, latest] = await Promise.all([
+  const [uncategorizedCount, lowConfidenceCount, lowConfidenceGroups, latest] = await Promise.all([
     prisma.transaction.count({
       where: {
         businessId: business.id,
@@ -51,6 +54,7 @@ export async function getOverviewActionItems(): Promise<OverviewActionItems> {
         aiConfidence: { lt: LOW_CONFIDENCE_THRESHOLD },
       },
     }),
+    countReviewGroups(),
     prisma.import.findFirst({
       where: { businessId: business.id },
       orderBy: { createdAt: "desc" },
@@ -64,6 +68,7 @@ export async function getOverviewActionItems(): Promise<OverviewActionItems> {
   return {
     uncategorizedCount,
     lowConfidenceCount,
+    lowConfidenceGroups,
     latestImport: latest
       ? {
           id: latest.id,

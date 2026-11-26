@@ -12,6 +12,10 @@ vi.mock("@/generated/prisma/client", () => ({
   PrismaClient: class {},
 }));
 
+vi.mock("@/lib/services/review", () => ({
+  countReviewGroups: vi.fn().mockResolvedValue(2),
+}));
+
 import { getCurrentUser } from "@/lib/auth/server";
 import { getPrismaClient } from "@/lib/db/client";
 import { getOverviewActionItems } from "@/lib/services/overview";
@@ -63,6 +67,7 @@ describe("getOverviewActionItems (tenant-scoped)", () => {
     expect(result).toEqual({
       uncategorizedCount: 3,
       lowConfidenceCount: 2,
+      lowConfidenceGroups: 2,
       latestImport: null,
     });
   });

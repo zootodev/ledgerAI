@@ -64,9 +64,16 @@ const displayDay = (iso: string) =>
 async function fillPicker(page: Page, index: number, iso: string) {
   const picker = page.locator('input[type="date"]').nth(index);
   const visible = page.locator('input[placeholder="DD/MM/YYYY"]').nth(index);
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    await picker.fill(iso);
-    await page.waitForTimeout(1_500);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    // Bypass React's value tracker so a repeated fill still dispatches input.
+    await picker.evaluate((element, value) => {
+      const input = element as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, iso);
+    await page.waitForTimeout(1_200);
     if ((await visible.inputValue()) === displayDay(iso)) return;
   }
 }
