@@ -4,18 +4,21 @@
  * Usage:
  *   npx tsx scripts/restore-test-accepted-review.ts --business <uuid> [--summary]
  *   npx tsx scripts/restore-test-accepted-review.ts --business <uuid> --apply
+ *   npx tsx scripts/restore-test-accepted-review.ts --business <uuid> --apply --confirm-no-owner-accepts
  *
  * Dry-run is the default and never writes. The window is fixed to the
  * 2026-11-26 incident: 11:30-14:15 WAT (10:30-13:15 UTC). The review service
  * does not persist an audit trail, so updatedAt + the confidence signal are
  * the only evidence. If that evidence cannot separate the test's accepts from
  * the owner's own accepts, the script says so, lists every row and REFUSES to
- * apply rather than guessing.
+ * apply unless the owner explicitly passes --confirm-no-owner-accepts.
  */
 import { config } from "dotenv";
 import path from "node:path";
 import { getPrismaClient } from "../src/lib/db/client";
 import { REVIEW_THRESHOLD } from "../src/lib/ai/rules";
+import { restoreApplyBlockReason } from "./confirmation";
+import { writeRowSnapshot, type SnapshotRow } from "./snapshot";
 
 config({ path: path.resolve(process.cwd(), ".env.local") });
 config();
@@ -30,6 +33,7 @@ interface Args {
   businessId: string;
   apply: boolean;
   summary: boolean;
+  confirmNoOwnerAccepts: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -45,6 +49,7 @@ function parseArgs(argv: string[]): Args {
     businessId,
     apply: argv.includes("--apply"),
     summary: argv.includes("--summary"),
+    confirmNoOwnerAccepts: argv.includes("--confirm-no-owner-accepts"),
   };
 }
 
@@ -57,6 +62,7 @@ interface Candidate {
   categoryName: string | null;
   categoryType: string | null;
   aiCategory: string | null;
+  aiConfidence: { toString(): string } | null;
   type: string;
   source: string;
   updatedAt: Date;
@@ -121,6 +127,7 @@ async function main(): Promise<void> {
     description: true,
     categoryId: true,
     aiCategory: true,
+    aiConfidence: true,
     type: true,
     source: true,
     updatedAt: true,
@@ -226,6 +233,7 @@ async function main(): Promise<void> {
         `rule changes undatable: ${changedRulesUndetectable}). Listing rows instead of guessing.`,
     );
   }
+  console.log(`Confirmed no owner accepts: ${args.confirmNoOwnerAccepts}`);
 
   if (!args.summary) {
     console.log("--- rows ---");
@@ -256,11 +264,22 @@ async function main(): Promise<void> {
   console.log(args.apply ? "Mode: APPLY requested" : "Mode: DRY RUN (no writes)");
 
   if (!args.apply) return;
-  if (ambiguous) {
-    throw new Error(
-      "Refusing to apply: the window cannot distinguish test accepts from owner accepts. Review the listed rows first.",
-    );
-  }
+  const blockReason = restoreApplyBlockReason(ambiguous, args.confirmNoOwnerAccepts);
+  if (blockReason) throw new Error(blockReason);
+
+  const snapshotRows: SnapshotRow[] = candidates.map((row) => ({
+    id: row.id,
+    type: row.type,
+    categoryId: row.categoryId,
+    aiConfidence: row.aiConfidence?.toString() ?? null,
+    updatedAt: row.updatedAt.toISOString(),
+  }));
+  const snapshotPath = await writeRowSnapshot(
+    "restore-test-accepted-review",
+    args.businessId,
+    snapshotRows,
+  );
+  console.log(`Snapshot: ${snapshotPath}`);
 
   const result = await prisma.$transaction(async (tx) => {
     let restored = 0;

@@ -19,6 +19,7 @@ import path from "node:path";
 import { getPrismaClient } from "../src/lib/db/client";
 import { looksLikeSpendWithoutDirection } from "../src/lib/import/spend-direction";
 import { planAirtimeCategoryReset } from "../src/lib/import/airtime-repair";
+import { writeRowSnapshot, type SnapshotRow } from "./snapshot";
 
 config({ path: path.resolve(process.cwd(), ".env.local") });
 config();
@@ -68,7 +69,16 @@ async function main(): Promise<void> {
   const [candidates, categories, rules] = await Promise.all([
     prisma.transaction.findMany({
       where: { businessId: args.businessId, type: "income" },
-      select: { id: true, date: true, description: true, amount: true, categoryId: true },
+      select: {
+        id: true,
+        date: true,
+        description: true,
+        amount: true,
+        categoryId: true,
+        type: true,
+        aiConfidence: true,
+        updatedAt: true,
+      },
       orderBy: [{ date: "asc" }, { id: "asc" }],
     }),
     prisma.category.findMany({
@@ -132,6 +142,16 @@ async function main(): Promise<void> {
   console.log(args.apply ? "Mode: APPLY" : "Mode: DRY RUN (no writes)");
 
   if (!args.apply) return;
+
+  const snapshotRows: SnapshotRow[] = affected.map((row) => ({
+    id: row.id,
+    type: row.type,
+    categoryId: row.categoryId,
+    aiConfidence: row.aiConfidence?.toString() ?? null,
+    updatedAt: row.updatedAt.toISOString(),
+  }));
+  const snapshotPath = await writeRowSnapshot("fix-airtime-type", args.businessId, snapshotRows);
+  console.log(`Snapshot: ${snapshotPath}`);
 
   const result = await prisma.$transaction(async (tx) => {
     let changed = 0;
