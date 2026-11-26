@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { ensureOnboarding } from "@/lib/services/auth";
 import { requireAuthContext } from "@/lib/services/auth-context";
 import { signOutAction } from "@/lib/auth/actions";
-import { startOfMonth, startOfQuarter, startOfYear, subDays } from "date-fns";
+import { format, startOfMonth, startOfQuarter, startOfYear, subDays } from "date-fns";
 import { analyticsQuerySchema, type AnalyticsQuery } from "@/lib/validation/index";
 import { OverviewShell } from "@/components/dashboard/overview-shell";
 import { AnalyticsKpiGrid, KpiGridFallback } from "@/components/dashboard/kpi-grid";
@@ -76,7 +76,10 @@ function singleParam(value: string | string[] | undefined): string | undefined {
 function presetToOverviewRange(preset: string | undefined): { dateFrom: string | undefined; dateTo: string | undefined } | undefined {
   if (!preset || preset === "all") return undefined;
   const today = new Date();
-  const iso = (d: Date) => d.toISOString().split("T")[0];
+  // Local calendar days, matching the client presets and the displayed fields.
+  // toISOString() shifts a UTC+ timezone's local midnight back a day, so
+  // "This month" used to render 31/10 for a URL that asked for 2026-11-01.
+  const iso = (d: Date) => format(d, "yyyy-MM-dd");
   const presetMap: Record<string, { dateFrom: string; dateTo: string }> = {
     "last7": { dateFrom: iso(subDays(today, 6)), dateTo: iso(today) },
     "last30": { dateFrom: iso(subDays(today, 29)), dateTo: iso(today) },

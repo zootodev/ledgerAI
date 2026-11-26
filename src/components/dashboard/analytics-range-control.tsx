@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarRange } from "lucide-react";
+import { CalendarRange, Loader2 } from "lucide-react";
 import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +60,7 @@ export function AnalyticsRangeControl({
 }: AnalyticsRangeControlProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const [isPending, startTransition] = React.useTransition();
   // Highlight the clicked pill immediately; server props arrive one
   // navigation later and must not make the click look like it did nothing.
   const [optimisticPreset, setOptimisticPreset] = React.useState<{
@@ -67,6 +68,22 @@ export function AnalyticsRangeControl({
     /** The applied params this click replaces — discarded once they change. */
     replaces: string;
   } | null>(null);
+  /**
+   * The search string of the last href this control pushed. A second click
+   * before the first render lands builds from THIS, not from the stale
+   * `from`/`to` props. Reset on popstate so Back/Forward start from the URL
+   * the browser just restored.
+   */
+  const lastPushedSearch = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    const resetForHistory = () => {
+      lastPushedSearch.current = null;
+      setOptimisticPreset(null);
+    };
+    window.addEventListener("popstate", resetForHistory);
+    return () => window.removeEventListener("popstate", resetForHistory);
+  }, []);
 
   const presets = React.useMemo(() => buildRangePresets(new Date()), []);
 
@@ -75,24 +92,28 @@ export function AnalyticsRangeControl({
     rangeParam === "all" || (Array.isArray(rangeParam) && rangeParam.includes("all"));
 
   /**
-   * Apply a selection without waiting for the App Router's RSC response.
-   *
-   * `router.push` only commits the address bar once the new server tree has
-   * streamed in. On /overview the analytics server components can take long
-   * enough that a fast second click sees the old URL and appears one preset
-   * behind. Writing the native History state first makes the URL (and the
-   * next click's `window.location.search`) correct immediately; `refresh()`
-   * then re-renders the server components for that already-committed URL.
+   * Let the App Router own the navigation. `pushState` + `refresh()` looked
+   * instant, but Next syncs a manual pushState into its router state
+   * asynchronously, so refresh() re-rendered the PREVIOUS URL's searchParams
+   * and the tiles stayed one click behind. One `router.push` fetches the RSC
+   * payload for the href we just built; `startTransition` exposes that wait.
+   * The ref carries the pending href across clicks made before it renders.
    */
   const apply = React.useCallback(
     (nextFrom: string, nextTo: string, presetId?: RangePresetId) => {
-      const current = typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search)
-        : paramsToSearchParams(params);
-      const href = buildRangeHref(current, pathname, { from: nextFrom, to: nextTo, presetId });
       if (typeof window === "undefined") return;
-      window.history.pushState(null, "", href);
-      router.refresh();
+      const currentSearch =
+        lastPushedSearch.current ?? window.location.search ?? paramsToSearchParams(params).toString();
+      const href = buildRangeHref(new URLSearchParams(currentSearch), pathname, {
+        from: nextFrom,
+        to: nextTo,
+        presetId,
+      });
+      const question = href.indexOf("?");
+      lastPushedSearch.current = question >= 0 ? href.slice(question + 1) : "";
+      startTransition(() => {
+        router.push(href, { scroll: false });
+      });
     },
     [params, pathname, router],
   );
@@ -107,7 +128,9 @@ export function AnalyticsRangeControl({
 
   const appliedKey = `${Array.isArray(params?.preset) ? params?.preset.join(",") : params?.preset ?? ""}|${from ?? ""}|${to ?? ""}`;
   const displayedPresetId =
-    optimisticPreset?.replaces === appliedKey ? optimisticPreset.id : activePresetId;
+    optimisticPreset && (optimisticPreset.replaces === appliedKey || isPending)
+      ? optimisticPreset.id
+      : activePresetId;
 
   return (
     <div
@@ -164,6 +187,12 @@ export function AnalyticsRangeControl({
               variant={active ? "secondary" : "ghost"}
               size="sm"
               aria-pressed={active}
+              data-pending={active && isPending ? "true" : undefined}
+              rightIcon={
+                active && isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : undefined
+              }
               onClick={() => {
                 setOptimisticPreset({ id: preset.id, replaces: appliedKey });
                 apply(preset.from, preset.to, preset.id);

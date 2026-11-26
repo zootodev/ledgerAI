@@ -92,7 +92,12 @@ export function LineChart({
   return (
     <div className={cn("w-full", className)}>
       <ResponsiveContainer width="100%" height={height}>
-        <RLineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        {/*
+         * A line's last point sits at the plot edge, while a bar's last tick
+         * is inset by half a band. Reserve that extra room so a two-line
+         * partial-month tick ("to 26th") is not clipped by the card.
+         */}
+        <RLineChart data={data} margin={{ top: 8, right: 32, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
           <XAxis
             dataKey={xKey}

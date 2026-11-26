@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
 
 vi.mock("@/lib/services/auth", () => ({
   ensureOnboarding: vi.fn().mockResolvedValue(undefined),
@@ -52,5 +53,18 @@ describe("OverviewPage (server)", () => {
         searchParams: Promise.resolve({ foo: "bar" } as Record<string, string>),
       }),
     ).resolves.toBeTruthy();
+  });
+
+  it("resolves presets to local calendar days, matching the URL and date fields", async () => {
+    const shell = (await OverviewPage({
+      searchParams: Promise.resolve({ preset: "month" }),
+    })) as ReactElement<{
+      rangeControl: ReactElement<{ from?: string; to?: string }>;
+    }>;
+
+    // Fake time is 2026-10-16. In a UTC+ timezone, toISOString() would turn
+    // the local 1 October midnight into 30 September and desync URL/content.
+    expect(shell.props.rangeControl.props.from).toBe("2026-10-01");
+    expect(shell.props.rangeControl.props.to).toBe("2026-10-16");
   });
 });
