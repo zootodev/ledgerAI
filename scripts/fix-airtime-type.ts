@@ -153,6 +153,7 @@ async function main(): Promise<void> {
   const snapshotPath = await writeRowSnapshot("fix-airtime-type", args.businessId, snapshotRows);
   console.log(`Snapshot: ${snapshotPath}`);
 
+  // The default 5s interactive-transaction timeout is too short for a bulk repair.
   const result = await prisma.$transaction(async (tx) => {
     let changed = 0;
     for (const row of affected) {
@@ -168,7 +169,7 @@ async function main(): Promise<void> {
       changed += updated.count;
     }
     return changed;
-  });
+  }, { timeout: 300_000, maxWait: 30_000 });
   console.log(`Applied: ${result} rows changed to Expense with type-safe categories.`);
 }
 

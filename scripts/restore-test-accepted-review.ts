@@ -281,6 +281,7 @@ async function main(): Promise<void> {
   );
   console.log(`Snapshot: ${snapshotPath}`);
 
+  // The default 5s interactive-transaction timeout is too short for 195 updates.
   const result = await prisma.$transaction(async (tx) => {
     let restored = 0;
     for (const row of candidates) {
@@ -305,7 +306,7 @@ async function main(): Promise<void> {
       },
     });
     return { restored, removed: removed.count };
-  });
+  }, { timeout: 300_000, maxWait: 30_000 });
   console.log(`Applied: ${result.restored} rows restored, ${result.removed} rules removed.`);
 }
 
