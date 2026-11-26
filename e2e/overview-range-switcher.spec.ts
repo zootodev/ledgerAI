@@ -124,6 +124,32 @@ async function expectLastProfitTickFits(page: Page) {
   expect(overflow, "last profit tick is clipped at the card edge").toBeLessThanOrEqual(0);
 }
 
+/** The calendar button must stay inside the field without covering the text. */
+async function expectCalendarButtonsFit(page: Page) {
+  const buttons = page.getByRole("button", { name: "Choose date" });
+  expect(await buttons.count()).toBeGreaterThanOrEqual(2);
+  for (const button of await buttons.all()) await expect(button).toBeVisible();
+
+  const fields = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLInputElement>('input[placeholder="DD/MM/YYYY"]')].map(
+      (input) => {
+        const field = input.closest("[data-date-field]");
+        const button = field?.querySelector('button[aria-label="Choose date"]');
+        const inputRect = input.getBoundingClientRect();
+        const buttonRect = button?.getBoundingClientRect();
+        return {
+          textOverflow: input.scrollWidth - input.clientWidth,
+          iconInside: buttonRect
+            ? buttonRect.right <= inputRect.right + 1 && buttonRect.left >= inputRect.left
+            : false,
+        };
+      },
+    ),
+  );
+  expect(fields.length).toBeGreaterThanOrEqual(2);
+  expect(fields.every((f) => f.textOverflow <= 1 && f.iconInside)).toBe(true);
+}
+
 test("range presets apply URL, dates and tiles on the first click", async ({ page }) => {
   test.setTimeout(180_000);
   await signInAndFinishOnboarding(page);
@@ -205,7 +231,29 @@ test("range presets apply URL, dates and tiles on the first click", async ({ pag
 
   // The line chart used to lose "st)" off "to 21st" at both widths.
   await expectLastProfitTickFits(page);
+  await expectCalendarButtonsFit(page);
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(1_000);
   await expectLastProfitTickFits(page);
+  await expectCalendarButtonsFit(page);
+
+  // Setting the hidden native picker is the same path as choosing a date in
+  // the browser UI: it must update the DD/MM/YYYY field and drive the URL.
+  const pickedFrom = "2026-11-20";
+  await page.locator('input[type="date"]').first().fill(pickedFrom);
+  await expect(page.getByLabel("From", { exact: true })).toHaveValue(
+    displayDay(pickedFrom),
+    { timeout: 20_000 },
+  );
+  await expect(page.getByLabel("To", { exact: true })).toHaveValue(displayDay(last90.to));
+  await expect(
+    page,
+    "picked date must be applied to the URL as well as the visible field",
+  ).toHaveURL(
+    (url) =>
+      url.searchParams.get("from") === pickedFrom &&
+      url.searchParams.get("to") === last90.to,
+    { timeout: 20_000 },
+  );
 });

@@ -38,7 +38,10 @@ describe("AnalyticsRangeControl — all-time state", () => {
     expect(html).toContain('placeholder="DD/MM/YYYY"');
     expect(html).toContain('value="01/09/2026"');
     expect(html).toContain('value="30/09/2026"');
-    expect(html).not.toContain('value="2026-09-01"');
+    // The ISO day now lives on the hidden native picker, not the visible field.
+    expect(html).toContain(
+      'type="date" tabindex="-1" aria-hidden="true" class="sr-only" value="2026-09-01"',
+    );
     expect(html).not.toContain("All recorded transactions");
   });
 
